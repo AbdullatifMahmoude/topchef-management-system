@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+SQLAlchemy
+pydantic
+psycopg2-binary
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+python-json-logger
+asyncpg
