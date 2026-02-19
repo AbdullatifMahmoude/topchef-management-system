@@ -7,10 +7,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Top chef restaurant management system"
     VERSION: str = "0.0.1"
 
-    DATABASE_URL: str #= os.getenv(
-      #  "DATABASE_URL",
-      #  "postgresql+asyncpg://postgres:parmagai@localhost:5432/parmagai",
-    #)
+    DATABASE_URL: str ='postgresql+asyncpg://neondb_owner:npg_Ymrp1e6nPwWV@ep-hidden-tooth-alpwd1i7-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
 
     SECRET_KEY: str = "a9f3d8c1b7e2f4a0c6d9e5b1c8f0a2d3e7f9a1b4c5d6e8f0a9b7c2d4e6f8"
     ALGORITHM: str = "HS256"
