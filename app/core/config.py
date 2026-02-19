@@ -9,7 +9,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = os.getenv(
         "database_url",
-        "postgresql+asyncpg://postgres:parmagai@localhost:5432/parmagai"
+        # "postgresql+asyncpg://postgres:parmagai@localhost:5432/parmagai",
+        "postgresql://postgres:5qv-&ni75*sAxRQ@db.orzjapbcljnqcezpwhzm.supabase.co:5432/postgres"
     )
 
     SECRET_KEY: str = "a9f3d8c1b7e2f4a0c6d9e5b1c8f0a2d3e7f9a1b4c5d6e8f0a9b7c2d4e6f8"
