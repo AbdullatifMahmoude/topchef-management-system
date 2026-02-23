@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
+from sqlalchemy import create_engine
 
 from app.core.config import settings
 
@@ -36,7 +37,9 @@ async def get_db() -> AsyncSession:
 
 
 def get_sync_engine():
-    from sqlalchemy import create_engine
-    sync_url = settings.DATABASE_URL.replace(
-        "postgresql+asyncpg", "postgresql")
-    return create_engine(sync_url)
+    # إزالة asyncpg و query string SSL من URL
+    sync_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://").split("?")[0]
+    return create_engine(
+        sync_url,
+        connect_args={"sslmode":"require"}  # psycopg2 يفهم SSL
+    )

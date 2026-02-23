@@ -56,46 +56,46 @@ async def toggle_category(id: int, db: AsyncSession = Depends(get_db)):
     return toggle
 
 
-# ================== products ==============
-@router.get("/products", response_model=List[schemas.ProductResponse])
-async def list_products(db: AsyncSession = Depends(get_db)):
-    products_service = service.ProductService(db)
-    listproduct = await products_service.list_products()
-    return listproduct
+# # ================== products ==============
+# @router.get("/products", response_model=List[schemas.ProductResponse])
+# async def list_products(db: AsyncSession = Depends(get_db)):
+#     products_service = service.ProductService(db)
+#     listproduct = await products_service.list_products()
+#     return listproduct
 
 
-@router.get("/products/{id}", response_model=schemas.ProductResponse)
-async def get_product(id: int, db: AsyncSession = Depends(get_db)):
-    products_service = service.ProductService(db)
-    getproduct = await products_service.get_product(id)
-    return getproduct
+# @router.get("/products/{id}", response_model=schemas.ProductResponse)
+# async def get_product(id: int, db: AsyncSession = Depends(get_db)):
+#     products_service = service.ProductService(db)
+#     getproduct = await products_service.get_product(id)
+#     return getproduct
 
 
-@router.post("/products",
-             response_model=schemas.ProductResponse,
-             status_code=status.HTTP_201_CREATED)
-async def create_product(product_data: schemas.CreateProduct, db: AsyncSession = Depends(get_db)):
-    products_service = service.ProductService(db)
-    createproduct = await products_service.create_product(product_data)
-    return createproduct
+# @router.post("/products",
+#              response_model=schemas.ProductResponse,
+#              status_code=status.HTTP_201_CREATED)
+# async def create_product(product_data: schemas.CreateProduct, db: AsyncSession = Depends(get_db)):
+#     products_service = service.ProductService(db)
+#     createproduct = await products_service.create_product(product_data)
+#     return createproduct
 
 
-@router.patch("/products/{id}", response_model=schemas.ProductResponse)
-async def update_product(id: int, product_data: schemas.UpdateProduct, db: AsyncSession = Depends(get_db)):
-    products_service = service.ProductService(db)
-    updateproduct = await products_service.update_product(id, product_data)
-    return updateproduct
+# @router.patch("/products/{id}", response_model=schemas.ProductResponse)
+# async def update_product(id: int, product_data: schemas.UpdateProduct, db: AsyncSession = Depends(get_db)):
+#     products_service = service.ProductService(db)
+#     updateproduct = await products_service.update_product(id, product_data)
+#     return updateproduct
 
 
-@router.delete("/products/{id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_product(id: int, db: AsyncSession = Depends(get_db)):
-    products_service = service.ProductService(db)
-    await products_service.delete_product(id)
-    return None
+# @router.delete("/products/{id}", status_code=status.HTTP_204_NO_CONTENT)
+# async def delete_product(id: int, db: AsyncSession = Depends(get_db)):
+#     products_service = service.ProductService(db)
+#     await products_service.delete_product(id)
+#     return None
 
 
-@router.patch("/products/{id}/toggle", response_model=schemas.ProductResponse)
-async def toggle_product(id: int, db: AsyncSession = Depends(get_db)):
-    products_service = service.ProductService(db)
-    toggle = await products_service.toggle_product(id)
-    return toggle
+# @router.patch("/products/{id}/toggle", response_model=schemas.ProductResponse)
+# async def toggle_product(id: int, db: AsyncSession = Depends(get_db)):
+#     products_service = service.ProductService(db)
+#     toggle = await products_service.toggle_product(id)
+#     return toggle
