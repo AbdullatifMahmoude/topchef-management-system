@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.modules.menu import models, schemas
 from typing import Optional
+from sqlalchemy import delete
 
 
 # ============== category ===============#
@@ -49,7 +50,7 @@ class ProductRepository:
 
     async def get_by_id(self, productid: int):
         product = await self.db.execute(select(models.Product).where(models.Product.id == productid))
-        return product.scalars().first()
+        return product.scalar_one_or_none()
 
     async def get_by_name(self, productname: str) -> models.Product:
         product = await self.db.execute(select(models.Product).where(models.Product.product_name == productname))
@@ -64,8 +65,7 @@ class ProductRepository:
         return product
 
     async def update_product(self, product: models.Product, productdata: schemas.UpdateProduct):
-        update_data = productdata.model_dump(exclude_unset=True)
-
+        update_data = productdata.model_dump(exclude_unset=True, exclude={"variants"})
         for key, value in update_data.items():
             setattr(product, key, value)
 
@@ -92,15 +92,11 @@ class VariantRepository:
         self.db.add_all(variant)
         return variant
 
-    async def update_variant(self, variant: models.Variant, variantdata: schemas.UpdateVariant):
-        update_variant = variantdata.model_dump(exclude_unset=True)
-        for key, value in update_variant.items():
-            setattr(variant, key, value)
-
-        return variant
-
-    async def delete_variant(self, variant: models.Variant):
-        await self.db.delete(variant)
+    async def delete_by_product_id(self, product_id: int):
+        stmt = delete(models.Variant).where(
+            models.Variant.product_id == product_id
+        )
+        await self.db.execute(stmt)
 
 
 # # ============== addons ===============#

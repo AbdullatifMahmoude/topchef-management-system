@@ -80,11 +80,11 @@ async def create_product(product_data: schemas.CreateProduct, db: AsyncSession =
     return createproduct
 
 
-# @router.patch("/products/{id}", response_model=schemas.ProductResponse)
-# async def update_product(id: int, product_data: schemas.UpdateProduct, db: AsyncSession = Depends(get_db)):
-#     products_service = service.ProductService(db)
-#     updateproduct = await products_service.update_product(id, product_data)
-#     return updateproduct
+@router.patch("/products/{id}", response_model=schemas.ProductResponse)
+async def update_product(id: int, product_data: schemas.UpdateProduct, db: AsyncSession = Depends(get_db)):
+    products_service = service.ProductService(db)
+    updateproduct = await products_service.update_product(id, product_data)
+    return updateproduct
 
 
 @router.delete("/products/{id}", status_code=status.HTTP_204_NO_CONTENT)

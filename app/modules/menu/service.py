@@ -146,33 +146,51 @@ class ProductService:
             product_with_relation = result.scalar_one()
         return schemas.ProductResponse.from_orm(product_with_relation)
 
-    # async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
-    #     existing = await self.get_product(product_id)
-    #     if product_data.cat_id is not None:
-    #         await self.category_service.get_category(product_data.cat_id)
+    async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
+        async with self.db.begin():
+            existing = await self.repo.get_by_id(product_id)
+            if not existing:
+                raise NotFoundError(f"product with id:{product_id}")
+            if product_data.cat_id is not None:
+                cat = await self.category_service.get_category(product_data.cat_id)
 
-    #     if product_data.name:
-    #         exist_name = await self.repo.get_by_name(product_data.name)
-    #         if exist_name and exist_name.id != product_id:
-    #             raise ValidationError(
-    #                 f"Product with name: {product_data.name} already exist")
+            if product_data.product_name is not None:
+                product = await self.repo.get_by_name(product_data.product_name)
+                if product and product.id != product_id:
+                    raise ValidationError(
+                        f"Product with name: '{product_data.product_name}' already exist")
 
-    #     if product_data.product_type == ProductType.SIMPLE and len(product_data.variants) != 1:
-    #         raise ValidationError(
-    #             "simple type of product must have one variant"
-    #         )
-    #     if product_data.product_type == ProductType.VARIANT and len(product_data.variants) < 2:
-    #         raise ValidationError(
-    #             "variant type of product must have at least two variants"
-    #         )
-    #     async with self.db.begin():
-    #         updateproduct = await self.repo.update_product(existing, product_data)
-    #         await self.db.flush()
-    #         stmt = select(models.Product).options(selectinload(
-    #             models.Product.category)).where(models.Product.cat_id == product_data.cat_id)
-    #         result = await self.db.execute(stmt)
-    #         product_with_cat = result.scalar_one()
-    #     return schemas.ProductResponse.from_orm(product_with_cat)
+            if product_data.product_type == ProductType.SIMPLE and len(product_data.variants) != 1:
+                raise ValidationError(
+                    "simple type of product must have one variant"
+                )
+            if product_data.product_type == ProductType.VARIANT and len(product_data.variants) < 2:
+                raise ValidationError(
+                    "variant type of product must have at least two variants"
+                )
+
+            
+            await self.repo.update_product(existing, product_data)
+            if product_data.variants is not None:
+                await self.varrepo.delete_by_product_id(product_id)
+            await self.db.flush()
+            variants = []
+            for v in product_data.variants:
+                variant = models.Variant(
+                    product_id= product_id,
+                    name=v.name,
+                    price=v.price
+                )
+                variants.append(variant)
+            await self.varrepo.create_variant(variants)
+            await self.db.flush()
+            stmt = select(models.Product).options(
+                selectinload(models.Product.category),
+                selectinload(models.Product.variants)
+            ).where(models.Product.id == product_id)
+            result = await self.db.execute(stmt)
+            product_with_relation = result.scalar_one()
+        return schemas.ProductResponse.from_orm(product_with_relation)
 
     async def delete_product(self, product_id: int):
         async with self.db.begin():
