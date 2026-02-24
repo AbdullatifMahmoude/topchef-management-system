@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError, NotFoundError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
+from app.core.enums import ProductType
 
 
 # ============== category ===============#
@@ -68,98 +69,127 @@ class CategoryService:
         return schemas.CategoryResponse.from_orm(toggle)
 
 
-# # ============== product ===============#
-# class ProductService:
-#     def __init__(self, db: AsyncSession):
-#         self.db = db
-#         self.repo = repository.ProductRepository(db)
-#         self.category_service = CategoryService(db)
+# ============== product ===============#
+class ProductService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+        self.repo = repository.ProductRepository(db)
+        self.varrepo = repository.VariantRepository(db)
+        self.category_service = CategoryService(db)
 
-#     async def get_product(self, product_id: int):
-#         product = await self.repo.get_by_id(product_id)
-#         if not product:
-#             raise NotFoundError(f"Product With id:{product_id}")
+    async def get_product(self, product_id: int):
+        product = await self.repo.get_by_id(product_id)
+        if not product:
+            raise NotFoundError(f"Product With id:{product_id}")
 
-#         return product
+        stmt = select(models.Product).options(selectinload(
+            models.Product.variants)).where(models.Product.id == product_id)
+        result = await self.db.execute(stmt)
+        product_with_var = result.all()
+        return product
 
-#     async def get_product_by_name(self, product_name: str):
-#         product = await self.repo.get_by_name(product_name)
-#         return product
+    async def get_product_by_name(self, product_name: str):
+        stmt = select(models.Product).options(selectinload(
+            models.Product.variants)).where(models.Product.product_name == product_name)
+        result = await self.db.execute(stmt)
+        product_with_var = result.all()
+        return product_with_var
 
-#     async def list_products(self):
-#         listproduct = await self.repo.list_products()
-#         return [schemas.ProductResponse.from_orm(c) for c in listproduct]
+    async def list_products(self):
+        stmt = select(models.Product).options(
+            selectinload(models.Product.variants))
+        result = await self.db.execute(stmt)
+        listproduct = result.scalars().all()
+        return [schemas.ProductResponse.from_orm(c) for c in listproduct]
 
-#     async def create_product(self, product_data: schemas.CreateProduct):
-#         async with self.db.begin():
-#             product = await self.repo.get_by_name(product_data.name)
-#             if product:
-#                 raise ValidationError(
-#                     f"Product with name: {product_data.name} already exist")
+    async def create_product(self, product_data: schemas.CreateProduct):
+        async with self.db.begin():
+            product = await self.repo.get_by_name(product_data.product_name)
+            cat = await self.category_service.get_category(product_data.cat_id)
+            if product:
+                raise ValidationError(
+                    f"Product with name: '{product_data.product_name}' already exist")
 
-#             createproduct = await self.repo.create_product(product_data)
-#             await self.db.flush()
-#             stmt = select(models.Product).options(selectinload(
-#                 models.Product.category)).where(models.Product.cat_id == product_data.cat_id)
-#             result = await self.db.execute(stmt)
-#             product_with_cat = result.scalar_one()
-#         return schemas.ProductResponse.from_orm(product_with_cat)
+            if product_data.product_type == ProductType.SIMPLE and len(product_data.variants) != 1:
+                raise ValidationError(
+                    "simple type of product must have one variant"
+                )
+            if product_data.product_type == ProductType.VARIANT and len(product_data.variants) < 2:
+                raise ValidationError(
+                    "variant type of product must have at least two variants"
+                )
 
-#     async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
-#         async with self.db.begin():
-#             existing = await self.get_product(product_id)
+            product_model = models.Product(
+                cat_id=product_data.cat_id,
+                product_name=product_data.product_name,
+                product_type=product_data.product_type,
+                description=product_data.description
 
-#             if product_data.cat_id is not None:
-#                 await self.category_service.get_category(product_data.cat_id)
+            )
+            await self.repo.create_product(product_model)
+            await self.db.flush()
+            variants = []
+            for v in product_data.variants:
+                variant = models.Variant(
+                    product_id=product_model.id,
+                    name=v.name,
+                    price=v.price
+                )
+                variants.append(variant)
+            await self.varrepo.create_variant(variants)
+            await self.db.flush()
+            stmt = select(models.Product).options(
+                selectinload(models.Product.category),
+                selectinload(models.Product.variants)
+            ).where(models.Product.id == product_model.id)
+            result = await self.db.execute(stmt)
+            product_with_relation = result.scalar_one()
+        return schemas.ProductResponse.from_orm(product_with_relation)
 
-#             if product_data.name:
-#                 exist_name = await self.repo.get_by_name(product_data.name)
-#                 if exist_name and exist_name.id != product_id:
-#                     raise ValidationError(
-#                         f"Product with name: {product_data.name} already exist")
+    # async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
+    #     existing = await self.get_product(product_id)
+    #     if product_data.cat_id is not None:
+    #         await self.category_service.get_category(product_data.cat_id)
 
-#             updateproduct = await self.repo.update_product(existing, product_data)
-#             await self.db.flush
-#             stmt = select(models.Product).options(selectinload(models.Product.category)).where(models.Product.cat_id == product_data.cat_id)
-#             result = await self.db.execute(stmt)
-#             product_with_cat = result.scalar_one()
-#         return schemas.ProductResponse.from_orm(product_with_cat)
+    #     if product_data.name:
+    #         exist_name = await self.repo.get_by_name(product_data.name)
+    #         if exist_name and exist_name.id != product_id:
+    #             raise ValidationError(
+    #                 f"Product with name: {product_data.name} already exist")
 
-#     async def delete_product(self, product_id: int):
-#         async with self.db.begin():
-#             product = await self.get_product(product_id)
-#             await self.repo.delete_product(product)
-#         return True
+    #     if product_data.product_type == ProductType.SIMPLE and len(product_data.variants) != 1:
+    #         raise ValidationError(
+    #             "simple type of product must have one variant"
+    #         )
+    #     if product_data.product_type == ProductType.VARIANT and len(product_data.variants) < 2:
+    #         raise ValidationError(
+    #             "variant type of product must have at least two variants"
+    #         )
+    #     async with self.db.begin():
+    #         updateproduct = await self.repo.update_product(existing, product_data)
+    #         await self.db.flush()
+    #         stmt = select(models.Product).options(selectinload(
+    #             models.Product.category)).where(models.Product.cat_id == product_data.cat_id)
+    #         result = await self.db.execute(stmt)
+    #         product_with_cat = result.scalar_one()
+    #     return schemas.ProductResponse.from_orm(product_with_cat)
 
-#     async def toggle_product(self, product_id: int):
-#         async with self.db.begin():
-#             product = await self.get_product(product_id)
-#             toggle = await self.repo.toggle_active(product)
-#             await self.db.flush
-#             stmt = select(models.Product).options(selectinload(models.Product.category)).where(models.Product.cat_id == product_data.cat_id)
-#             result = await self.db.execute(stmt)
-#             product_with_cat = result.scalar_one()
-#         return schemas.ProductResponse.from_orm(product_with_cat)
+    async def delete_product(self, product_id: int):
+        async with self.db.begin():
+            product = await self.get_product(product_id)
+            await self.repo.delete_product(product)
+        return True
 
+    async def toggle_product(self, product_id: int):
+        async with self.db.begin():
+            product = await self.get_product(product_id)
+            toggle = await self.repo.toggle_active(product)
+            await self.db.flush()
+            stmt = select(models.Product).options(
+                selectinload(models.Product.category),
+                selectinload(models.Product.variants)
+            ).where(models.Product.id == product_id)
+            result = await self.db.execute(stmt)
+            product_with_relation = result.scalar_one()
+        return schemas.ProductResponse.from_orm(product_with_relation)
 
-# # ============== variant ===============#
-# class VariantService:
-#     def __init__(self, db: AsyncSession):
-#         self.db = db
-#         self.repo = repository.VariantRepository(db)
-#         self.product_service = ProductService(db)
-
-#     async def get_by_product_id(self, product_id: int):
-#         await self.product_service.get_product(product_id)
-#         variants = await self.repo.get_by_product_id(product_id)
-#         return variants
-
-#     async def create_variant(self, variantdata: schemas.CreateVariant):
-#         async with self.db.begin():
-#             await self.product_service.get_product(variantdata.product_id)
-#             variant = self.repo.create_variant(variantdata)
-#             stmt = select(models.Variant).options(selectinload(models.Variant.product)).where(models.Variant.product_id == variantdata.product_id)
-#             result = await self.db.execute()
-#             variant  
-
-        

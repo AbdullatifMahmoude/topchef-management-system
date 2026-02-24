@@ -42,67 +42,65 @@ class CategoryRepository:
         return category
 
 
-# # ============== product ===============#
-# class ProductRepository:
-#     def __init__(self, db: AsyncSession):
-#         self.db = db
+# ============== product ===============#
+class ProductRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
-#     async def get_by_id(self, productid: int):
-#         product = await self.db.execute(select(models.Product).where(models.Product.id == productid))
-#         return product.scalars().first()
+    async def get_by_id(self, productid: int):
+        product = await self.db.execute(select(models.Product).where(models.Product.id == productid))
+        return product.scalars().first()
 
-#     async def get_by_name(self, productname: str) -> models.Product:
-#         product = await self.db.execute(select(models.Product).where(models.Product.product_name == productname))
-#         return product.scalars().first()
+    async def get_by_name(self, productname: str) -> models.Product:
+        product = await self.db.execute(select(models.Product).where(models.Product.product_name == productname))
+        return product.scalars().first()
 
-#     async def list_products(self):
-#         listproduct = await self.db.execute(select(models.Product).order_by(models.Product.is_available.desc(), models.Product.id))
-#         return listproduct.scalars().all()
+    async def list_products(self):
+        listproduct = await self.db.execute(select(models.Product).order_by(models.Product.is_available.desc(), models.Product.id))
+        return listproduct.scalars().all()
 
-#     async def create_product(self, productdata: schemas.CreateProduct):
-#         new_product = models.Product(**productdata.model_dump())
-#         self.db.add(new_product)
-#         return new_product
+    async def create_product(self, product: models.Product):
+        self.db.add(product)
+        return product
 
-#     async def update_product(self, product: models.Product, productdata: schemas.UpdateProduct):
-#         update_data = productdata.model_dump(exclude_unset=True)
+    async def update_product(self, product: models.Product, productdata: schemas.UpdateProduct):
+        update_data = productdata.model_dump(exclude_unset=True)
 
-#         for key, value in update_data.items():
-#             setattr(product, key, value)
+        for key, value in update_data.items():
+            setattr(product, key, value)
 
-#         return product
+        return product
 
-#     async def delete_product(self, product: models.Product):
-#         await self.db.delete(product)
+    async def delete_product(self, product: models.Product):
+        await self.db.delete(product)
 
-#     async def toggle_active(self, product: models.Product):
-#         product.is_available = not product.is_available
-#         return product
+    async def toggle_active(self, product: models.Product):
+        product.is_available = not product.is_available
+        return product
 
 
-# # ============== variant ===============#
-# class VariantRepository:
-#     def __init__(self, db: AsyncSession):
-#         self.db = db
+# ============== variant ===============#
+class VariantRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
-#     async def get_by_product_id(self, productid: int):
-#         result = await self.db.execute(select(models.Variant).where(models.Variant.product_id == productid).order_by(models.Variant.id))
-#         return result.scalars().all()
+    async def get_by_product_id(self, productid: int):
+        result = await self.db.execute(select(models.Variant).where(models.Variant.product_id == productid).order_by(models.Variant.id))
+        return result.scalars().all()
 
-#     async def create_variant(self, variantdata: schemas.CreateVariant):
-#         variant = models.Variant(**variantdata.model_dump())
-#         self.db.add(variant)
-#         return variant
+    async def create_variant(self, variant: list[models.Variant]):
+        self.db.add_all(variant)
+        return variant
 
-#     async def update_variant(self, variant: models.Variant, variantdata: schemas.UpdateVariant):
-#         update_variant = variantdata.model_dump(exclude_unset=True)
-#         for key, value in update_variant.items():
-#             setattr(variant, key, value)
+    async def update_variant(self, variant: models.Variant, variantdata: schemas.UpdateVariant):
+        update_variant = variantdata.model_dump(exclude_unset=True)
+        for key, value in update_variant.items():
+            setattr(variant, key, value)
 
-#         return variant
+        return variant
 
-#     async def delete_variant(self, variant: models.Variant):
-#         await self.db.delete(variant)
+    async def delete_variant(self, variant: models.Variant):
+        await self.db.delete(variant)
 
 
 # # ============== addons ===============#
