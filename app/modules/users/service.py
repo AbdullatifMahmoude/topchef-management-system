@@ -60,11 +60,11 @@ class UserService:
         async with self.db.begin():
             user = await self.get_by_id(user_id)
             
-            if data.name is not None:
-                exist_name = await self.repo.get_by_name(data.name)
+            if data.username is not None:
+                exist_name = await self.repo.get_by_name(data.username)
                 if exist_name and exist_name.id != user_id:
                     raise ValidationError(
-                        f"user with name: '{data.name}' already exists")
+                        f"user with name: '{data.username}' already exists")
 
             if data.phone is not None:
                 exist_phone = await self.repo.get_by_phone(data.phone)

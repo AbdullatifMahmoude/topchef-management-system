@@ -25,3 +25,8 @@ async def create_user(data: schemas.CreateUser, db: AsyncSession = Depends(get_d
     createuser = await user_service.create_user(data)
     return createuser
  
+@router.patch("/users/{id}", response_model=schemas.UserResponse)
+async def update_user(id: int , data: schemas.UpdateUser, db: AsyncSession = Depends(get_db)):
+    user_service = service.UserService(db)
+    updateuser = await user_service.update_user(id , data)
+    return updateuser
