@@ -22,7 +22,7 @@ from app.core.enums import ProductType
 class Category(Base):
     __tablename__ = "categories"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     cat_name = Column(String(100), unique=True, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True,)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -33,7 +33,7 @@ class Category(Base):
 class Product(Base):
     __tablename__ = "products"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     cat_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
     product_name = Column(String(100), unique=True, nullable=False)
     product_type = Column(
@@ -63,6 +63,6 @@ class Variant(Base):
 class Addon(Base):
     __tablename__ = "addons"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     addon_name = Column(String(50), unique=True, nullable=False)
     addon_price = Column(Numeric(10,2), nullable=False, default=0)

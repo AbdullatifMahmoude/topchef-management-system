@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.modules.menu import register_menu
 from app.core.database import engine, Base
+from app.modules.users import register_user
 
 
 app = FastAPI(
@@ -10,6 +11,8 @@ app = FastAPI(
 )
 
 register_menu(app)
+register_user(app)
+
 
 @app.on_event("startup")
 async def startup():
