@@ -25,11 +25,11 @@ async def create_user(data: schemas.CreateUser, db: AsyncSession = Depends(get_d
     createuser = await user_service.create_user(data)
     return createuser
  
-# @router.patch("/users/{id}", response_model=schemas.UserResponse)
-# async def update_user(id: int , data: schemas.UpdateUser, db: AsyncSession = Depends(get_db)):
-#     user_service = service.UserService(db)
-#     updateuser = await user_service.update_user(id , data)
-#     return updateuser
+@router.patch("/users/{id}", response_model=schemas.UserResponse)
+async def update_user(id: int , data: schemas.UpdateUser, db: AsyncSession = Depends(get_db)):
+    user_service = service.UserService(db)
+    updateuser = await user_service.update_user(id , data)
+    return updateuser
 
 @router.delete("/users/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(id: int, db: AsyncSession = Depends(get_db)):
@@ -37,7 +37,7 @@ async def delete_user(id: int, db: AsyncSession = Depends(get_db)):
     deleteuser = await user_service.delete_user(id)
     return None
 
-@router.patch("/users/{id}", response_model=schemas.UserResponse)
+@router.patch("/users/{id}/toggle", response_model=schemas.UserResponse)
 async def toggle_user(id: int , db: AsyncSession = Depends(get_db)):
     user_service = service.UserService(db)
     toggleuser = await user_service.toggle_user(id)
