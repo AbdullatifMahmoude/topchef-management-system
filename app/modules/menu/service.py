@@ -174,16 +174,17 @@ class ProductService:
             if product_data.variants is not None:
                 await self.varrepo.delete_by_product_id(product_id)
             await self.db.flush()
-            variants = []
-            for v in product_data.variants:
-                variant = models.Variant(
-                    product_id= product_id,
-                    name=v.name,
-                    price=v.price
-                )
-                variants.append(variant)
-            await self.varrepo.create_variant(variants)
-            await self.db.flush()
+            if product_data.variants:
+                variants = []
+                for v in product_data.variants:
+                    variant = models.Variant(
+                        product_id= product_id,
+                        name=v.name,
+                        price=v.price
+                    )
+                    variants.append(variant)
+                await self.varrepo.create_variant(variants)
+                await self.db.flush()
             stmt = select(models.Product).options(
                 selectinload(models.Product.category),
                 selectinload(models.Product.variants)
