@@ -36,3 +36,9 @@ async def delete_user(id: int, db: AsyncSession = Depends(get_db)):
     user_service = service.UserService(db)
     deleteuser = await user_service.delete_user(id)
     return None
+
+@router.patch("/users/{id}", response_model=schemas.UserResponse)
+async def toggle_user(id: int , db: AsyncSession = Depends(get_db)):
+    user_service = service.UserService(db)
+    toggleuser = await user_service.toggle_user(id)
+    return toggleuser
