@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker
 )
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool
 from sqlalchemy import create_engine
 
 from app.core.config import settings
@@ -16,7 +15,10 @@ engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
-    poolclass=NullPool
+    pool_pre_ping=True,      # Check if connection is alive before using
+    pool_recycle=1800,       # Recycle connections every 30 minutes
+    pool_size=5,             # Maintain 5 background connections
+    max_overflow=10          # Allow up to 10 extra temporary connections
 )
 
 

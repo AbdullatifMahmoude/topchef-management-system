@@ -1,24 +1,47 @@
 from fastapi import FastAPI
+
 from app.core.config import settings
-from app.modules.menu import register_menu
 from app.core.database import engine, Base
-from app.modules.users import register_user
 from app.cors import add_cors_middleware
+
+# Module registrations
+from app.modules.menu import register_menu
+from app.modules.users import register_user
+from app.modules.auth import register_auth
+from app.modules.offer import register_offer
+
+# Infrastructure middlewares
+from app.modules.infrastructure.middlewares.auth import AuthMiddleware
+from app.modules.infrastructure.middlewares.error_handler import ErrorHandlerMiddleware
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    version=settings.VERSION
+    version=settings.VERSION,
 )
+
+# ─── Middleware Stack (order matters: first added = outermost) ───
+# 1. Error handler wraps everything — catches unhandled exceptions
+app.add_middleware(ErrorHandlerMiddleware)
+
+# 2. Auth middleware verifies JWT on protected routes
+app.add_middleware(AuthMiddleware)
+
+# 3. CORS middleware
 add_cors_middleware(app)
-register_menu(app)
-register_user(app)
+
+# ─── Register Modules ───
+register_auth(app)    # /auth/login (public)
+register_menu(app)    # /menu/* (protected)
+register_user(app)    # /user/* (protected)
+register_offer(app)   # /offers/* (protected)
 
 
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
 
 @app.get("/")
 def root():

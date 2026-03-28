@@ -27,3 +27,15 @@ class User(Base):
     __table_args__ = (
         Index("ix_users_role", "role"),
         )
+
+    def set_password(self, password: str):
+        from app.core.security import get_password_hash
+        self.hashed_password = get_password_hash(password)
+
+    def check_password(self, password: str) -> bool:
+        from app.core.security import verify_password
+        return verify_password(password, self.hashed_password)
+
+    def toggle_active(self):
+        self.is_active = not self.is_active
+        return self.is_active

@@ -25,7 +25,7 @@ class AuthenticationError(AppExceptions):
 class AuthorizationError(AppExceptions):
     def __init__(self, detail: str = "Not authorized"):
         super().__init__(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
             error_code="FORBIDDEN"
         )

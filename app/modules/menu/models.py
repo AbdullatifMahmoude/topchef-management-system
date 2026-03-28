@@ -29,6 +29,10 @@ class Category(Base):
 
     products = relationship("Product", back_populates="category",cascade="all, delete-orphan")
 
+    def toggle_active(self):
+        self.is_active = not self.is_active
+        return self.is_active
+
 
 class Product(Base):
     __tablename__ = "products"
@@ -46,6 +50,10 @@ class Product(Base):
 
     category = relationship("Category", back_populates="products")
     variants = relationship("Variant", back_populates="product",cascade="all, delete-orphan")
+
+    def toggle_availability(self):
+        self.is_available = not self.is_available
+        return self.is_available
 
 
 class Variant(Base):

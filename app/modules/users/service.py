@@ -4,10 +4,13 @@ from app.core.enums import UserRole
 from app.core.exceptions import NotFoundError, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 import re
+from app.core.logging import logger
+
 class UserService:
     def __init__(self, db:AsyncSession):
         self.db = db
         self.repo = repository.UserRepository(db)
+    
     @staticmethod
     def validate_password(password: str) -> None:
         if not re.search(r"[A-Z]", password):
@@ -54,6 +57,7 @@ class UserService:
             user_dect['hashed_password'] = hashed_password
 
             createuser = await self.repo.create_user(user_dect)
+            logger.info(f"User created: username='{data.username}', role={data.role}")
         return schemas.UserResponse.model_validate(createuser)
 
     async def update_user(self, user_id: int , data:schemas.UpdateUser):
@@ -79,17 +83,20 @@ class UserService:
                 update_data.pop("password")
 
             updateuser = await self.repo.update_user(user, schemas.UpdateUser(**update_data))
+            logger.info(f"User updated: id={user_id}, fields={list(update_data.keys())}")
         return schemas.UserResponse.model_validate(updateuser)
 
     async def delete_user(self, userid: int):
         async with self.db.begin():
             user = await self.get_by_id(userid)
             await self.repo.delete_user(user)
+            logger.info(f"User deleted: id={userid}, username='{user.username}'")
         return True
 
     async def toggle_user(self, user_id):
         async with self.db.begin():
             user = await self.get_by_id(user_id)
             toggle = await self.repo.toggle_user(user)
+            logger.info(f"User active status toggled: id={user_id}, now_active={toggle.is_active}")
         return schemas.UserResponse.model_validate(toggle)
 

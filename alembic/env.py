@@ -4,6 +4,7 @@ from alembic import context
 from app.core.database import Base, get_sync_engine
 from app.core.config import settings
 from app.modules.menu.models import Category, Product, Variant, Addon
+from app.modules.users.models import User
 
 # Alembic Config object
 config = context.config

@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError, NotFoundError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
-from app.core.enums import ProductType
-
+from app.core.enums import ProductType 
+from app.core.logging import logger
 
 # ============== category ===============#
 class CategoryService:
@@ -37,6 +37,7 @@ class CategoryService:
                     f"Category '{category_data.cat_name}' already exists")
 
             createcat = await self.repo.create_category(category_data)
+            logger.info(f"Menu Category created: '{category_data.cat_name}'")
 
         return schemas.CategoryResponse.from_orm(createcat)
 
@@ -51,20 +52,22 @@ class CategoryService:
                         f"Category '{cat_data.cat_name}' already exists")
 
             updatecat = await self.repo.update_category(existing, cat_data)
+            logger.info(f"Menu Category updated: id={cat_id}, new_name='{cat_data.cat_name}'")
 
         return schemas.CategoryResponse.from_orm(updatecat)
 
     async def delete_category(self, category_id: int):
         async with self.db.begin():
             category = await self.get_category(category_id)
-
             await self.repo.delete_category(category)
+            logger.info(f"Menu Category deleted: id={category_id}, name='{category.cat_name}'")
         return True
 
     async def toggle_category(self, category_id: int):
         async with self.db.begin():
             category = await self.get_category(category_id)
             toggle = await self.repo.toggle_active(category)
+            logger.info(f"Menu Category status toggled: id={category_id}, now_active={toggle.is_active}")
 
         return schemas.CategoryResponse.from_orm(toggle)
 
@@ -79,7 +82,7 @@ class ProductService:
 
     async def get_product(self, product_id: int):
         product = await self.repo.get_by_id(product_id)
-        if not product:
+        if not product or not product.is_available or not product.category.is_active:
             raise NotFoundError(f"Product With id:{product_id}")
 
         stmt = select(models.Product).options(selectinload(
@@ -96,8 +99,11 @@ class ProductService:
         return product_with_var
 
     async def list_products(self):
-        stmt = select(models.Product).options(
-            selectinload(models.Product.variants))
+        stmt = select(models.Product).join(models.Product.category).options(
+            selectinload(models.Product.variants)).where(
+                models.Category.is_deleted == False,
+                models.Category.is_active == True
+            )
         result = await self.db.execute(stmt)
         listproduct = result.scalars().all()
         return [schemas.ProductResponse.from_orm(c) for c in listproduct]
@@ -144,6 +150,7 @@ class ProductService:
             ).where(models.Product.id == product_model.id)
             result = await self.db.execute(stmt)
             product_with_relation = result.scalar_one()
+            logger.info(f"Menu Product created: '{product_data.product_name}', type={product_data.product_type}")
         return schemas.ProductResponse.from_orm(product_with_relation)
 
     async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
@@ -191,12 +198,14 @@ class ProductService:
             ).where(models.Product.id == product_id)
             result = await self.db.execute(stmt)
             product_with_relation = result.scalar_one()
+            logger.info(f"Menu Product updated: id={product_id}")
         return schemas.ProductResponse.from_orm(product_with_relation)
 
     async def delete_product(self, product_id: int):
         async with self.db.begin():
             product = await self.get_product(product_id)
             await self.repo.delete_product(product)
+            logger.info(f"Menu Product deleted: id={product_id}, name='{product.product_name}'")
         return True
 
     async def toggle_product(self, product_id: int):
@@ -210,5 +219,6 @@ class ProductService:
             ).where(models.Product.id == product_id)
             result = await self.db.execute(stmt)
             product_with_relation = result.scalar_one()
+            logger.info(f"Menu Product status toggled: id={product_id}, now_available={toggle.is_available}")
         return schemas.ProductResponse.from_orm(product_with_relation)
 

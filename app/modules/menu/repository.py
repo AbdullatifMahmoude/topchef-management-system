@@ -39,7 +39,7 @@ class CategoryRepository:
         await self.db.delete(category)
 
     async def toggle_active(self, category: models.Category):
-        category.is_active = not category.is_active
+        category.toggle_active()
         return category
 
 
@@ -75,7 +75,7 @@ class ProductRepository:
         await self.db.delete(product)
 
     async def toggle_active(self, product: models.Product):
-        product.is_available = not product.is_available
+        product.toggle_availability()
         return product
 
 

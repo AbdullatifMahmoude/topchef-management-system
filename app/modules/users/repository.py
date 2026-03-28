@@ -44,5 +44,5 @@ class UserRepository:
         await self.db.delete(user)
     
     async def toggle_user(self, user: models.User):
-        user.is_active = not user.is_active
+        user.toggle_active()
         return user
