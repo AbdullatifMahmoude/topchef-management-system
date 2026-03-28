@@ -2,7 +2,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.modules.offer.models import Offer
 from app.modules.offer.schemas import OfferCreate
-from datetime import datetime
 
 class OfferRepository:
     def __init__(self, db: AsyncSession):
