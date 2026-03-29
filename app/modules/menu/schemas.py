@@ -13,7 +13,6 @@ class CreateVariant(VariantBase):
     pass
 
 class UpdateVariant(BaseModel):
-    id: Optional[int] = None
     name: Optional[str] = None
     price: Optional[Decimal] = Field(None, max_digits=10, decimal_places=2)
 

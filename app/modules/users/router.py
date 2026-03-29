@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.users import schemas, service
 from typing import List
 from app.core.database import get_db
+from app.core.redis import get_redis
 from app.core.enums import UserRole
 from app.modules.infrastructure.dependencies import require_role
 
@@ -15,9 +16,10 @@ router = APIRouter(prefix="/user", tags=['user'])
 @router.get("/users", response_model=List[schemas.UserResponse])
 async def get_list(
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_role(UserRole.ADMIN)),
 ):
-    user_service = service.UserService(db)
+    user_service = service.UserService(db, redis)
     get_list = await user_service.list_users()
     return get_list
 
@@ -26,9 +28,10 @@ async def get_list(
 async def get_user_by_id(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_role(UserRole.ADMIN)),
 ):
-    user_service = service.UserService(db)
+    user_service = service.UserService(db, redis)
     get_user = await user_service.get_by_id(id)
     return get_user
 
@@ -37,9 +40,10 @@ async def get_user_by_id(
 async def create_user(
     data: schemas.CreateUser,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_role(UserRole.ADMIN)),
 ):
-    user_service = service.UserService(db)
+    user_service = service.UserService(db, redis)
     createuser = await user_service.create_user(data)
     return createuser
 
@@ -49,9 +53,10 @@ async def update_user(
     id: int,
     data: schemas.UpdateUser,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_role(UserRole.ADMIN)),
 ):
-    user_service = service.UserService(db)
+    user_service = service.UserService(db, redis)
     updateuser = await user_service.update_user(id, data)
     return updateuser
 
@@ -60,9 +65,10 @@ async def update_user(
 async def delete_user(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_role(UserRole.ADMIN)),
 ):
-    user_service = service.UserService(db)
+    user_service = service.UserService(db, redis)
     deleteuser = await user_service.delete_user(id)
     return None
 
@@ -71,8 +77,9 @@ async def delete_user(
 async def toggle_user(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_role(UserRole.ADMIN)),
 ):
-    user_service = service.UserService(db)
+    user_service = service.UserService(db, redis)
     toggleuser = await user_service.toggle_user(id)
     return toggleuser

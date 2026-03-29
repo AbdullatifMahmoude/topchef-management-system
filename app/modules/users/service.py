@@ -7,8 +7,9 @@ import re
 from app.core.logging import logger
 
 class UserService:
-    def __init__(self, db:AsyncSession):
+    def __init__(self, db: AsyncSession, redis=None):
         self.db = db
+        self.redis = redis
         self.repo = repository.UserRepository(db)
     
     @staticmethod
@@ -28,10 +29,31 @@ class UserService:
                 "Password must contain at least one digit"
             )
         
-    async def get_by_id(self, userid: int):
+    async def get_by_id(self, userid: int, check_cache: bool = True):
+        cache_key = f"user_session:{userid}"
+        
+        # 1. Try Cache Path
+        if check_cache and self.redis:
+            try:
+                cached = await self.redis.get(cache_key)
+                if cached:
+                    return schemas.UserResponse.model_validate_json(cached)
+            except Exception as e:
+                logger.warning(f"Redis error getting user {userid}: {e}")
+
+        # 2. Database Path
         user = await self.repo.get_by_id(userid)
         if not user: 
             raise NotFoundError(f"user with id:{userid} not found")
+            
+        # 3. Save to Cache (10 minutes)
+        if self.redis:
+            try:
+                user_res = schemas.UserResponse.model_validate(user)
+                await self.redis.setex(cache_key, 600, user_res.model_dump_json())
+            except Exception as e:
+                logger.warning(f"Redis error caching user {userid}: {e}")
+                
         return user
 
     async def get_by_name(self, name:str):
@@ -62,7 +84,7 @@ class UserService:
 
     async def update_user(self, user_id: int , data:schemas.UpdateUser):
         async with self.db.begin():
-            user = await self.get_by_id(user_id)
+            user = await self.get_by_id(user_id, check_cache=False)
             
             if data.username is not None:
                 exist_name = await self.repo.get_by_name(data.username)
@@ -83,20 +105,36 @@ class UserService:
                 update_data.pop("password")
 
             updateuser = await self.repo.update_user(user, schemas.UpdateUser(**update_data))
+            
+            # Invalidate Redis cache
+            if self.redis:
+                await self.redis.delete(f"user_session:{user_id}")
+            
             logger.info(f"User updated: id={user_id}, fields={list(update_data.keys())}")
         return schemas.UserResponse.model_validate(updateuser)
 
     async def delete_user(self, userid: int):
         async with self.db.begin():
-            user = await self.get_by_id(userid)
+            user = await self.get_by_id(userid, check_cache=False)
             await self.repo.delete_user(user)
+            
+            # Invalidate Redis cache
+            if self.redis:
+                await self.redis.delete(f"user_session:{userid}")
+                
             logger.info(f"User deleted: id={userid}, username='{user.username}'")
         return True
 
     async def toggle_user(self, user_id):
         async with self.db.begin():
-            user = await self.get_by_id(user_id)
+            user = await self.get_by_id(user_id, check_cache=False)
             toggle = await self.repo.toggle_user(user)
+            
+            # Invalidate Redis cache
+            if self.redis:
+                await self.redis.delete(f"user_session:{user_id}")
+                
             logger.info(f"User active status toggled: id={user_id}, now_active={toggle.is_active}")
         return schemas.UserResponse.model_validate(toggle)
+
 

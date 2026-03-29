@@ -6,7 +6,10 @@ from pythonjsonlogger import jsonlogger
 def setup_logging():
     loghandler = logging.StreamHandler(sys.stdout)
     formatter = jsonlogger.JsonFormatter(
-        "%(timestamp)s %(level)s %(name)s %(message)s"
+        "%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        rename_fields={"asctime": "timestamp", "levelname": "level"},
+        json_ensure_ascii=False # Support Arabic in logs
     )
 
     loghandler.setFormatter(formatter)

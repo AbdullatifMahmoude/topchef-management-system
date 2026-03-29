@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
+from app.core.redis import get_redis
 from app.modules.menu import service, schemas
 from typing import List
 from app.modules.infrastructure.dependencies import (
@@ -17,22 +18,30 @@ router = APIRouter(prefix="/menu", tags=["menu"])
 @router.get("/categories", response_model=List[schemas.CategoryResponse])
 async def list_categories(
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(get_current_user),
 ):
-    cat_service = service.CategoryService(db)
-    listcat = await cat_service.list_categories()
-    return listcat
+    cat_service = service.CategoryService(db, redis)
+    
+    # Simple check: Admins see everything, Others see only active
+    only_active = _current_user.role != "admin"
+    
+    return await cat_service.list_categories(only_active=only_active)
 
 
 @router.get("/categories/{id}", response_model=schemas.CategoryResponse)
 async def get_category(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(get_current_user),
 ):
-    cat_service = service.CategoryService(db)
-    getcat = await cat_service.get_category(id)
-    return getcat
+    cat_service = service.CategoryService(db, redis)
+    
+    # Simple check: Admins can see inactive items via ID, Others cannot
+    only_active = _current_user.role != "admin"
+    
+    return await cat_service.get_category(id, only_active=only_active)
 
 
 # WRITE operations — only ADMIN can manage menu
@@ -44,9 +53,10 @@ async def get_category(
 async def create_category(
     cat_data: schemas.CreateCategory,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
-    cat_service = service.CategoryService(db)
+    cat_service = service.CategoryService(db, redis)
     createcat = await cat_service.create_category(cat_data)
     return createcat
 
@@ -56,9 +66,10 @@ async def update_category(
     id: int,
     cat_data: schemas.UpdateCategory,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
-    cat_service = service.CategoryService(db)
+    cat_service = service.CategoryService(db, redis)
     updatecat = await cat_service.update_category(id, cat_data)
     return updatecat
 
@@ -67,9 +78,10 @@ async def update_category(
 async def delete_category(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
-    cat_service = service.CategoryService(db)
+    cat_service = service.CategoryService(db, redis)
     await cat_service.delete_category(id)
     return None
 
@@ -78,9 +90,10 @@ async def delete_category(
 async def toggle_category(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
-    cat_service = service.CategoryService(db)
+    cat_service = service.CategoryService(db, redis)
     toggle = await cat_service.toggle_category(id)
     return toggle
 
@@ -91,22 +104,31 @@ async def toggle_category(
 @router.get("/products", response_model=List[schemas.ProductResponse])
 async def list_products(
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(get_current_user),
 ):
-    products_service = service.ProductService(db)
-    listproduct = await products_service.list_products()
-    return listproduct
+    products_service = service.ProductService(db, redis)
+    
+    # Simple check: Admins see everything, Others see only active
+    # Using 'admin' as the standard role name
+    only_active = _current_user.role != "admin"
+    
+    return await products_service.list_products(only_active=only_active)
 
 
 @router.get("/products/{id}", response_model=schemas.ProductResponse)
 async def get_product(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(get_current_user),
 ):
-    products_service = service.ProductService(db)
-    getproduct = await products_service.get_product(id)
-    return getproduct
+    products_service = service.ProductService(db, redis)
+    
+    # Simple check: Admins can see inactive items via ID, Others cannot
+    only_active = _current_user.role != "admin"
+    
+    return await products_service.get_product(id, only_active=only_active)
 
 
 # WRITE operations — only ADMIN can manage menu
@@ -118,9 +140,10 @@ async def get_product(
 async def create_product(
     product_data: schemas.CreateProduct,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
-    products_service = service.ProductService(db)
+    products_service = service.ProductService(db, redis)
     createproduct = await products_service.create_product(product_data)
     return createproduct
 
@@ -130,9 +153,10 @@ async def update_product(
     id: int,
     product_data: schemas.UpdateProduct,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
-    products_service = service.ProductService(db)
+    products_service = service.ProductService(db, redis)
     updateproduct = await products_service.update_product(id, product_data)
     return updateproduct
 
@@ -141,9 +165,10 @@ async def update_product(
 async def delete_product(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
-    products_service = service.ProductService(db)
+    products_service = service.ProductService(db, redis)
     await products_service.delete_product(id)
     return None
 
@@ -152,8 +177,9 @@ async def delete_product(
 async def toggle_product(
     id: int,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
-    products_service = service.ProductService(db)
+    products_service = service.ProductService(db, redis)
     toggle = await products_service.toggle_product(id)
     return toggle

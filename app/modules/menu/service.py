@@ -1,3 +1,4 @@
+import json
 from app.modules.menu import repository, models, schemas
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError, NotFoundError
@@ -8,15 +9,33 @@ from app.core.logging import logger
 
 # ============== category ===============#
 class CategoryService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, redis=None):
         self.db = db
+        self.redis = redis
         self.repo = repository.CategoryRepository(db)
 
-    async def get_category(self, category_id: int):
+    async def get_category(self, category_id: int, check_cache: bool = True, only_active: bool = False):
+        # 1. Try Cache Path
+        if check_cache and self.redis:
+            try:
+                cached = await self.redis.get("menu:categories")
+                if cached:
+                    logger.info("⚡ Redis Cache Hit: Categories")
+                    data = json.loads(cached)
+                    for cat_data in categories:
+                        if cat_data["id"] == category_id:
+                            return schemas.CategoryResponse.model_validate(cat_data)
+            except Exception as e:
+                logger.warning(f"Redis error getting category {category_id}: {e}")
+
+        # 2. Database Path
         category = await self.repo.get_by_id(category_id)
 
         if not category:
             raise NotFoundError(f"Category with id:{category_id}")
+            
+        if only_active and not category.is_active:
+             raise NotFoundError(f"Category with id:{category_id} is inactive")
 
         return category
 
@@ -24,201 +43,255 @@ class CategoryService:
         cat = await self.repo.get_by_name(cat_name)
         return cat
 
-    async def list_categories(self):
+    async def list_categories(self, only_active: bool = False):
+        cache_key = "menu:categories"
+        
+        # 1. Try Cache (Only for public requests)
+        if only_active and self.redis:
+            try:
+                cached = await self.redis.get(cache_key)
+                if cached:
+                    logger.info("⚡ Redis Cache Hit: Category List")
+                    data = json.loads(cached)
+                    return [schemas.CategoryResponse.model_validate(item) for item in data]
+            except Exception as e:
+                logger.warning(f"Redis error reading categories: {e}")
+
+        # 2. DB Fallback
         listcat = await self.repo.list_category()
-        return [schemas.CategoryResponse.from_orm(c) for c in listcat]
+        
+        if only_active:
+            # Public view: Filter active categories
+            categories = [schemas.CategoryResponse.model_validate(c) for c in listcat if c.is_active]
+            # Refresh public cache
+            if self.redis:
+                try:
+                    serializable = [c.model_dump(mode='json') for c in categories]
+                    await self.redis.setex(cache_key, 3600, json.dumps(serializable))
+                except Exception as e:
+                    logger.warning(f"Redis error writing categories: {e}")
+        else:
+            # Admin view: Show all
+            categories = [schemas.CategoryResponse.model_validate(c) for c in listcat]
+
+        return categories
+
+    async def _invalidate_cache(self):
+        if self.redis:
+            try:
+                await self.redis.delete("menu:categories")
+                await self.redis.delete("menu:products")
+            except Exception as e:
+                logger.warning(f"Redis error invalidating menu cache: {e}")
 
     async def create_category(self, category_data: schemas.CreateCategory):
         async with self.db.begin():
             existing = await self.repo.get_by_name(category_data.cat_name)
-
             if existing:
-                raise ValidationError(
-                    f"Category '{category_data.cat_name}' already exists")
+                raise ValidationError(f"Category '{category_data.cat_name}' already exists")
 
             createcat = await self.repo.create_category(category_data)
+            await self.db.flush()
             logger.info(f"Menu Category created: '{category_data.cat_name}'")
+            await self._invalidate_cache()
 
-        return schemas.CategoryResponse.from_orm(createcat)
+        return schemas.CategoryResponse.model_validate(createcat)
 
     async def update_category(self, cat_id: int, cat_data: schemas.UpdateCategory):
         async with self.db.begin():
-            existing = await self.get_category(cat_id)
+            existing = await self.get_category(cat_id, check_cache=False)
 
-            if cat_data.cat_name is not None:
+            if cat_data.cat_name is not None and cat_data.cat_name != existing.cat_name:
                 exist_name = await self.repo.get_by_name(cat_data.cat_name)
-                if exist_name and exist_name.id != cat_id:
-                    raise ValidationError(
-                        f"Category '{cat_data.cat_name}' already exists")
+                if exist_name:
+                    raise ValidationError(f"Category '{cat_data.cat_name}' already exists")
 
             updatecat = await self.repo.update_category(existing, cat_data)
-            logger.info(f"Menu Category updated: id={cat_id}, new_name='{cat_data.cat_name}'")
+            await self.db.flush()
+            logger.info(f"Menu Category updated: id={cat_id}")
+            await self._invalidate_cache()
 
-        return schemas.CategoryResponse.from_orm(updatecat)
+        return schemas.CategoryResponse.model_validate(updatecat)
 
     async def delete_category(self, category_id: int):
         async with self.db.begin():
-            category = await self.get_category(category_id)
+            category = await self.get_category(category_id, check_cache=False)
             await self.repo.delete_category(category)
-            logger.info(f"Menu Category deleted: id={category_id}, name='{category.cat_name}'")
+            logger.info(f"Menu Category deleted: id={category_id}")
+            await self._invalidate_cache()
         return True
 
     async def toggle_category(self, category_id: int):
         async with self.db.begin():
-            category = await self.get_category(category_id)
+            category = await self.get_category(category_id, check_cache=False)
             toggle = await self.repo.toggle_active(category)
+            await self.db.flush()
             logger.info(f"Menu Category status toggled: id={category_id}, now_active={toggle.is_active}")
+            await self._invalidate_cache()
 
-        return schemas.CategoryResponse.from_orm(toggle)
+        return schemas.CategoryResponse.model_validate(toggle)
 
 
 # ============== product ===============#
 class ProductService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, redis=None):
         self.db = db
+        self.redis = redis
         self.repo = repository.ProductRepository(db)
         self.varrepo = repository.VariantRepository(db)
-        self.category_service = CategoryService(db)
+        self.category_service = CategoryService(db, redis)
 
-    async def get_product(self, product_id: int):
+    async def _invalidate_cache(self):
+        if self.redis:
+            try:
+                await self.redis.delete("menu:products")
+            except Exception as e:
+                logger.warning(f"Redis error invalidating products cache: {e}")
+
+    async def get_product(self, product_id: int, check_cache: bool = True, only_active: bool = False):
+        # 1. Try Cache Path (Used by public API)
+        if check_cache and self.redis:
+            try:
+                cached = await self.redis.get("menu:products")
+                if cached:
+                    logger.info(f"⚡ Redis Cache Hit: Product {product_id}")
+                    products = json.loads(cached)
+                    for prod_data in products:
+                        if prod_data["id"] == product_id:
+                            return schemas.ProductResponse.model_validate(prod_data)
+            except Exception as e:
+                logger.warning(f"Redis error getting product {product_id}: {e}")
+
+        # 2. Database Path
         product = await self.repo.get_by_id(product_id)
-        if not product or not product.is_available or not product.category.is_active:
+        if not product:
             raise NotFoundError(f"Product With id:{product_id}")
-
-        stmt = select(models.Product).options(selectinload(
-            models.Product.variants)).where(models.Product.id == product_id)
-        result = await self.db.execute(stmt)
-        product_with_var = result.all()
+        
+        # Validation for public route if requested
+        if only_active and (not product.is_available or not (product.category and product.category.is_active)):
+            raise NotFoundError(f"Product With id:{product_id} is not available")
+            
         return product
 
-    async def get_product_by_name(self, product_name: str):
-        stmt = select(models.Product).options(selectinload(
-            models.Product.variants)).where(models.Product.product_name == product_name)
-        result = await self.db.execute(stmt)
-        product_with_var = result.all()
-        return product_with_var
+    async def list_products(self, only_active: bool = False):
+        cache_key = "menu:products"
 
-    async def list_products(self):
-        stmt = select(models.Product).join(models.Product.category).options(
-            selectinload(models.Product.variants)).where(
-                models.Category.is_deleted == False,
-                models.Category.is_active == True
-            )
-        result = await self.db.execute(stmt)
-        listproduct = result.scalars().all()
-        return [schemas.ProductResponse.from_orm(c) for c in listproduct]
+        # 1. Try Cache (Only for public active-only requests)
+        if only_active and self.redis:
+            try:
+                cached = await self.redis.get(cache_key)
+                if cached:
+                    logger.info("⚡ Redis Cache Hit: Product List")
+                    data = json.loads(cached)
+                    return [schemas.ProductResponse.model_validate(item) for item in data]
+            except Exception as e:
+                logger.warning(f"Redis error reading products: {e}")
+
+        # 2. DB Fallback
+        listproduct = await self.repo.list_products()
+        
+        if only_active:
+            # Public view: Filter for active categories AND active products
+            products = [
+                schemas.ProductResponse.model_validate(p) 
+                for p in listproduct 
+                if p.is_available and (p.category and p.category.is_active)
+            ]
+            # Save public list to cache
+            if self.redis:
+                try:
+                    serializable = [p.model_dump(mode='json') for p in products]
+                    await self.redis.setex(cache_key, 3600, json.dumps(serializable))
+                except Exception as e:
+                    logger.warning(f"Redis error writing products: {e}")
+        else:
+            # Admin view: Show everything
+            products = [schemas.ProductResponse.model_validate(p) for p in listproduct]
+
+        return products
 
     async def create_product(self, product_data: schemas.CreateProduct):
         async with self.db.begin():
-            product = await self.repo.get_by_name(product_data.product_name)
-            cat = await self.category_service.get_category(product_data.cat_id)
-            if product:
-                raise ValidationError(
-                    f"Product with name: '{product_data.product_name}' already exist")
+            # Bundle checks into fewer DB trips
+            existing = await self.repo.get_by_name(product_data.product_name)
+            if existing:
+                raise ValidationError(f"Product name '{product_data.product_name}' already exists")
+
+            # Use cached category check for speed
+            await self.category_service.get_category(product_data.cat_id)
 
             if product_data.product_type == ProductType.SIMPLE and len(product_data.variants) != 1:
-                raise ValidationError(
-                    "simple type of product must have one variant"
-                )
+                raise ValidationError("Simple type must have one variant")
             if product_data.product_type == ProductType.VARIANT and len(product_data.variants) < 2:
-                raise ValidationError(
-                    "variant type of product must have at least two variants"
-                )
+                raise ValidationError("Variant type must have at least two variants")
 
+            # Efficient relationship management: build tree and save once
             product_model = models.Product(
                 cat_id=product_data.cat_id,
                 product_name=product_data.product_name,
                 product_type=product_data.product_type,
-                description=product_data.description
-
+                description=product_data.description,
+                variants=[models.Variant(name=v.name, price=v.price) for v in product_data.variants]
             )
             await self.repo.create_product(product_model)
             await self.db.flush()
-            variants = []
-            for v in product_data.variants:
-                variant = models.Variant(
-                    product_id=product_model.id,
-                    name=v.name,
-                    price=v.price
-                )
-                variants.append(variant)
-            await self.varrepo.create_variant(variants)
-            await self.db.flush()
-            stmt = select(models.Product).options(
-                selectinload(models.Product.category),
-                selectinload(models.Product.variants)
-            ).where(models.Product.id == product_model.id)
-            result = await self.db.execute(stmt)
-            product_with_relation = result.scalar_one()
-            logger.info(f"Menu Product created: '{product_data.product_name}', type={product_data.product_type}")
-        return schemas.ProductResponse.from_orm(product_with_relation)
+            logger.info(f"Menu Product created: '{product_data.product_name}'")
+            await self._invalidate_cache()
+
+        return schemas.ProductResponse.model_validate(product_model)
 
     async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
         async with self.db.begin():
-            existing = await self.repo.get_by_id(product_id)
-            if not existing:
-                raise NotFoundError(f"product with id:{product_id}")
-            if product_data.cat_id is not None:
-                cat = await self.category_service.get_category(product_data.cat_id)
-
-            if product_data.product_name is not None:
-                product = await self.repo.get_by_name(product_data.product_name)
-                if product and product.id != product_id:
-                    raise ValidationError(
-                        f"Product with name: '{product_data.product_name}' already exist")
-
-            if product_data.product_type == ProductType.SIMPLE and len(product_data.variants) != 1:
-                raise ValidationError(
-                    "simple type of product must have one variant"
-                )
-            if product_data.product_type == ProductType.VARIANT and len(product_data.variants) < 2:
-                raise ValidationError(
-                    "variant type of product must have at least two variants"
-                )
-
+            # 1 DB Trip: Fetch product with category and variants pre-loaded
+            existing = await self.get_product(product_id, check_cache=False)
             
+            if product_data.cat_id and product_data.cat_id != existing.cat_id:
+                await self.category_service.get_category(product_data.cat_id)
+
+            if product_data.product_name and product_data.product_name != existing.product_name:
+                name_check = await self.repo.get_by_name(product_data.product_name)
+                if name_check:
+                    raise ValidationError(f"Product name '{product_data.product_name}' taken")
+
+            # Variant & Type Validation
+            p_type = product_data.product_type or existing.product_type
+            v_list = product_data.variants if product_data.variants is not None else existing.variants
+            v_count = len(v_list)
+
+            if p_type == ProductType.SIMPLE and v_count != 1:
+                raise ValidationError(f"Simple type product must have exactly one variant (current count: {v_count})")
+            
+            if p_type == ProductType.VARIANT and v_count < 2:
+                raise ValidationError(f"Variant type product must have at least two variants (current count: {v_count})")
+
+            # Update core fields
             await self.repo.update_product(existing, product_data)
+            
+            # Efficient Variant update (if provided)
             if product_data.variants is not None:
-                await self.varrepo.delete_by_product_id(product_id)
+                existing.variants = [models.Variant(name=v.name, price=v.price) for v in product_data.variants]
+
             await self.db.flush()
-            if product_data.variants:
-                variants = []
-                for v in product_data.variants:
-                    variant = models.Variant(
-                        product_id= product_id,
-                        name=v.name,
-                        price=v.price
-                    )
-                    variants.append(variant)
-                await self.varrepo.create_variant(variants)
-                await self.db.flush()
-            stmt = select(models.Product).options(
-                selectinload(models.Product.category),
-                selectinload(models.Product.variants)
-            ).where(models.Product.id == product_id)
-            result = await self.db.execute(stmt)
-            product_with_relation = result.scalar_one()
             logger.info(f"Menu Product updated: id={product_id}")
-        return schemas.ProductResponse.from_orm(product_with_relation)
+            await self._invalidate_cache()
+            
+        return schemas.ProductResponse.model_validate(existing)
 
     async def delete_product(self, product_id: int):
         async with self.db.begin():
-            product = await self.get_product(product_id)
+            product = await self.get_product(product_id, check_cache=False)
             await self.repo.delete_product(product)
-            logger.info(f"Menu Product deleted: id={product_id}, name='{product.product_name}'")
+            logger.info(f"Menu Product deleted: id={product_id}")
+            await self._invalidate_cache()
         return True
 
     async def toggle_product(self, product_id: int):
         async with self.db.begin():
-            product = await self.get_product(product_id)
+            product = await self.get_product(product_id, check_cache=False)
             toggle = await self.repo.toggle_active(product)
             await self.db.flush()
-            stmt = select(models.Product).options(
-                selectinload(models.Product.category),
-                selectinload(models.Product.variants)
-            ).where(models.Product.id == product_id)
-            result = await self.db.execute(stmt)
-            product_with_relation = result.scalar_one()
             logger.info(f"Menu Product status toggled: id={product_id}, now_available={toggle.is_available}")
-        return schemas.ProductResponse.from_orm(product_with_relation)
+            await self._invalidate_cache()
+            
+        return schemas.ProductResponse.model_validate(toggle)
 

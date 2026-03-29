@@ -3,6 +3,7 @@ from sqlalchemy.future import select
 from app.modules.menu import models, schemas
 from typing import Optional
 from sqlalchemy import delete
+from sqlalchemy.orm import selectinload
 
 
 # ============== category ===============#
@@ -49,15 +50,27 @@ class ProductRepository:
         self.db = db
 
     async def get_by_id(self, productid: int):
-        product = await self.db.execute(select(models.Product).where(models.Product.id == productid))
+        stmt = select(models.Product).options(
+            selectinload(models.Product.category),
+            selectinload(models.Product.variants)
+        ).where(models.Product.id == productid)
+        product = await self.db.execute(stmt)
         return product.scalar_one_or_none()
 
     async def get_by_name(self, productname: str) -> models.Product:
-        product = await self.db.execute(select(models.Product).where(models.Product.product_name == productname))
+        stmt = select(models.Product).options(
+            selectinload(models.Product.category),
+            selectinload(models.Product.variants)
+        ).where(models.Product.product_name == productname)
+        product = await self.db.execute(stmt)
         return product.scalars().first()
 
     async def list_products(self):
-        listproduct = await self.db.execute(select(models.Product).order_by(models.Product.is_available.desc(), models.Product.id))
+        stmt = select(models.Product).options(
+            selectinload(models.Product.category),
+            selectinload(models.Product.variants)
+        ).order_by(models.Product.is_available.desc(), models.Product.id)
+        listproduct = await self.db.execute(stmt)
         return listproduct.scalars().all()
 
     async def create_product(self, product: models.Product):
