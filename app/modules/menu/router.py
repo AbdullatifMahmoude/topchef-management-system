@@ -44,7 +44,7 @@ async def get_category(
     return await cat_service.get_category(id, only_active=only_active)
 
 
-# WRITE operations — only ADMIN can manage menu
+# WRITE operations — only ADM;IN can manage menu
 @router.post(
     "/categories",
     response_model=schemas.CategoryResponse,
