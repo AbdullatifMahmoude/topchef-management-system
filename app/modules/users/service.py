@@ -64,6 +64,11 @@ class UserService:
         listusers = await self.repo.list_users()
         return [schemas.UserResponse.model_validate(c) for c in listusers]
 
+    async def list_delivery_users(self):
+        listusers = await self.repo.get_by_role(UserRole.DELIVERY)
+        return [schemas.UserResponse.model_validate(c) for c in listusers]
+
+
     async def create_user(self, data:schemas.CreateUser):
         async with self.db.begin():
             exist_user = await self.get_by_name(data.username)

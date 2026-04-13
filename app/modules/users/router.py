@@ -24,6 +24,16 @@ async def get_list(
     return get_list
 
 
+@router.get("/users/delivery", response_model=List[schemas.UserResponse])
+async def get_delivery_users(
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
+    _current_user=Depends(require_role(UserRole.ADMIN, UserRole.CASHIER)),
+):
+    user_service = service.UserService(db, redis)
+    return await user_service.list_delivery_users()
+
+
 @router.get("/users/{id}", response_model=schemas.UserResponse)
 async def get_user_by_id(
     id: int,

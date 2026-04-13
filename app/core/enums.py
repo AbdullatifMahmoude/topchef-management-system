@@ -16,3 +16,21 @@ class DiscountType(str, Enum):
     SEASONAL_DISCOUNT = "seasonal_discount"
     PROMO_CODE = "promo_code"
     BULK_DISCOUNT = "bulk_discount"
+
+class OrderStatus(str, Enum):
+    NEW = "new"
+    CONFIRMED = "confirmed"
+    COMPLETED = "completed"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
+    
+
+class OrderType(str, Enum):
+    HALL = "hall"
+    TAKEAWAY = "takeaway"
+    DELIVERY = "delivery"
+    ONLINE = "online"
+
+class OrderSource(str, Enum):
+    CASHIER = "cashier"
+    ONLINE = "online"
