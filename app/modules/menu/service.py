@@ -173,6 +173,10 @@ class ProductService:
             
         return product
 
+    async def get_products_by_ids(self, product_ids: list[int]) -> list[models.Product]:
+        """Get multiple products by IDs."""
+        return await self.repo.get_by_ids(product_ids)
+
     async def list_products(self, only_active: bool = False):
         cache_key = "menu:products"
 

@@ -11,13 +11,31 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    sha256_hashedpassword = hashlib.sha256(plain_password.encode()).hexdigest()
-    return pwd_context.verify(sha256_hashedpassword, hashed_password)
+    """
+    Verify password using bcrypt.
+    Includes fallback for legacy SHA256 double-hashed passwords.
+    """
+    # 1. Try standard bcrypt (Modern)
+    try:
+        if pwd_context.verify(plain_password, hashed_password):
+            return True
+    except Exception:
+        pass
+
+    # 2. Try legacy fallback (SHA256 then Bcrypt)
+    try:
+        legacy_hash = hashlib.sha256(plain_password.encode()).hexdigest()
+        if pwd_context.verify(legacy_hash, hashed_password):
+            return True
+    except Exception:
+        pass
+
+    return False
 
 
 def get_password_hash(password: str) -> str:
-    sha256_hashedpassword = hashlib.sha256(password.encode()).hexdigest()
-    return pwd_context.hash(sha256_hashedpassword)
+    """Hash password using bcrypt."""
+    return pwd_context.hash(password)
 
 
 def create_access_token(

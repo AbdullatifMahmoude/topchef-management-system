@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,14 +12,25 @@ from app.modules.auth.repository import AuthRepository
 from app.modules.auth.schemas import TokenPayload
 from app.modules.users.schemas import UserResponse
 
-security_scheme = HTTPBearer()
+from app.core.logging import logger
+
+security_scheme = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis)
 ):
+    if not credentials:
+         raise AuthenticationError("Authorization header missing")
+         
     token = credentials.credentials
+    
+    # ✅ FIX: Check if token is revoked
+    from app.core.token_blacklist import TokenBlacklist
+    if await TokenBlacklist().is_revoked(token):
+        raise AuthenticationError("Token has been revoked. Please log in again.")
+        
     payload = decode_token(token)
     if payload is None:
         raise AuthenticationError("Invalid or expired token")
@@ -41,8 +53,6 @@ async def get_current_user(
     # 2. If not in cache or error, get from database
     repo = AuthRepository(db)
     user = await repo.get_user_by_id(token_data.user_id)
-    await db.commit()
-
     if user is None:
         raise AuthenticationError("User no longer exists")
 
@@ -52,7 +62,7 @@ async def get_current_user(
     # 3. Cache the user for future requests (expire in 10 minutes)
     if redis:
         try:
-            user_response = UserResponse.from_orm(user)
+            user_response = UserResponse.model_validate(user)
             await redis.setex(
                 cache_key,
                 600,  # 10 minutes
@@ -62,3 +72,15 @@ async def get_current_user(
             logger.warning(f"Error writing to Redis cache: {e}")
 
     return user
+
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis)
+) -> Optional[UserResponse]:
+    if not credentials:
+        return None
+    try:
+        return await get_current_user(credentials, db, redis)
+    except Exception:
+        return None

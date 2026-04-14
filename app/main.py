@@ -9,6 +9,8 @@ from app.modules.menu import register_menu
 from app.modules.users import register_user
 from app.modules.auth import register_auth
 from app.modules.offer import register_offer
+from app.modules.pricing import register_pricing
+from app.modules.orders import register_orders
 
 # Infrastructure middlewares
 from app.modules.infrastructure.middlewares.auth import AuthMiddleware
@@ -35,6 +37,8 @@ register_auth(app)    # /auth/login (public)
 register_menu(app)    # /menu/* (protected)
 register_user(app)    # /user/* (protected)
 register_offer(app)   # /offers/* (protected)
+register_pricing(app) # /pricing/* (public/protected)
+register_orders(app)  # /orders/* (protected)
 
 
 @app.on_event("startup")

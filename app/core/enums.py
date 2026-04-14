@@ -13,9 +13,6 @@ class DiscountType(str, Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
     BUY_ONE_GET_ONE = "buy_one_get_one"
-    SEASONAL_DISCOUNT = "seasonal_discount"
-    PROMO_CODE = "promo_code"
-    BULK_DISCOUNT = "bulk_discount"
 
 class OrderStatus(str, Enum):
     NEW = "new"

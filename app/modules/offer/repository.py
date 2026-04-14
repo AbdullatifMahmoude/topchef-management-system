@@ -23,10 +23,32 @@ class OfferRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_by_code(self, code: str) -> Offer:
+    async def get_by_code(self, code: str, lock: bool = False) -> Offer:
         query = select(Offer).where(Offer.code == code)
+        if lock:
+            query = query.with_for_update()
         result = await self.db.execute(query)
         return result.scalars().first()
+
+    async def get_customer_usage_count(self, offer_id: int, customer_phone: str = None, cashier_id: int = None) -> int:
+        from sqlalchemy import func
+        from app.modules.offer.models import OfferUsage
+        
+        query = select(func.count(OfferUsage.usage_id)).where(OfferUsage.offer_id == offer_id)
+        if customer_phone:
+            query = query.where(OfferUsage.customer_phone == customer_phone)
+        elif cashier_id:
+            query = query.where(OfferUsage.cashier_id == cashier_id)
+        else:
+            return 0 # No identity to check
+            
+        result = await self.db.execute(query)
+        return result.scalar() or 0
+
+    async def record_usage(self, usage_data: dict) -> None:
+        from app.modules.offer.models import OfferUsage
+        new_usage = OfferUsage(**usage_data)
+        self.db.add(new_usage)
 
     async def list_offers(self) -> list[Offer]:
         query = select(Offer)

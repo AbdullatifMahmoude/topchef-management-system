@@ -50,7 +50,7 @@ class EventBus:
 
     async def _run_handler(self, handler: Callable, event: Event):
         try:
-            if asyncio.iscoroutine(handler):
+            if asyncio.iscoroutinefunction(handler):
                 await handler(event)
             else:
                 handler(event)

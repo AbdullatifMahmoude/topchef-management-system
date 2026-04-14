@@ -8,6 +8,7 @@ from app.modules.infrastructure.dependencies import (
     require_capability,
     Capability,
     get_current_user,
+    get_optional_user,
 )
 
 router = APIRouter(prefix="/menu", tags=["menu"])
@@ -19,12 +20,12 @@ router = APIRouter(prefix="/menu", tags=["menu"])
 async def list_categories(
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
-    _current_user=Depends(get_current_user),
+    _user=Depends(get_optional_user),
 ):
     cat_service = service.CategoryService(db, redis)
     
-    # Simple check: Admins see everything, Others see only active
-    only_active = _current_user.role != "admin"
+    # Simple check: Admins see everything, Others (including guests) see only active
+    only_active = _user.role != "admin" if _user else True
     
     return await cat_service.list_categories(only_active=only_active)
 
@@ -34,12 +35,12 @@ async def get_category(
     id: int,
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
-    _current_user=Depends(get_current_user),
+    _user=Depends(get_optional_user),
 ):
     cat_service = service.CategoryService(db, redis)
     
-    # Simple check: Admins can see inactive items via ID, Others cannot
-    only_active = _current_user.role != "admin"
+    # Simple check: Admins can see inactive items via ID, Guest/Non-admin cannot
+    only_active = _user.role != "admin" if _user else True
     
     return await cat_service.get_category(id, only_active=only_active)
 
@@ -105,13 +106,12 @@ async def toggle_category(
 async def list_products(
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
-    _current_user=Depends(get_current_user),
+    _user=Depends(get_optional_user),
 ):
     products_service = service.ProductService(db, redis)
     
-    # Simple check: Admins see everything, Others see only active
-    # Using 'admin' as the standard role name
-    only_active = _current_user.role != "admin"
+    # Simple check: Admins see everything, Others (including guests) see only active
+    only_active = _user.role != "admin" if _user else True
     
     return await products_service.list_products(only_active=only_active)
 
@@ -121,12 +121,12 @@ async def get_product(
     id: int,
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
-    _current_user=Depends(get_current_user),
+    _user=Depends(get_optional_user),
 ):
     products_service = service.ProductService(db, redis)
     
-    # Simple check: Admins can see inactive items via ID, Others cannot
-    only_active = _current_user.role != "admin"
+    # Simple check: Admins can see inactive items via ID, Guest/Non-admin cannot
+    only_active = _user.role != "admin" if _user else True
     
     return await products_service.get_product(id, only_active=only_active)
 

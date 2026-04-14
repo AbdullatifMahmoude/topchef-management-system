@@ -1,224 +1,189 @@
-from sqlalchemy.orm import Session
-from datetime import date, timedelta
-from typing import Optional, List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, desc
+from sqlalchemy.orm import selectinload
+from datetime import date, timedelta, datetime
+from typing import Optional, List, Tuple
 from app.modules.orders import models, schemas
-
-
+from app.core.enums import OrderSource, OrderStatus, OrderType
 
 class OrderRepository:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
 
-    def get_by_id(self, idnumber: int):
-        return self.db.query(models.Order).filter(
-            models.Order.id == idnumber).first()
+    def get_business_date(self) -> date:
+        """
+        Returns the logical Business Date.
+        If current time is before 3:00 AM, it's considered 'Yesterday'.
+        """
+        now = datetime.now() 
+        if now.hour < 3:
+            return (now - timedelta(days=1)).date()
+        return now.date()
 
-    def get_by_number(self, ordernumber: str, orderdate: Optional[date] = None):
-        query = self.db.query(models.Order).filter(
-            models.Order.order_number == ordernumber)
-        if orderdate is None:
-            orderdate = date.today()
+    async def get_by_id(self, order_id: int) -> Optional[models.Order]:
+        query = select(models.Order).options(
+            selectinload(models.Order.items),
+            selectinload(models.Order.creator),
+            selectinload(models.Order.delivery_person)
+        ).where(models.Order.id == order_id)
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-        return query.filter(
-            models.Order.order_date == orderdate).first()
+    async def get_by_idempotency_key(self, key: str) -> Optional[models.Order]:
+        query = select(models.Order).options(
+            selectinload(models.Order.items),
+            selectinload(models.Order.creator),
+            selectinload(models.Order.delivery_person)
+        ).where(
+            models.Order.idempotency_key == key
+        )
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-    def list_orders(self,
-                    ordersource: Optional[models.OrderSource] = None,
-                    orderstatus: Optional[models.OrderStatus] = None,
-                    ordertype: Optional[models.OrderType] = None):
-        query = self.db.query(models.Order)
-        if ordersource:
-            query = query.filter(
-                models.Order.order_source == ordersource)
+    async def get_by_number(self, order_number: str, order_date: Optional[date] = None) -> Optional[models.Order]:
+        if order_date is None:
+            order_date = date.today()
+        query = select(models.Order).options(
+            selectinload(models.Order.items),
+            selectinload(models.Order.creator),
+            selectinload(models.Order.delivery_person)
+        ).where(
+            models.Order.order_number == order_number,
+            models.Order.order_date == order_date
+        )
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-        if orderstatus:
-            query = query.filter(
-                models.Order.order_status == orderstatus)
-
-        if ordertype:
-            query = query.filter(
-                models.Order.order_type == ordertype)
-        today = date.today()
-        yesterday = today - timedelta(days=1)
-        query = query.filter(models.Order.order_date.in_([today, yesterday]))
-        query = query.order_by(models.Order.created_at.desc())
-
-        return query.all()
-
-    def _get_next_order_number(self):
-        today = date.today()
-        last_order = self.db.query(models.Order).filter(
-            models.Order.order_date == today).order_by(models.Order.order_number.desc()).first()
-
-        if last_order is None:
-            return "001"
-        
-        last_number = int(last_order.order_number)
-        next_number = last_number + 1
-
-        return f"{next_number:03d}"
-
-    def create_order(self, order_data: schemas.OrderCreate) -> models.Order:
-        next_number = self._get_next_order_number()
-    
-        items_data = order_data.items
-        order_dict = order_data.dict(exclude={'items'})  
-        
-      
-        order_dict['order_number'] = next_number
-        order_dict['order_date'] = date.today()
-        
-       
-        new_order = models.Order(**order_dict)
-        
-        
-        for item_data in items_data:
-            item = models.OrderItem(**item_data.dict())
-            new_order.items.append(item)
-        
-        return new_order
-
-    def save_order(self, order: models.Order) -> models.Order:
-        """يحفظ الـ Order بعد ما Pricing يحسب"""
-        
-        self.db.add(order)
-        
-        try:
-            self.db.commit()
-            self.db.refresh(order)
-            return order
-        except Exception:
-            self.db.rollback()
-            raise
-
-    # app/modules/orders/repository.py
-
-from sqlalchemy.orm import Session
-from datetime import date, timedelta
-from typing import Optional, List
-from app.modules.orders import models, schemas
-
-
-class OrderRepository:
-    def __init__(self, db: Session):
-        self.db = db
-
-    def get_by_id(self, idnumber: int) -> Optional[models.Order]:
-        return self.db.query(models.Order).filter(
-            models.Order.id == idnumber
-        ).first()
-
-    def get_by_number(
-        self, 
-        ordernumber: str, 
-        orderdate: Optional[date] = None
-    ) -> Optional[models.Order]:
-        if orderdate is None:
-            orderdate = date.today()
-        
-        return self.db.query(models.Order).filter(
-            models.Order.order_number == ordernumber,
-            models.Order.order_date == orderdate
-        ).first()
-
-    def list_orders(
+    async def list_orders_paginated(
         self,
-        ordersource: Optional[models.OrderSource] = None,
-        orderstatus: Optional[models.OrderStatus] = None,
-        ordertype: Optional[models.OrderType] = None
-    ) -> List[models.Order]:
-        query = self.db.query(models.Order)
+        source: Optional[OrderSource] = None,
+        status: Optional[OrderStatus] = None,
+        order_type: Optional[OrderType] = None,
+        page: int = 1,
+        page_size: int = 50
+    ) -> Tuple[int, List[models.Order]]:
+        """Get paginated orders."""
+        query = select(models.Order).options(
+            selectinload(models.Order.items),
+            selectinload(models.Order.creator),
+            selectinload(models.Order.delivery_person)
+        )
         
-        if ordersource:
-            query = query.filter(models.Order.order_source == ordersource)
-        
-        if orderstatus:
-            query = query.filter(models.Order.order_status == orderstatus)
-        
-        if ordertype:
-            query = query.filter(models.Order.order_type == ordertype)
+        if source:
+            query = query.where(models.Order.order_source == source)
+        if status:
+            query = query.where(models.Order.order_status == status)
+        if order_type:
+            query = query.where(models.Order.order_type == order_type)
         
         today = date.today()
         yesterday = today - timedelta(days=1)
-        query = query.filter(models.Order.order_date.in_([today, yesterday]))
-        query = query.order_by(models.Order.created_at.desc())
+        query = query.where(models.Order.order_date.in_([today, yesterday]))
         
-        return query.all()
+        # Count total
+        count_query = select(func.count()).select_from(models.Order)
+        if source:
+            count_query = count_query.where(models.Order.order_source == source)
+        if status:
+            count_query = count_query.where(models.Order.order_status == status)
+        if order_type:
+            count_query = count_query.where(models.Order.order_type == order_type)
+        count_query = count_query.where(models.Order.order_date.in_([today, yesterday]))
+        
+        total = await self.db.scalar(count_query) or 0
+        
+        # Paginate
+        offset = (page - 1) * page_size
+        query = query.order_by(desc(models.Order.created_at)).offset(offset).limit(page_size)
+        
+        result = await self.db.execute(query)
+        return total, result.scalars().all()
 
-    def _get_next_order_number(self) -> str:
+    async def list_orders(
+        self,
+        source: Optional[OrderSource] = None,
+        status: Optional[OrderStatus] = None,
+        order_type: Optional[OrderType] = None
+    ) -> List[models.Order]:
+        query = select(models.Order).options(
+            selectinload(models.Order.items),
+            selectinload(models.Order.creator),
+            selectinload(models.Order.delivery_person)
+        )
+        if source:
+            query = query.where(models.Order.order_source == source)
+        if status:
+            query = query.where(models.Order.order_status == status)
+        if order_type:
+            query = query.where(models.Order.order_type == order_type)
+        
         today = date.today()
-        last_order = self.db.query(models.Order).filter(
-            models.Order.order_date == today
-        ).order_by(models.Order.order_number.desc()).first()
+        yesterday = today - timedelta(days=1)
+        query = query.where(models.Order.order_date.in_([today, yesterday]))
+        query = query.order_by(desc(models.Order.created_at))
         
-        if last_order is None:
-            return "001"
-        
-        last_number = int(last_order.order_number)
-        next_number = last_number + 1
-        
-        return f"{next_number:03d}"
+        result = await self.db.execute(query)
+        return result.scalars().all()
 
-    def create_order(
-        self, 
-        order_data: schemas.OrderCreate
-    ) -> models.Order:
-        """يحضر الـ Order من غير حسابات — Pricing Module يكمل"""
-        
-        # 1. الرقم التالي
-        next_number = self._get_next_order_number()
-        
-        # 2. نفك الـ items
-        items_data = order_data.items
-        order_dict = order_data.dict(exclude={'items'})
-        
-        # 3. نضيف الرقم والتاريخ
-        order_dict['order_number'] = next_number
-        order_dict['order_date'] = date.today()
-        
-        # 4. نعمل الـ Order (لسه في الذاكرة)
-        new_order = models.Order(**order_dict)
-        
-        # 5. نضيف الـ Items
-        for item_data in items_data:
-            item = models.OrderItem(**item_data.dict())
-            new_order.items.append(item)
-        
-        # 6. نرجع من غير commit — Pricing يكمل
-        return new_order
-
-    def save_order(self, order: models.Order) -> models.Order:
-        """يحفظ الـ Order بعد ما Pricing يحسب"""
-        
-        self.db.add(order)
-        
+    async def get_next_order_number(self) -> str:
+        """Get next order number using PostgreSQL sequence (atomic)."""
+        from sqlalchemy import text
+        from app.core.logging import logger
+        from app.core.exceptions import ValidationError
         try:
-            self.db.commit()
-            self.db.refresh(order)
+            # Get atomic sequence value
+            result = await self.db.execute(text("SELECT nextval('order_number_seq')"))
+            seq_value = result.scalar()
+            
+            # Format: 0001
+            return f"{seq_value:04d}"
+        except Exception as e:
+            logger.error(f"Error generating order number: {e}")
+            raise ValidationError("Failed to generate order number")
+
+    async def save_in_transaction(self, order: models.Order) -> models.Order:
+        """Adds to session without explicit commit (delegates to context manager)."""
+        self.db.add(order)
+        await self.db.flush()
+        return order
+
+    async def save(self, order: models.Order) -> models.Order:
+        self.db.add(order)
+        try:
+            await self.db.commit()
+            await self.db.refresh(order)
             return order
         except Exception:
-            self.db.rollback()
+            await self.db.rollback()
             raise
 
-    def update_order(
-        self, 
-        order: models.Order, 
-        update_data: schemas.OrderUpdate
-    ) -> models.Order:
-        """يحدد الـ Order"""
-        
-        # نحدد الحقول اللي جات
-        update_dict = update_data.dict(exclude_unset=True)
+    async def update(self, order: models.Order, update_data: schemas.OrderUpdate, changed_by_user_id: Optional[int] = None) -> models.Order:
+        old_status = order.order_status
+        update_dict = update_data.model_dump(exclude_unset=True)
+        new_status = update_dict.get('order_status')
+        if new_status and old_status != new_status:
+            from app.core.exceptions import ValidationError
+            if not order.can_transition_to(new_status):
+                raise ValidationError(f"Invalid status transition from {old_status} to {new_status}")
         
         for field, value in update_dict.items():
             setattr(order, field, value)
         
         order.updated_at = datetime.utcnow()
         
+        # Record history if status changed
+        if old_status != new_status:
+            history = models.OrderStatusHistory(
+                order_id=order.id,
+                status=new_status,
+                changed_by_user_id=changed_by_user_id
+            )
+            self.db.add(history)
+
         try:
-            self.db.commit()
-            self.db.refresh(order)
+            await self.db.commit()
+            await self.db.refresh(order)
             return order
         except Exception:
-            self.db.rollback()
+            await self.db.rollback()
             raise

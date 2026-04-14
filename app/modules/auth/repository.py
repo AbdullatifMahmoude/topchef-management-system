@@ -18,3 +18,11 @@ class AuthRepository:
             select(User).where(User.id == user_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_users_by_ids(self, user_ids: list[int]) -> list[User]:
+        """Get multiple users by IDs."""
+        if not user_ids:
+            return []
+        query = select(User).where(User.id.in_(user_ids))
+        result = await self.db.execute(query)
+        return result.scalars().all()

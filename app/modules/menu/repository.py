@@ -65,6 +65,17 @@ class ProductRepository:
         product = await self.db.execute(stmt)
         return product.scalars().first()
 
+    async def get_by_ids(self, product_ids: list[int]):
+        """Get multiple products by IDs."""
+        if not product_ids:
+            return []
+        stmt = select(models.Product).options(
+            selectinload(models.Product.category),
+            selectinload(models.Product.variants)
+        ).where(models.Product.id.in_(product_ids))
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
     async def list_products(self):
         stmt = select(models.Product).options(
             selectinload(models.Product.category),
