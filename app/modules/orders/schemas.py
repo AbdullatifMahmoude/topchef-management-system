@@ -1,0 +1,79 @@
+from datetime import date, datetime
+from typing import List, Optional
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from decimal import Decimal
+from app.core.enums import OrderType, OrderSource, OrderStatus
+
+class OrderItemBase(BaseModel):
+    product_id: int
+    quantity: int = Field(default=1, ge=1)
+    unit_price: Decimal
+
+class OrderItemCreate(OrderItemBase):
+    pass
+
+class OrderItemResponse(OrderItemBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    total_price: Decimal
+
+class OrderBase(BaseModel):
+    customer_id: Optional[int] = None
+    customer_phone: Optional[str] = None
+    customer_name: Optional[str] = None
+    order_type: OrderType
+    source: OrderSource = OrderSource.ONLINE
+    customer_notes: Optional[str] = None
+    internal_notes: Optional[str] = None
+
+class OrderCreate(OrderBase):
+    items: List[OrderItemCreate]
+    idempotency_key: Optional[str] = None
+    address_id: Optional[int] = None
+    delivery_person_id: Optional[int] = None
+    delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
+    offer_code: Optional[str] = None
+
+class OrderUpdate(BaseModel):
+    order_status: Optional[OrderStatus] = None
+    delivery_person_id: Optional[int] = None
+    internal_notes: Optional[str] = None
+
+class OrderResponse(OrderBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    order_number: str
+    order_date: date
+    order_status: OrderStatus
+    subtotal: Decimal
+    discount_amount: Decimal
+    delivery_fee: Decimal
+    total_amount: Decimal
+    items: List[OrderItemResponse]
+
+    @model_validator(mode='after')
+    def validate_financial_integrity(self):
+        if self.discount_amount < Decimal("0.00"):
+            raise ValueError("Discount cannot be negative")
+        if self.discount_amount > self.subtotal:
+            raise ValueError("Discount cannot exceed subtotal")
+        if self.total_amount < Decimal("0.00"):
+            raise ValueError("Total cannot be negative")
+        return self
+
+
+class OrderDetailResponse(OrderResponse):
+    created_by_user_id: Optional[int] = None
+    creator_name: Optional[str] = None
+    delivery_person_id: Optional[int] = None
+    delivery_person_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    internal_notes: Optional[str] = None
+
+
+class OrderListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    orders: List[OrderResponse]
