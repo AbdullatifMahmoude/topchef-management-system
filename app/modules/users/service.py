@@ -4,6 +4,7 @@ from app.core.enums import UserRole
 from app.core.exceptions import NotFoundError, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 import re
+import json
 from app.core.logging import logger
 
 class UserService:
@@ -11,6 +12,15 @@ class UserService:
         self.db = db
         self.redis = redis
         self.repo = repository.UserRepository(db)
+    
+    async def _invalidate_delivery_cache(self):
+        """Invalidate delivery users cache after any user changes."""
+        if self.redis:
+            try:
+                await self.redis.delete("delivery:users:list")
+                logger.info("✓ Invalidated delivery users cache")
+            except Exception as e:
+                logger.warning(f"Redis error invalidating delivery cache: {e}")
     
     @staticmethod
     def validate_password(password: str) -> None:
@@ -65,8 +75,32 @@ class UserService:
         return [schemas.UserResponse.model_validate(c) for c in listusers]
 
     async def list_delivery_users(self):
+        cache_key = "delivery:users:list"
+        
+        # 1. Try Cache Path
+        if self.redis:
+            try:
+                cached = await self.redis.get(cache_key)
+                if cached:
+                    logger.info("⚡ Redis Cache Hit: Delivery Users")
+                    data = json.loads(cached)
+                    return [schemas.UserResponse(**item) for item in data]
+            except Exception as e:
+                logger.warning(f"Redis error reading delivery users: {e}")
+        
+        # 2. Database Path
         listusers = await self.repo.get_by_role(UserRole.DELIVERY)
-        return [schemas.UserResponse.model_validate(c) for c in listusers]
+        response = [schemas.UserResponse.model_validate(c) for c in listusers]
+        
+        # 3. Save to Cache (1 hour)
+        if self.redis:
+            try:
+                serializable = [u.model_dump(mode='json') for u in response]
+                await self.redis.setex(cache_key, 3600, json.dumps(serializable))
+            except Exception as e:
+                logger.warning(f"Redis error writing delivery users cache: {e}")
+        
+        return response
 
 
     async def create_user(self, data:schemas.CreateUser):
@@ -84,6 +118,9 @@ class UserService:
             user_dect['hashed_password'] = hashed_password
 
             createuser = await self.repo.create_user(user_dect)
+            # Invalidate delivery cache if created user is delivery
+            if data.role == UserRole.DELIVERY:
+                await self._invalidate_delivery_cache()
             logger.info(f"User created: username='{data.username}', role={data.role}")
         return schemas.UserResponse.model_validate(createuser)
 
@@ -114,6 +151,9 @@ class UserService:
             # Invalidate Redis cache
             if self.redis:
                 await self.redis.delete(f"user_session:{user_id}")
+                # Invalidate delivery cache if user is or was delivery
+                if user.role == UserRole.DELIVERY or (data.role and data.role == UserRole.DELIVERY):
+                    await self._invalidate_delivery_cache()
             
             logger.info(f"User updated: id={user_id}, fields={list(update_data.keys())}")
         return schemas.UserResponse.model_validate(updateuser)
@@ -126,6 +166,9 @@ class UserService:
             # Invalidate Redis cache
             if self.redis:
                 await self.redis.delete(f"user_session:{userid}")
+                # Invalidate delivery cache if deleted user is delivery
+                if user.role == UserRole.DELIVERY:
+                    await self._invalidate_delivery_cache()
                 
             logger.info(f"User deleted: id={userid}, username='{user.username}'")
         return True
@@ -138,6 +181,9 @@ class UserService:
             # Invalidate Redis cache
             if self.redis:
                 await self.redis.delete(f"user_session:{user_id}")
+                # Invalidate delivery cache if toggled user is delivery
+                if toggle.role == UserRole.DELIVERY:
+                    await self._invalidate_delivery_cache()
                 
             logger.info(f"User active status toggled: id={user_id}, now_active={toggle.is_active}")
         return schemas.UserResponse.model_validate(toggle)
