@@ -111,6 +111,11 @@ class OrderService:
             order.order_source = order_data.source
             order.created_by_user_id = current_user_id
             
+            if order.order_source == models.OrderSource.CASHIER:
+                order.order_status = models.OrderStatus.CONFIRMED
+            else:
+                order.order_status = models.OrderStatus.NEW
+            
             order.subtotal = pricing_res.subtotal
             order.discount_amount = pricing_res.discount_amount
             order.delivery_fee = pricing_res.delivery_fee

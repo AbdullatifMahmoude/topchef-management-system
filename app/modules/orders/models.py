@@ -81,10 +81,9 @@ class Order(Base):
     def can_transition_to(self, new_status: OrderStatus) -> bool:
         """Domain logic for state transitions."""
         allowed_transitions = {
-            OrderStatus.NEW: [OrderStatus.KITCHEN, OrderStatus.CANCELLED],
-            OrderStatus.KITCHEN: [OrderStatus.READY, OrderStatus.CANCELLED],
-            OrderStatus.READY: [OrderStatus.DELIVERY, OrderStatus.COMPLETED, OrderStatus.CANCELLED],
-            OrderStatus.DELIVERY: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
+            OrderStatus.NEW: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+            OrderStatus.CONFIRMED: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+            OrderStatus.DELIVERED: [],
             OrderStatus.COMPLETED: [],
             OrderStatus.CANCELLED: []
         }
