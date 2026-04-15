@@ -11,7 +11,7 @@ class Customer(Base):
     phone_number = Column(String(15), unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    addresses = relationship("CustomerAddress", back_populates="customer", cascade="all, delete-orphan")
+    addresses = relationship("CustomerAddress", back_populates="customer", cascade="all, delete-orphan", lazy="selectin")
 
 class CustomerAddress(Base):
     __tablename__ = "customer_addresses"
