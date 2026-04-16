@@ -13,12 +13,13 @@ class OrderRepository:
     def get_business_date(self) -> date:
         """
         Returns the logical Business Date.
-        If current time is before 3:00 AM, it's considered 'Yesterday'.
+        If current time is before 5:00 AM, it's considered 'Yesterday'.
         """
         now = datetime.now() 
-        if now.hour < 3:
+        if now.hour < 5:
             return (now - timedelta(days=1)).date()
         return now.date()
+
 
     async def get_by_id(self, order_id: int) -> Optional[models.Order]:
         query = select(models.Order).options(
@@ -62,6 +63,7 @@ class OrderRepository:
         page: int = 1,
         page_size: int = 50
     ) -> Tuple[int, List[models.Order]]:
+
         """Get paginated orders."""
         query = select(models.Order).options(
             selectinload(models.Order.items),
@@ -75,10 +77,10 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
-        
-        today = date.today()
-        yesterday = today - timedelta(days=1)
-        query = query.where(models.Order.order_date.in_([today, yesterday]))
+
+        # Filter by current business shift (24h starting at 5am)
+        query = query.where(models.Order.order_date == self.get_business_date())
+
         
         # Count total
         count_query = select(func.count()).select_from(models.Order)
@@ -88,7 +90,7 @@ class OrderRepository:
             count_query = count_query.where(models.Order.order_status == status)
         if order_type:
             count_query = count_query.where(models.Order.order_type == order_type)
-        count_query = count_query.where(models.Order.order_date.in_([today, yesterday]))
+        count_query = count_query.where(models.Order.order_date == self.get_business_date())
         
         total = await self.db.scalar(count_query) or 0
         
@@ -116,10 +118,10 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
-        
-        today = date.today()
-        yesterday = today - timedelta(days=1)
-        query = query.where(models.Order.order_date.in_([today, yesterday]))
+
+        # Filter by current business shift (24h starting at 5am)
+        query = query.where(models.Order.order_date == self.get_business_date())
+
         query = query.order_by(desc(models.Order.created_at))
         
         result = await self.db.execute(query)

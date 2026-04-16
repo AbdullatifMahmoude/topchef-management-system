@@ -174,6 +174,7 @@ class OrderService:
         """Listing with enrichment already handled by eager loading."""
         return await self.repository.list_orders(**kwargs)
 
+
     async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: Optional[int] = None) -> models.Order:
         order = await self.get_order(order_id)
         return await self.repository.update(order, update_data, changed_by_user_id=current_user_id)

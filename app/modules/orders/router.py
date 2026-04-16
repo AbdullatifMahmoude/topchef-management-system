@@ -27,8 +27,8 @@ async def list_orders(
     source: Optional[OrderSource] = None,
     status: Optional[OrderStatus] = None,
     order_type: Optional[OrderType] = None,
-    page: int = Query(1, ge=1),  # ✅ NEW
-    page_size: int = Query(50, ge=1, le=500),  # ✅ NEW
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
     service: OrderService = Depends(get_order_service),
     current_user: any = Depends(get_current_user)
 ):
@@ -39,6 +39,7 @@ async def list_orders(
         page=page,
         page_size=page_size
     )
+
     return {
         "total": total,
         "page": page,
