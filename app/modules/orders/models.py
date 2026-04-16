@@ -76,7 +76,9 @@ class Order(Base):
         Index('idx_order_source', 'order_source'),
         Index('idx_order_created', 'created_at'),
         Index('idx_order_number_date', 'order_number', 'order_date', unique=True),
+        Index('idx_order_date_source', 'order_date', 'order_source'),
     )
+
 
     def can_transition_to(self, new_status: OrderStatus) -> bool:
         """Domain logic for state transitions."""

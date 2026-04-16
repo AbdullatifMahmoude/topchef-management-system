@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
@@ -10,6 +11,8 @@ from app.core.enums import OrderSource, OrderStatus, OrderType
 
 from app.core.redis import get_redis
 from app.modules.orders.dependencies import get_order_service
+from app.core.events import order_events_manager
+
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -64,3 +67,16 @@ async def update_order_status(
 ):
     user_id = current_user.id if current_user else None
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)
+
+@router.websocket("/ws")
+async def websocket_orders(websocket: WebSocket):
+    await order_events_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        order_events_manager.disconnect(websocket)
+    except Exception:
+        order_events_manager.disconnect(websocket)
+

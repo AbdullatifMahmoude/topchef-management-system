@@ -12,6 +12,8 @@ from app.modules.auth.repository import AuthRepository
 import contextlib
 
 from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore
+from app.core.events import order_events_manager
+
 
 class OrderService:
     def __init__(
@@ -144,7 +146,22 @@ class OrderService:
                 )
             
             # 7. Final Save (add + flush)
-            return await self.repository.save_in_transaction(order)
+            order = await self.repository.save_in_transaction(order)
+            
+            # 8. Real-time Notification
+            await order_events_manager.broadcast({
+                "event": "order.created",
+                "data": {
+                    "id": order.id,
+                    "order_number": order.order_number,
+                    "source": order.order_source.value,
+                    "status": order.order_status.value,
+                    "total": str(order.total_amount)
+                }
+            })
+            
+            return order
+
 
 
     async def get_order(self, order_id: int) -> models.Order:
@@ -177,4 +194,17 @@ class OrderService:
 
     async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: Optional[int] = None) -> models.Order:
         order = await self.get_order(order_id)
-        return await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
+        updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
+        
+        # Real-time Notification for update
+        await order_events_manager.broadcast({
+            "event": "order.updated",
+            "data": {
+                "id": updated_order.id,
+                "order_number": updated_order.order_number,
+                "status": updated_order.order_status.value
+            }
+        })
+        
+        return updated_order
+
