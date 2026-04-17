@@ -50,8 +50,10 @@ class OfferRepository:
         new_usage = OfferUsage(**usage_data)
         self.db.add(new_usage)
 
-    async def list_offers(self) -> list[Offer]:
+    async def list_offers(self, only_active: bool = False) -> list[Offer]:
         query = select(Offer)
+        if only_active:
+            query = query.where(Offer.is_active == True)
         result = await self.db.execute(query)
         return result.scalars().all()
 

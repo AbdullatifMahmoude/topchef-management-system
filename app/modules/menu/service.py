@@ -15,14 +15,14 @@ class CategoryService:
         self.repo = repository.CategoryRepository(db)
 
     async def get_category(self, category_id: int, check_cache: bool = True, only_active: bool = False):
-        # 1. Try Cache Path
-        if check_cache and self.redis:
+        # 1. Try Cache Path (Only for public active-only requests)
+        if check_cache and only_active and self.redis:
             try:
                 cached = await self.redis.get("menu:categories")
                 if cached:
                     logger.info("⚡ Redis Cache Hit: Categories")
                     data = json.loads(cached)
-                    for cat_data in categories:
+                    for cat_data in data:
                         if cat_data["id"] == category_id:
                             return schemas.CategoryResponse.model_validate(cat_data)
             except Exception as e:
@@ -58,11 +58,12 @@ class CategoryService:
                 logger.warning(f"Redis error reading categories: {e}")
 
         # 2. DB Fallback
-        listcat = await self.repo.list_category()
+        listcat = await self.repo.list_category(only_active=only_active)
         
+        # Convert to schemas
+        categories = [schemas.CategoryResponse.model_validate(c) for c in listcat]
+
         if only_active:
-            # Public view: Filter active categories
-            categories = [schemas.CategoryResponse.model_validate(c) for c in listcat if c.is_active]
             # Refresh public cache
             if self.redis:
                 try:
@@ -70,9 +71,6 @@ class CategoryService:
                     await self.redis.setex(cache_key, 3600, json.dumps(serializable))
                 except Exception as e:
                     logger.warning(f"Redis error writing categories: {e}")
-        else:
-            # Admin view: Show all
-            categories = [schemas.CategoryResponse.model_validate(c) for c in listcat]
 
         return categories
 
@@ -149,8 +147,8 @@ class ProductService:
                 logger.warning(f"Redis error invalidating products cache: {e}")
 
     async def get_product(self, product_id: int, check_cache: bool = True, only_active: bool = False):
-        # 1. Try Cache Path (Used by public API)
-        if check_cache and self.redis:
+        # 1. Try Cache Path (Used strictly for public active-only requests)
+        if check_cache and only_active and self.redis:
             try:
                 cached = await self.redis.get("menu:products")
                 if cached:
@@ -192,15 +190,12 @@ class ProductService:
                 logger.warning(f"Redis error reading products: {e}")
 
         # 2. DB Fallback
-        listproduct = await self.repo.list_products()
+        listproduct = await self.repo.list_products(only_active=only_active)
         
+        # Convert to schemas
+        products = [schemas.ProductResponse.model_validate(p) for p in listproduct]
+
         if only_active:
-            # Public view: Filter for active categories AND active products
-            products = [
-                schemas.ProductResponse.model_validate(p) 
-                for p in listproduct 
-                if p.is_available and (p.category and p.category.is_active)
-            ]
             # Save public list to cache
             if self.redis:
                 try:
@@ -208,9 +203,6 @@ class ProductService:
                     await self.redis.setex(cache_key, 3600, json.dumps(serializable))
                 except Exception as e:
                     logger.warning(f"Redis error writing products: {e}")
-        else:
-            # Admin view: Show everything
-            products = [schemas.ProductResponse.model_validate(p) for p in listproduct]
 
         return products
 

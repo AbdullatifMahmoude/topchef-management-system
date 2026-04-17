@@ -8,6 +8,7 @@ from app.modules.infrastructure.dependencies import (
     require_capability,
     Capability,
     get_current_user,
+    get_optional_user,
 )
 
 router = APIRouter(prefix="/offers", tags=["offers"])
@@ -16,10 +17,14 @@ router = APIRouter(prefix="/offers", tags=["offers"])
 async def list_offers(
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
-    _current_user=Depends(require_capability(Capability.VIEW_OFFERS)),
+    _user=Depends(get_optional_user),
 ):
     offer_service = service.OfferService(db, redis)
-    return await offer_service.list_all_offers()
+    
+    # Admins see all, others (Cashier/Online) see active only
+    only_active = _user.role != "admin" if _user else True
+    
+    return await offer_service.list_all_offers(only_active=only_active)
 
 @router.post("/", response_model=schemas.OfferResponse, status_code=status.HTTP_201_CREATED)
 async def create_offer(
