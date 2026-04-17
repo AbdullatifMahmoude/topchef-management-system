@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 from decimal import Decimal
 from app.core.enums import OrderType, OrderSource, OrderStatus
 
@@ -33,11 +33,25 @@ class OrderCreate(OrderBase):
     delivery_person_id: Optional[int] = None
     delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
     offer_code: Optional[str] = None
+    
+    @field_validator('customer_id', 'address_id', 'delivery_person_id', mode='before')
+    @classmethod
+    def convert_zero_to_none(cls, v):
+        if v == 0:
+            return None
+        return v
 
 class OrderUpdate(BaseModel):
     order_status: Optional[OrderStatus] = None
     delivery_person_id: Optional[int] = None
     internal_notes: Optional[str] = None
+
+    @field_validator('delivery_person_id', mode='before')
+    @classmethod
+    def convert_zero_to_none(cls, v):
+        if v == 0:
+            return None
+        return v
 
 class OrderResponse(OrderBase):
     model_config = ConfigDict(from_attributes=True)
