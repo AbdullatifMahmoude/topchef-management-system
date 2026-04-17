@@ -125,7 +125,7 @@ async def get_product(
 ):
     products_service = service.ProductService(db, redis)
     
-    # Simple check: Admins can see inactive items via ID, Guest/Non-admin cannot
+    # Simple check: Admins can see inactive items via ID, Guest/Non-admin cannot.
     only_active = _user.role != "admin" if _user else True
     
     return await products_service.get_product(id, only_active=only_active)
