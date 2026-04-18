@@ -38,7 +38,7 @@ class Product(Base):
     __tablename__ = "products"
 
     id = Column(Integer, primary_key=True)
-    cat_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    cat_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
     product_name = Column(String(100), unique=True, nullable=False)
     product_type = Column(
         SQLEnum(ProductType, name="product_type_enum"), nullable=False)
@@ -60,7 +60,7 @@ class Variant(Base):
     __tablename__ = "variants"
 
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
     name = Column(String(50), nullable=False)
     price = Column(Numeric(10,2), nullable=False, default=0)
 

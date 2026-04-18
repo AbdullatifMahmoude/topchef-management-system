@@ -1,7 +1,9 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
+
 from functools import lru_cache
 import os
-import asyncpg
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Top chef restaurant management system"
@@ -9,6 +11,20 @@ class Settings(BaseSettings):
 
     # Loaded from Environment Variables
     DATABASE_URL: str
+
+    @field_validator("DATABASE_URL", mode="after")
+    @classmethod
+    def assemble_db_url(cls, v: str) -> str:
+        if v and v.startswith("postgresql://"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+        # asyncpg uses 'ssl=' instead of 'sslmode='
+        if v and "sslmode=" in v:
+            v = v.replace("sslmode=", "ssl=")
+            
+        return v
+
+
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720

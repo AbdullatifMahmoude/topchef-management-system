@@ -30,13 +30,13 @@ class Order(Base):
     order_seq = Column(Integer, nullable=True) # For PostgreSQL sequence tracking
     
     # Customer Info: Supports both registered customers or guest phone/name
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
     customer_phone = Column(String(20), nullable=True)
     customer_name = Column(String(100), nullable=True)
     
-    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    delivery_person_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    address_id = Column(Integer, ForeignKey("customer_addresses.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    delivery_person_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    address_id = Column(Integer, ForeignKey("customer_addresses.id"), nullable=True, index=True)
     
     order_type = Column(SQLEnum(OrderType), nullable=False)
     order_status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.NEW)
