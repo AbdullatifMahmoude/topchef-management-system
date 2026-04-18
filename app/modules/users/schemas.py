@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from app.core.enums import UserRole
 from typing import Annotated, Optional
 
@@ -23,6 +23,12 @@ class UserResponse(BaseModel):
     role: UserRole
     phone: str
     is_active: bool
+    display_name: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
+    
+    @model_validator(mode='after')
+    def set_display_name(self) -> 'UserResponse':
+        self.display_name = self.full_name or self.username
+        return self
 

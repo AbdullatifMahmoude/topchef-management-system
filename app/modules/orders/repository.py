@@ -130,16 +130,35 @@ class OrderRepository:
     async def get_next_order_number(self) -> str:
         """Get next order number using PostgreSQL sequence (atomic)."""
         from sqlalchemy import text
+        from app.core.database import engine
         from app.core.logging import logger
         from app.core.exceptions import ValidationError
+        
         try:
-            # Get atomic sequence value
+            # Try to get next value
             result = await self.db.execute(text("SELECT nextval('order_number_seq')"))
             seq_value = result.scalar()
-            
-            # Format: 0001
             return f"{seq_value:04d}"
         except Exception as e:
+            # If sequence doesn't exist, try to create it using a separate connection
+            # because the current transaction is now 'aborted'.
+            if "order_number_seq" in str(e).lower():
+                try:
+                    logger.info("Sequence 'order_number_seq' missing. Creating via independent connection...")
+                    async with engine.begin() as conn:
+                        await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS order_number_seq START WITH 1"))
+                    
+                    # Manual rollback of the failed transaction in the current session
+                    # so we can reuse the session for the retry
+                    await self.db.rollback()
+                    
+                    # Retry after creation
+                    result = await self.db.execute(text("SELECT nextval('order_number_seq')"))
+                    seq_value = result.scalar()
+                    return f"{seq_value:04d}"
+                except Exception as create_err:
+                    logger.error(f"Critical: Failed to self-heal sequence: {create_err}")
+            
             logger.error(f"Error generating order number: {e}")
             raise ValidationError("Failed to generate order number")
 

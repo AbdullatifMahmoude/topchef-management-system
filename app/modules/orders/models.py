@@ -67,11 +67,15 @@ class Order(Base):
 
     @property
     def creator_name(self) -> str:
-        return self.creator.full_name if self.creator else "Unknown"
+        if self.creator:
+            return self.creator.full_name or self.creator.username
+        return "Unknown"
 
     @property
     def delivery_person_name(self) -> str:
-        return self.delivery_person.full_name if self.delivery_person else "Unknown"
+        if self.delivery_person:
+            return self.delivery_person.full_name or self.delivery_person.username
+        return "Unknown"
 
     __table_args__ = (
         UniqueConstraint('idempotency_key', 'order_date', name='uq_idempotency_per_day'),

@@ -64,6 +64,8 @@ class OrderResponse(OrderBase):
     delivery_fee: Decimal
     total_amount: Decimal
     items: List[OrderItemResponse]
+    creator_name: Optional[str] = None
+    delivery_person_name: Optional[str] = None
 
     @model_validator(mode='after')
     def validate_financial_integrity(self):
@@ -78,9 +80,7 @@ class OrderResponse(OrderBase):
 
 class OrderDetailResponse(OrderResponse):
     created_by_user_id: Optional[int] = None
-    creator_name: Optional[str] = None
     delivery_person_id: Optional[int] = None
-    delivery_person_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     internal_notes: Optional[str] = None
