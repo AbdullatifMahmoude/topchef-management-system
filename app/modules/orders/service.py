@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Tuple
 from app.modules.orders.repository import OrderRepository
 from app.modules.orders import schemas, models
 from app.modules.pricing.service import PricingService
+from app.modules.settings.service import SettingsService
 from app.modules.pricing.schemas import PricingRequest, PricingItem
 from app.modules.offer.service import OfferService
 from app.core.exceptions import ValidationError, NotFoundError
@@ -28,6 +29,7 @@ class OrderService:
         self.redis = redis
         self.pricing_service = pricing_service or PricingService(db)
         self.offer_service = offer_service or OfferService(db, redis=redis)
+        self.settings_service = SettingsService(db, redis=redis)
 
     @contextlib.asynccontextmanager
     async def _transaction_scope(self):
@@ -62,6 +64,11 @@ class OrderService:
         Creates an order with idempotency protection.
         """
         async with self._transaction_scope():
+            # Check if online orders are enabled
+            if order_data.source == models.OrderSource.ONLINE:
+                if not await self.settings_service.get_web_orders_status():
+                    raise ValidationError("Online ordering is currently disabled.")
+
             # ✅ NEW: Validate items first
             await self._validate_order_items(order_data.items)
             

@@ -13,6 +13,14 @@ class UserService:
         self.redis = redis
         self.repo = repository.UserRepository(db)
     
+    @contextlib.asynccontextmanager
+    async def _transaction_scope(self):
+        if self.db.in_transaction():
+            yield
+        else:
+            async with self.db.begin():
+                yield
+    
     async def _invalidate_delivery_cache(self):
         """Invalidate delivery users cache after any user changes."""
         if self.redis:
@@ -104,7 +112,7 @@ class UserService:
 
 
     async def create_user(self, data:schemas.CreateUser):
-        async with self.db.begin():
+        async with self._transaction_scope():
             exist_user = await self.get_by_name(data.username)
             if exist_user:
                 raise ValidationError(f"user with name: {data.username} already exists")
@@ -125,7 +133,7 @@ class UserService:
         return schemas.UserResponse.model_validate(createuser)
 
     async def update_user(self, user_id: int , data:schemas.UpdateUser):
-        async with self.db.begin():
+        async with self._transaction_scope():
             user = await self.get_by_id(user_id, check_cache=False)
             
             if data.username is not None:
@@ -159,7 +167,7 @@ class UserService:
         return schemas.UserResponse.model_validate(updateuser)
 
     async def delete_user(self, userid: int):
-        async with self.db.begin():
+        async with self._transaction_scope():
             user = await self.get_by_id(userid, check_cache=False)
             await self.repo.delete_user(user)
             
@@ -174,7 +182,7 @@ class UserService:
         return True
 
     async def toggle_user(self, user_id):
-        async with self.db.begin():
+        async with self._transaction_scope():
             user = await self.get_by_id(user_id, check_cache=False)
             toggle = await self.repo.toggle_user(user)
             
