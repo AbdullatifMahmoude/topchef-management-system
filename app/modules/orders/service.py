@@ -155,6 +155,9 @@ class OrderService:
             # 7. Final Save (add + flush)
             order = await self.repository.save_in_transaction(order)
             
+            # Refresh with eager loading to satisfy Response schemas
+            order = await self.get_order(order.id)
+            
             # 8. Real-time Notification
             await order_events_manager.broadcast({
                 "event": "order.created",
@@ -213,5 +216,8 @@ class OrderService:
             }
         })
         
-        return updated_order
+        # Refresh with eager loading to satisfy Response schemas
+        completed_order = await self.get_order(updated_order.id)
+        
+        return completed_order
 
