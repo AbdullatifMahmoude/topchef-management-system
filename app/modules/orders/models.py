@@ -13,12 +13,16 @@ from sqlalchemy import (
     Index,
     Date,
     UniqueConstraint,
+    Sequence,
 )
 from app.core.enums import OrderStatus, OrderType, OrderSource
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 from app.modules.users.models import User
+
+# Atomic sequence for order numbering (PostgreSQL)
+order_number_seq = Sequence('order_number_seq', start=1)
 
 class Order(Base):
     __tablename__ = "orders"
