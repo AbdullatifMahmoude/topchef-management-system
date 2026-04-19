@@ -166,6 +166,7 @@ class OrderService:
                 "data": {
                     "id": order.id,
                     "order_number": order.order_number,
+                    "created_at": order.created_at.isoformat() if order.created_at else None,
                     "source": order.order_source.value,
                     "status": order.order_status.value,
                     "total": str(order.total_amount)
@@ -222,4 +223,3 @@ class OrderService:
         completed_order = await self.get_order(updated_order.id)
         
         return completed_order
-
