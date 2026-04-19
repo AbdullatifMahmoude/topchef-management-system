@@ -58,6 +58,7 @@ class OrderResponse(OrderBase):
     id: int
     order_number: str
     order_date: date
+    created_at: datetime
     order_status: OrderStatus
     subtotal: Decimal
     discount_amount: Decimal
@@ -81,7 +82,6 @@ class OrderResponse(OrderBase):
 class OrderDetailResponse(OrderResponse):
     created_by_user_id: Optional[int] = None
     delivery_person_id: Optional[int] = None
-    created_at: datetime
     updated_at: datetime
     internal_notes: Optional[str] = None
 
