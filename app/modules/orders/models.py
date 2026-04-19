@@ -1,5 +1,5 @@
 import enum
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 
 from sqlalchemy import (
     Column,
@@ -53,8 +53,8 @@ class Order(Base):
     
     customer_notes = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None))
 
     items = relationship(
         "OrderItem",
@@ -117,7 +117,7 @@ class OrderStatusHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
     status = Column(SQLEnum(OrderStatus, name="order_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
-    changed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), nullable=False)
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     order = relationship("Order", backref="status_history")

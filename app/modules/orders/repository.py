@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from sqlalchemy.orm import selectinload
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 from typing import Optional, List, Tuple
 from app.modules.orders import models, schemas
 from app.core.enums import OrderSource, OrderStatus, OrderType
@@ -11,14 +11,9 @@ class OrderRepository:
         self.db = db
 
     def get_business_date(self) -> date:
-        """
-        Returns the logical Business Date.
-        If current time is before 5:00 AM, it's considered 'Yesterday'.
-        """
-        now = datetime.now() 
-        if now.hour < 5:
-            return (now - timedelta(days=1)).date()
-        return now.date()
+        # Force UTC+2 (Local Time for Egypt/Palestine)
+        tz = timezone(timedelta(hours=2))
+        return datetime.now(tz).date()
 
 
     async def get_by_id(self, order_id: int) -> Optional[models.Order]:
@@ -190,7 +185,8 @@ class OrderRepository:
         for field, value in update_dict.items():
             setattr(order, field, value)
         
-        order.updated_at = datetime.utcnow()
+        tz = timezone(timedelta(hours=2))
+        order.updated_at = datetime.now(tz).replace(tzinfo=None)
         
         # Record history if status changed
         if old_status != new_status:

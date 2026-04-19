@@ -121,12 +121,19 @@ class CategoryService:
         return schemas.CategoryResponse.model_validate(updatecat)
 
     async def delete_category(self, category_id: int):
-        async with self._transaction_scope():
-            category = await self.get_category(category_id, check_cache=False)
-            await self.repo.delete_category(category)
-            logger.info(f"Menu Category deleted: id={category_id}")
-            await self._invalidate_cache()
-        return True
+        from sqlalchemy.exc import IntegrityError
+        try:
+            async with self._transaction_scope():
+                category = await self.get_category(category_id, check_cache=False)
+                await self.repo.delete_category(category)
+                await self.db.flush()
+                logger.info(f"Menu Category deleted: id={category_id}")
+                await self._invalidate_cache()
+            return True
+        except IntegrityError as e:
+            if "foreign key" in str(e).lower() or "order_items" in str(e).lower():
+                raise ValidationError("Cannot delete category because it contains products referenced in existing orders. Please disable its availability instead.")
+            raise e
 
     async def toggle_category(self, category_id: int):
         async with self._transaction_scope():
@@ -291,12 +298,19 @@ class ProductService:
         return schemas.ProductResponse.model_validate(existing)
 
     async def delete_product(self, product_id: int):
-        async with self._transaction_scope():
-            product = await self.get_product(product_id, check_cache=False)
-            await self.repo.delete_product(product)
-            logger.info(f"Menu Product deleted: id={product_id}")
-            await self._invalidate_cache()
-        return True
+        from sqlalchemy.exc import IntegrityError
+        try:
+            async with self._transaction_scope():
+                product = await self.get_product(product_id, check_cache=False)
+                await self.repo.delete_product(product)
+                await self.db.flush()
+                logger.info(f"Menu Product deleted: id={product_id}")
+                await self._invalidate_cache()
+            return True
+        except IntegrityError as e:
+            if "foreign key" in str(e).lower() or "order_items" in str(e).lower():
+                raise ValidationError("Cannot delete product because it is referenced in existing orders. Please disable its availability instead.")
+            raise e
 
     async def toggle_product(self, product_id: int):
         async with self._transaction_scope():

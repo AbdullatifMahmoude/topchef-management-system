@@ -93,7 +93,7 @@ class OrderService:
                 delivery_fee=order_data.delivery_fee,
                 offer_code=order_data.offer_code,
                 customer_phone=order_data.customer_phone,
-                cashier_id=current_user_id if order_data.source == "cashier" else None
+                cashier_id=current_user_id if order_data.source == models.OrderSource.CASHIER else None
             )
             
             # 2. Get Pricing Calculation (Preview)
@@ -117,10 +117,12 @@ class OrderService:
             # 4. Fill calculated financials and metadata
             order.order_number = next_number
             order.order_date = self.repository.get_business_date()
+            from app.core.logging import logger
+            logger.info(f"[DEBUG] Creating order on business date: {order.order_date}")
             order.order_source = order_data.source
             order.created_by_user_id = current_user_id
             
-            if order.order_source == models.OrderSource.CASHIER:
+            if order_data.source == models.OrderSource.CASHIER:
                 order.order_status = models.OrderStatus.CONFIRMED
             else:
                 order.order_status = models.OrderStatus.NEW

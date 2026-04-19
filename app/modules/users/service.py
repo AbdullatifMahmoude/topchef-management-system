@@ -168,19 +168,26 @@ class UserService:
         return schemas.UserResponse.model_validate(updateuser)
 
     async def delete_user(self, userid: int):
-        async with self._transaction_scope():
-            user = await self.get_by_id(userid, check_cache=False)
-            await self.repo.delete_user(user)
-            
-            # Invalidate Redis cache
-            if self.redis:
-                await self.redis.delete(f"user_session:{userid}")
-                # Invalidate delivery cache if deleted user is delivery
-                if user.role == UserRole.DELIVERY:
-                    await self._invalidate_delivery_cache()
+        from sqlalchemy.exc import IntegrityError
+        try:
+            async with self._transaction_scope():
+                user = await self.get_by_id(userid, check_cache=False)
+                await self.repo.delete_user(user)
+                await self.db.flush()
                 
-            logger.info(f"User deleted: id={userid}, username='{user.username}'")
-        return True
+                # Invalidate Redis cache
+                if self.redis:
+                    await self.redis.delete(f"user_session:{userid}")
+                    # Invalidate delivery cache if deleted user is delivery
+                    if user.role == UserRole.DELIVERY:
+                        await self._invalidate_delivery_cache()
+                    
+                logger.info(f"User deleted: id={userid}, username='{user.username}'")
+            return True
+        except IntegrityError as e:
+            if "foreign key" in str(e).lower() or "orders" in str(e).lower():
+                raise ValidationError("Cannot delete user because they are referenced in existing orders. Please disable their account instead.")
+            raise e
 
     async def toggle_user(self, user_id):
         async with self._transaction_scope():
