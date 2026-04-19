@@ -1,0 +1,21 @@
+[project]
+name = "topchef-api"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]",
+    "uvicorn",
+    "SQLAlchemy",
+    "pydantic",
+    "psycopg2-binary",
+    "pydantic-settings",
+    "python-jose[cryptography]",
+    "passlib",
+    "bcrypt==4.0.1",
+    "python-json-logger",
+    "asyncpg",
+    "redis"
+]
+
+[tool.fastapi]
+entrypoint = "app.main:app"

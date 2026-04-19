@@ -76,7 +76,7 @@ class OfferService:
         
         return OfferResponse.model_validate(offer)
 
-    async def list_all_offers(self) -> List[OfferResponse]:
+    async def list_all_offers(self, only_active: bool = False) -> List[OfferResponse]:
         # 1. Get current cache version
         version = "1"
         if self.redis:
@@ -85,7 +85,8 @@ class OfferService:
             except Exception:
                 pass
         
-        cache_key = f"offers:all:v{version}"
+        # Distinguish cache by active status
+        cache_key = f"offers:{'active' if only_active else 'all'}:v{version}"
         
         # 2. Try Cache
         if self.redis:
@@ -99,12 +100,15 @@ class OfferService:
 
         # 3. DB Fallback
         async with self._transaction_scope():
-            offers = await self.repository.list_offers()
-            for offer in offers:
-                offer.deactivate_if_expired()
-                offer.deactivate_if_usage_full()
+            offers = await self.repository.list_offers(only_active=only_active)
             
-            await self.db.flush()
+            # Auto-maintenance: deactivate if needed (only for full list or if we want latest status)
+            if not only_active:
+                for offer in offers:
+                    offer.deactivate_if_expired()
+                    offer.deactivate_if_usage_full()
+                await self.db.flush()
+            
             response = [OfferResponse.model_validate(offer) for offer in offers]
 
             # 4. Save to Cache (5 minutes)

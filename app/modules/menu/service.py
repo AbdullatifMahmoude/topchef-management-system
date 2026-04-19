@@ -1,4 +1,5 @@
 import json
+import contextlib
 from app.modules.menu import repository, models, schemas
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ValidationError, NotFoundError
@@ -14,15 +15,23 @@ class CategoryService:
         self.redis = redis
         self.repo = repository.CategoryRepository(db)
 
+    @contextlib.asynccontextmanager
+    async def _transaction_scope(self):
+        if self.db.in_transaction():
+            yield
+        else:
+            async with self.db.begin():
+                yield
+
     async def get_category(self, category_id: int, check_cache: bool = True, only_active: bool = False):
-        # 1. Try Cache Path
-        if check_cache and self.redis:
+        # 1. Try Cache Path (Only for public active-only requests)
+        if check_cache and only_active and self.redis:
             try:
                 cached = await self.redis.get("menu:categories")
                 if cached:
                     logger.info("⚡ Redis Cache Hit: Categories")
                     data = json.loads(cached)
-                    for cat_data in categories:
+                    for cat_data in data:
                         if cat_data["id"] == category_id:
                             return schemas.CategoryResponse.model_validate(cat_data)
             except Exception as e:
@@ -58,11 +67,12 @@ class CategoryService:
                 logger.warning(f"Redis error reading categories: {e}")
 
         # 2. DB Fallback
-        listcat = await self.repo.list_category()
+        listcat = await self.repo.list_category(only_active=only_active)
         
+        # Convert to schemas
+        categories = [schemas.CategoryResponse.model_validate(c) for c in listcat]
+
         if only_active:
-            # Public view: Filter active categories
-            categories = [schemas.CategoryResponse.model_validate(c) for c in listcat if c.is_active]
             # Refresh public cache
             if self.redis:
                 try:
@@ -70,9 +80,6 @@ class CategoryService:
                     await self.redis.setex(cache_key, 3600, json.dumps(serializable))
                 except Exception as e:
                     logger.warning(f"Redis error writing categories: {e}")
-        else:
-            # Admin view: Show all
-            categories = [schemas.CategoryResponse.model_validate(c) for c in listcat]
 
         return categories
 
@@ -85,7 +92,7 @@ class CategoryService:
                 logger.warning(f"Redis error invalidating menu cache: {e}")
 
     async def create_category(self, category_data: schemas.CreateCategory):
-        async with self.db.begin():
+        async with self._transaction_scope():
             existing = await self.repo.get_by_name(category_data.cat_name)
             if existing:
                 raise ValidationError(f"Category '{category_data.cat_name}' already exists")
@@ -98,7 +105,7 @@ class CategoryService:
         return schemas.CategoryResponse.model_validate(createcat)
 
     async def update_category(self, cat_id: int, cat_data: schemas.UpdateCategory):
-        async with self.db.begin():
+        async with self._transaction_scope():
             existing = await self.get_category(cat_id, check_cache=False)
 
             if cat_data.cat_name is not None and cat_data.cat_name != existing.cat_name:
@@ -114,15 +121,22 @@ class CategoryService:
         return schemas.CategoryResponse.model_validate(updatecat)
 
     async def delete_category(self, category_id: int):
-        async with self.db.begin():
-            category = await self.get_category(category_id, check_cache=False)
-            await self.repo.delete_category(category)
-            logger.info(f"Menu Category deleted: id={category_id}")
-            await self._invalidate_cache()
-        return True
+        from sqlalchemy.exc import IntegrityError
+        try:
+            async with self._transaction_scope():
+                category = await self.get_category(category_id, check_cache=False)
+                await self.repo.delete_category(category)
+                await self.db.flush()
+                logger.info(f"Menu Category deleted: id={category_id}")
+                await self._invalidate_cache()
+            return True
+        except IntegrityError as e:
+            if "foreign key" in str(e).lower() or "order_items" in str(e).lower():
+                raise ValidationError("Cannot delete category because it contains products referenced in existing orders. Please disable its availability instead.")
+            raise e
 
     async def toggle_category(self, category_id: int):
-        async with self.db.begin():
+        async with self._transaction_scope():
             category = await self.get_category(category_id, check_cache=False)
             toggle = await self.repo.toggle_active(category)
             await self.db.flush()
@@ -141,6 +155,14 @@ class ProductService:
         self.varrepo = repository.VariantRepository(db)
         self.category_service = CategoryService(db, redis)
 
+    @contextlib.asynccontextmanager
+    async def _transaction_scope(self):
+        if self.db.in_transaction():
+            yield
+        else:
+            async with self.db.begin():
+                yield
+
     async def _invalidate_cache(self):
         if self.redis:
             try:
@@ -149,8 +171,8 @@ class ProductService:
                 logger.warning(f"Redis error invalidating products cache: {e}")
 
     async def get_product(self, product_id: int, check_cache: bool = True, only_active: bool = False):
-        # 1. Try Cache Path (Used by public API)
-        if check_cache and self.redis:
+        # 1. Try Cache Path (Used strictly for public active-only requests)
+        if check_cache and only_active and self.redis:
             try:
                 cached = await self.redis.get("menu:products")
                 if cached:
@@ -192,15 +214,12 @@ class ProductService:
                 logger.warning(f"Redis error reading products: {e}")
 
         # 2. DB Fallback
-        listproduct = await self.repo.list_products()
+        listproduct = await self.repo.list_products(only_active=only_active)
         
+        # Convert to schemas
+        products = [schemas.ProductResponse.model_validate(p) for p in listproduct]
+
         if only_active:
-            # Public view: Filter for active categories AND active products
-            products = [
-                schemas.ProductResponse.model_validate(p) 
-                for p in listproduct 
-                if p.is_available and (p.category and p.category.is_active)
-            ]
             # Save public list to cache
             if self.redis:
                 try:
@@ -208,14 +227,11 @@ class ProductService:
                     await self.redis.setex(cache_key, 3600, json.dumps(serializable))
                 except Exception as e:
                     logger.warning(f"Redis error writing products: {e}")
-        else:
-            # Admin view: Show everything
-            products = [schemas.ProductResponse.model_validate(p) for p in listproduct]
 
         return products
 
     async def create_product(self, product_data: schemas.CreateProduct):
-        async with self.db.begin():
+        async with self._transaction_scope():
             # Bundle checks into fewer DB trips
             existing = await self.repo.get_by_name(product_data.product_name)
             if existing:
@@ -245,7 +261,7 @@ class ProductService:
         return schemas.ProductResponse.model_validate(product_model)
 
     async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
-        async with self.db.begin():
+        async with self._transaction_scope():
             # 1 DB Trip: Fetch product with category and variants pre-loaded
             existing = await self.get_product(product_id, check_cache=False)
             
@@ -282,15 +298,22 @@ class ProductService:
         return schemas.ProductResponse.model_validate(existing)
 
     async def delete_product(self, product_id: int):
-        async with self.db.begin():
-            product = await self.get_product(product_id, check_cache=False)
-            await self.repo.delete_product(product)
-            logger.info(f"Menu Product deleted: id={product_id}")
-            await self._invalidate_cache()
-        return True
+        from sqlalchemy.exc import IntegrityError
+        try:
+            async with self._transaction_scope():
+                product = await self.get_product(product_id, check_cache=False)
+                await self.repo.delete_product(product)
+                await self.db.flush()
+                logger.info(f"Menu Product deleted: id={product_id}")
+                await self._invalidate_cache()
+            return True
+        except IntegrityError as e:
+            if "foreign key" in str(e).lower() or "order_items" in str(e).lower():
+                raise ValidationError("Cannot delete product because it is referenced in existing orders. Please disable its availability instead.")
+            raise e
 
     async def toggle_product(self, product_id: int):
-        async with self.db.begin():
+        async with self._transaction_scope():
             product = await self.get_product(product_id, check_cache=False)
             toggle = await self.repo.toggle_active(product)
             await self.db.flush()

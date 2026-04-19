@@ -1,78 +1,79 @@
-import asyncio
-from typing import Callable, Dict, List, Any
-from dataclasses import dataclass
-from datetime import datetime
+from enum import Enum
+from typing import List, Dict, Any, Callable
+import json
+from fastapi import WebSocket
+from app.core.logging import logger
 
-
-@dataclass
+# Base Event class
 class Event:
-    name: str
-    payload: Dict[str, Any]
-    timestamp: datetime = None
-    metadata: Dict[str, Any] = None
+    def __init__(self, name: str, data: Any = None):
+        self.name = name
+        self.data = data
 
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = datetime.utcnow()
-        if self.metadata is None:
-            self.metadata = {}
-
-
-class EventBus:
-
-    def __init__(self):
-        self._handlers: Dict[str, List[Callable]] = {}
-        self._middlewares: List[Callable] = []
-
-    def subscribe(self, event_name: str, handler=Callable):
-        if event_name not in self._handlers:
-            self._handlers[event_name] = []
-        self._handlers[event_name].append(handler)
-
-    def unsubscribe(self, event_name: str, handler=Callable):
-        self._handlers[event_name].remove(handler)
-
-    def add_middleware(self, middleware: Callable):
-        self._middlewares.append(middleware)
-
-    async def publish(self, event: Event):
-
-        for middleware in self._middlewares:
-            await middleware(event)
-
-        handlers = self._handlers.get(event.name, [])
-        tasks = [
-            self._run_handler(handler, event)
-            for handler in handlers
-        ]
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def _run_handler(self, handler: Callable, event: Event):
-        try:
-            if asyncio.iscoroutinefunction(handler):
-                await handler(event)
-            else:
-                handler(event)
-        except Exception as e:
-            print(f"event handler error: {e}")
-
-    def get_handler(self, event_name: Event) -> List[Callable]:
-        return self._handlers.get(event_name, [])
-
-
-event_bus = EventBus()
-
-
-class OrderEvents:
+# Event enumerations for system-wide consistency
+class OrderEvents(str, Enum):
     CREATED = "order.created"
-    CONFIRMED = "order.confirmed"
-    COMPLETED = "order.completed"
-    DELIVERED = "order.delivered"
-    CANCELED = "order.canceled"
+    UPDATED = "order.updated"
+    STATUS_CHANGED = "order.status_changed"
 
-
-class AuthEvents:
+class AuthEvents(str, Enum):
     LOGIN = "auth.login"
     LOGOUT = "auth.logout"
 
+# Simple internal Event Bus for server-side event handling
+class EventBus:
+    def __init__(self):
+        self._subscribers: Dict[str, List[Callable]] = {}
+
+    def subscribe(self, event_name: str, callback: Callable):
+        if event_name not in self._subscribers:
+            self._subscribers[event_name] = []
+        self._subscribers[event_name].append(callback)
+
+    async def emit(self, event_name: str, data: Any = None):
+        if event_name in self._subscribers:
+            for callback in self._subscribers[event_name]:
+                try:
+                    await callback(data)
+                except Exception as e:
+                    logger.error(f"Error in event subscriber for {event_name}: {e}")
+
+# Global internal event bus instance
+event_bus = EventBus()
+
+# WebSocket Connection Manager for real-time frontend notifications
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(f"✓ New WebSocket connection. Total: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            try:
+                self.active_connections.remove(websocket)
+            except ValueError:
+                pass
+            logger.info(f"✗ WebSocket disconnected. Total: {len(self.active_connections)}")
+
+    async def broadcast(self, message: Dict[str, Any]):
+        """Broadcast message to all connected clients."""
+        dead_connections = []
+        payload = json.dumps(message)
+        
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(payload)
+            except Exception as e:
+                logger.error(f"Error broadcasting to WebSocket: {e}")
+                dead_connections.append(connection)
+        
+        # Cleanup broken connections
+        for dead in dead_connections:
+            self.disconnect(dead)
+
+# Global manager instance for orders module
+order_events_manager = ConnectionManager()

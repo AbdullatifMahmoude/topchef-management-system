@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from sqlalchemy.orm import selectinload
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 from typing import Optional, List, Tuple
 from app.modules.orders import models, schemas
 from app.core.enums import OrderSource, OrderStatus, OrderType
@@ -11,14 +11,10 @@ class OrderRepository:
         self.db = db
 
     def get_business_date(self) -> date:
-        """
-        Returns the logical Business Date.
-        If current time is before 3:00 AM, it's considered 'Yesterday'.
-        """
-        now = datetime.now() 
-        if now.hour < 3:
-            return (now - timedelta(days=1)).date()
-        return now.date()
+        # Force UTC+2 (Local Time for Egypt/Palestine)
+        tz = timezone(timedelta(hours=2))
+        return datetime.now(tz).date()
+
 
     async def get_by_id(self, order_id: int) -> Optional[models.Order]:
         query = select(models.Order).options(
@@ -62,6 +58,7 @@ class OrderRepository:
         page: int = 1,
         page_size: int = 50
     ) -> Tuple[int, List[models.Order]]:
+
         """Get paginated orders."""
         query = select(models.Order).options(
             selectinload(models.Order.items),
@@ -75,10 +72,10 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
-        
-        today = date.today()
-        yesterday = today - timedelta(days=1)
-        query = query.where(models.Order.order_date.in_([today, yesterday]))
+
+        # Filter by current business shift (24h starting at 5am)
+        query = query.where(models.Order.order_date == self.get_business_date())
+
         
         # Count total
         count_query = select(func.count()).select_from(models.Order)
@@ -88,7 +85,7 @@ class OrderRepository:
             count_query = count_query.where(models.Order.order_status == status)
         if order_type:
             count_query = count_query.where(models.Order.order_type == order_type)
-        count_query = count_query.where(models.Order.order_date.in_([today, yesterday]))
+        count_query = count_query.where(models.Order.order_date == self.get_business_date())
         
         total = await self.db.scalar(count_query) or 0
         
@@ -116,10 +113,10 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
-        
-        today = date.today()
-        yesterday = today - timedelta(days=1)
-        query = query.where(models.Order.order_date.in_([today, yesterday]))
+
+        # Filter by current business shift (24h starting at 5am)
+        query = query.where(models.Order.order_date == self.get_business_date())
+
         query = query.order_by(desc(models.Order.created_at))
         
         result = await self.db.execute(query)
@@ -128,16 +125,35 @@ class OrderRepository:
     async def get_next_order_number(self) -> str:
         """Get next order number using PostgreSQL sequence (atomic)."""
         from sqlalchemy import text
+        from app.core.database import engine
         from app.core.logging import logger
         from app.core.exceptions import ValidationError
+        
         try:
-            # Get atomic sequence value
+            # Try to get next value
             result = await self.db.execute(text("SELECT nextval('order_number_seq')"))
             seq_value = result.scalar()
-            
-            # Format: 0001
             return f"{seq_value:04d}"
         except Exception as e:
+            # If sequence doesn't exist, try to create it using a separate connection
+            # because the current transaction is now 'aborted'.
+            if "order_number_seq" in str(e).lower():
+                try:
+                    logger.info("Sequence 'order_number_seq' missing. Creating via independent connection...")
+                    async with engine.begin() as conn:
+                        await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS order_number_seq START WITH 1"))
+                    
+                    # Manual rollback of the failed transaction in the current session
+                    # so we can reuse the session for the retry
+                    await self.db.rollback()
+                    
+                    # Retry after creation
+                    result = await self.db.execute(text("SELECT nextval('order_number_seq')"))
+                    seq_value = result.scalar()
+                    return f"{seq_value:04d}"
+                except Exception as create_err:
+                    logger.error(f"Critical: Failed to self-heal sequence: {create_err}")
+            
             logger.error(f"Error generating order number: {e}")
             raise ValidationError("Failed to generate order number")
 
@@ -169,7 +185,8 @@ class OrderRepository:
         for field, value in update_dict.items():
             setattr(order, field, value)
         
-        order.updated_at = datetime.utcnow()
+        tz = timezone(timedelta(hours=2))
+        order.updated_at = datetime.now(tz).replace(tzinfo=None)
         
         # Record history if status changed
         if old_status != new_status:

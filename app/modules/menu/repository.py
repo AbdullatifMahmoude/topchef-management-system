@@ -19,8 +19,12 @@ class CategoryRepository:
         cat = await self.db.execute(select(models.Category).where(models.Category.id == catid))
         return cat.scalars().first()
 
-    async def list_category(self):
-        listcat = await self.db.execute(select(models.Category).order_by(models.Category.id))
+    async def list_category(self, only_active: bool = False):
+        query = select(models.Category)
+        if only_active:
+            query = query.where(models.Category.is_active == True)
+        
+        listcat = await self.db.execute(query.order_by(models.Category.id))
         return listcat.scalars().all()
 
     async def create_category(self, catdata: schemas.CreateCategory):
@@ -76,11 +80,19 @@ class ProductRepository:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def list_products(self):
+    async def list_products(self, only_active: bool = False):
         stmt = select(models.Product).options(
             selectinload(models.Product.category),
             selectinload(models.Product.variants)
-        ).order_by(models.Product.is_available.desc(), models.Product.id)
+        )
+        
+        if only_active:
+            stmt = stmt.join(models.Category).where(
+                models.Product.is_available == True,
+                models.Category.is_active == True
+            )
+            
+        stmt = stmt.order_by(models.Product.is_available.desc(), models.Product.id)
         listproduct = await self.db.execute(stmt)
         return listproduct.scalars().all()
 

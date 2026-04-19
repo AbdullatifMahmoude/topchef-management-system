@@ -1,6 +1,7 @@
 from app.core.security import get_password_hash
 from app.modules.users import schemas, models, repository
 from app.core.enums import UserRole
+import contextlib
 from app.core.exceptions import NotFoundError, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 import re
@@ -12,6 +13,14 @@ class UserService:
         self.db = db
         self.redis = redis
         self.repo = repository.UserRepository(db)
+    
+    @contextlib.asynccontextmanager
+    async def _transaction_scope(self):
+        if self.db.in_transaction():
+            yield
+        else:
+            async with self.db.begin():
+                yield
     
     async def _invalidate_delivery_cache(self):
         """Invalidate delivery users cache after any user changes."""
@@ -104,7 +113,7 @@ class UserService:
 
 
     async def create_user(self, data:schemas.CreateUser):
-        async with self.db.begin():
+        async with self._transaction_scope():
             exist_user = await self.get_by_name(data.username)
             if exist_user:
                 raise ValidationError(f"user with name: {data.username} already exists")
@@ -125,7 +134,7 @@ class UserService:
         return schemas.UserResponse.model_validate(createuser)
 
     async def update_user(self, user_id: int , data:schemas.UpdateUser):
-        async with self.db.begin():
+        async with self._transaction_scope():
             user = await self.get_by_id(user_id, check_cache=False)
             
             if data.username is not None:
@@ -159,22 +168,29 @@ class UserService:
         return schemas.UserResponse.model_validate(updateuser)
 
     async def delete_user(self, userid: int):
-        async with self.db.begin():
-            user = await self.get_by_id(userid, check_cache=False)
-            await self.repo.delete_user(user)
-            
-            # Invalidate Redis cache
-            if self.redis:
-                await self.redis.delete(f"user_session:{userid}")
-                # Invalidate delivery cache if deleted user is delivery
-                if user.role == UserRole.DELIVERY:
-                    await self._invalidate_delivery_cache()
+        from sqlalchemy.exc import IntegrityError
+        try:
+            async with self._transaction_scope():
+                user = await self.get_by_id(userid, check_cache=False)
+                await self.repo.delete_user(user)
+                await self.db.flush()
                 
-            logger.info(f"User deleted: id={userid}, username='{user.username}'")
-        return True
+                # Invalidate Redis cache
+                if self.redis:
+                    await self.redis.delete(f"user_session:{userid}")
+                    # Invalidate delivery cache if deleted user is delivery
+                    if user.role == UserRole.DELIVERY:
+                        await self._invalidate_delivery_cache()
+                    
+                logger.info(f"User deleted: id={userid}, username='{user.username}'")
+            return True
+        except IntegrityError as e:
+            if "foreign key" in str(e).lower() or "orders" in str(e).lower():
+                raise ValidationError("Cannot delete user because they are referenced in existing orders. Please disable their account instead.")
+            raise e
 
     async def toggle_user(self, user_id):
-        async with self.db.begin():
+        async with self._transaction_scope():
             user = await self.get_by_id(user_id, check_cache=False)
             toggle = await self.repo.toggle_user(user)
             

@@ -1,5 +1,5 @@
 import enum
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 
 from sqlalchemy import (
     Column,
@@ -13,12 +13,16 @@ from sqlalchemy import (
     Index,
     Date,
     UniqueConstraint,
+    Sequence,
 )
 from app.core.enums import OrderStatus, OrderType, OrderSource
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 from app.modules.users.models import User
+
+# Atomic sequence for order numbering (PostgreSQL)
+order_number_seq = Sequence('order_number_seq', start=1)
 
 class Order(Base):
     __tablename__ = "orders"
@@ -30,13 +34,13 @@ class Order(Base):
     order_seq = Column(Integer, nullable=True) # For PostgreSQL sequence tracking
     
     # Customer Info: Supports both registered customers or guest phone/name
-    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
     customer_phone = Column(String(20), nullable=True)
     customer_name = Column(String(100), nullable=True)
     
-    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    delivery_person_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    address_id = Column(Integer, ForeignKey("customer_addresses.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    delivery_person_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    address_id = Column(Integer, ForeignKey("customer_addresses.id"), nullable=True, index=True)
     
     order_type = Column(SQLEnum(OrderType), nullable=False)
     order_status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.NEW)
@@ -49,8 +53,8 @@ class Order(Base):
     
     customer_notes = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None))
 
     items = relationship(
         "OrderItem",
@@ -63,11 +67,15 @@ class Order(Base):
 
     @property
     def creator_name(self) -> str:
-        return self.creator.full_name if self.creator else "Unknown"
+        if self.creator:
+            return self.creator.full_name or self.creator.username
+        return "Unknown"
 
     @property
     def delivery_person_name(self) -> str:
-        return self.delivery_person.full_name if self.delivery_person else "Unknown"
+        if self.delivery_person:
+            return self.delivery_person.full_name or self.delivery_person.username
+        return "Unknown"
 
     __table_args__ = (
         UniqueConstraint('idempotency_key', 'order_date', name='uq_idempotency_per_day'),
@@ -76,15 +84,16 @@ class Order(Base):
         Index('idx_order_source', 'order_source'),
         Index('idx_order_created', 'created_at'),
         Index('idx_order_number_date', 'order_number', 'order_date', unique=True),
+        Index('idx_order_date_source', 'order_date', 'order_source'),
     )
+
 
     def can_transition_to(self, new_status: OrderStatus) -> bool:
         """Domain logic for state transitions."""
         allowed_transitions = {
-            OrderStatus.NEW: [OrderStatus.KITCHEN, OrderStatus.CANCELLED],
-            OrderStatus.KITCHEN: [OrderStatus.READY, OrderStatus.CANCELLED],
-            OrderStatus.READY: [OrderStatus.DELIVERY, OrderStatus.COMPLETED, OrderStatus.CANCELLED],
-            OrderStatus.DELIVERY: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
+            OrderStatus.NEW: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+            OrderStatus.CONFIRMED: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+            OrderStatus.DELIVERED: [],
             OrderStatus.COMPLETED: [],
             OrderStatus.CANCELLED: []
         }
@@ -108,7 +117,7 @@ class OrderStatusHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
     status = Column(SQLEnum(OrderStatus, name="order_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
-    changed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), nullable=False)
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     order = relationship("Order", backref="status_history")

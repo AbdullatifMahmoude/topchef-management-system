@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Tuple
 from app.modules.orders.repository import OrderRepository
 from app.modules.orders import schemas, models
 from app.modules.pricing.service import PricingService
+from app.modules.settings.service import SettingsService
 from app.modules.pricing.schemas import PricingRequest, PricingItem
 from app.modules.offer.service import OfferService
 from app.core.exceptions import ValidationError, NotFoundError
@@ -12,6 +13,8 @@ from app.modules.auth.repository import AuthRepository
 import contextlib
 
 from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore
+from app.core.events import order_events_manager
+
 
 class OrderService:
     def __init__(
@@ -26,6 +29,7 @@ class OrderService:
         self.redis = redis
         self.pricing_service = pricing_service or PricingService(db)
         self.offer_service = offer_service or OfferService(db, redis=redis)
+        self.settings_service = SettingsService(db, redis=redis)
 
     @contextlib.asynccontextmanager
     async def _transaction_scope(self):
@@ -60,6 +64,11 @@ class OrderService:
         Creates an order with idempotency protection.
         """
         async with self._transaction_scope():
+            # Check if online orders are enabled
+            if order_data.source == models.OrderSource.ONLINE:
+                if not await self.settings_service.get_web_orders_status():
+                    raise ValidationError("Online ordering is currently disabled.")
+
             # ✅ NEW: Validate items first
             await self._validate_order_items(order_data.items)
             
@@ -84,7 +93,7 @@ class OrderService:
                 delivery_fee=order_data.delivery_fee,
                 offer_code=order_data.offer_code,
                 customer_phone=order_data.customer_phone,
-                cashier_id=current_user_id if order_data.source == "cashier" else None
+                cashier_id=current_user_id if order_data.source == models.OrderSource.CASHIER else None
             )
             
             # 2. Get Pricing Calculation (Preview)
@@ -108,8 +117,15 @@ class OrderService:
             # 4. Fill calculated financials and metadata
             order.order_number = next_number
             order.order_date = self.repository.get_business_date()
+            from app.core.logging import logger
+            logger.info(f"[DEBUG] Creating order on business date: {order.order_date}")
             order.order_source = order_data.source
             order.created_by_user_id = current_user_id
+            
+            if order_data.source == models.OrderSource.CASHIER:
+                order.order_status = models.OrderStatus.CONFIRMED
+            else:
+                order.order_status = models.OrderStatus.NEW
             
             order.subtotal = pricing_res.subtotal
             order.discount_amount = pricing_res.discount_amount
@@ -139,7 +155,25 @@ class OrderService:
                 )
             
             # 7. Final Save (add + flush)
-            return await self.repository.save_in_transaction(order)
+            order = await self.repository.save_in_transaction(order)
+            
+            # Refresh with eager loading to satisfy Response schemas
+            order = await self.get_order(order.id)
+            
+            # 8. Real-time Notification
+            await order_events_manager.broadcast({
+                "event": "order.created",
+                "data": {
+                    "id": order.id,
+                    "order_number": order.order_number,
+                    "source": order.order_source.value,
+                    "status": order.order_status.value,
+                    "total": str(order.total_amount)
+                }
+            })
+            
+            return order
+
 
 
     async def get_order(self, order_id: int) -> models.Order:
@@ -169,6 +203,23 @@ class OrderService:
         """Listing with enrichment already handled by eager loading."""
         return await self.repository.list_orders(**kwargs)
 
+
     async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: Optional[int] = None) -> models.Order:
         order = await self.get_order(order_id)
-        return await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
+        updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
+        
+        # Real-time Notification for update
+        await order_events_manager.broadcast({
+            "event": "order.updated",
+            "data": {
+                "id": updated_order.id,
+                "order_number": updated_order.order_number,
+                "status": updated_order.order_status.value
+            }
+        })
+        
+        # Refresh with eager loading to satisfy Response schemas
+        completed_order = await self.get_order(updated_order.id)
+        
+        return completed_order
+
