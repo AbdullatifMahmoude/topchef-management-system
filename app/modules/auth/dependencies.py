@@ -26,7 +26,7 @@ async def get_current_user(
          
     token = credentials.credentials
     
-    # ✅ FIX: Check if token is revoked
+    # ✅ FIX: Check if token is revokedf
     from app.core.token_blacklist import TokenBlacklist
     if await TokenBlacklist().is_revoked(token):
         raise AuthenticationError("Token has been revoked. Please log in again.")
