@@ -30,17 +30,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if path.startswith("/static") or path.startswith("/media"):
             return await call_next(request)
 
-        # ─── 3. Web Menu / Public API Bypass ───
-        # Allow viewing categories, products, and offers
+        # Allow viewing categories, products, offers, and comments
         if method == "GET" and (
             path.startswith("/menu/categories") or 
             path.startswith("/menu/products") or
-            path.startswith("/offers")
+            path.startswith("/offers") or
+            path.startswith("/comments")
         ):
             return await call_next(request)
         
-        # Allow creating orders (anonymous/guest orders)
-        if method == "POST" and path in ["/orders", "/orders/"]:
+        # Allow creating orders and comments (anonymous/guest)
+        if method == "POST" and (
+            path in ["/orders", "/orders/"] or
+            path in ["/comments", "/comments/"]
+        ):
              return await call_next(request)
 
         # ─── 4. Standard Auth Check ───
