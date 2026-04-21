@@ -4,6 +4,7 @@ from typing import List, Optional
 from app.modules.customer.repository import CustomerRepository
 from app.modules.customer import models, schemas
 from app.core.exceptions import NotFoundError, ValidationError
+import contextlib
 
 class CustomerService:
     def __init__(self, db: AsyncSession, redis=None):
@@ -11,9 +12,17 @@ class CustomerService:
         self.repository = CustomerRepository(db)
         self.redis = redis
 
+    @contextlib.asynccontextmanager
+    async def _transaction_scope(self):
+        if self.db.in_transaction():
+            yield
+        else:
+            async with self.db.begin():
+                yield
+
     async def create_customer(self, customer_data: schemas.CustomerCreate) -> models.Customer:
         """Atomic customer creation with phone uniqueness check."""
-        async with self.db.begin():
+        async with self._transaction_scope():
             # 1. Business Validation
             existing = await self.repository.get_by_phone(customer_data.phone_number)
             if existing:
@@ -24,10 +33,14 @@ class CustomerService:
             
             # 3. Save via Repository
             customer = await self.repository.save(new_customer)
-            
-            # Invalidate any list caches if they exist
-            await self._invalidate_cache(f"customer_at_phone:{customer.phone_number}")
-            return customer
+        
+        # 4. Reload with eager loading after transaction commits
+        # This ensures relationships are properly loaded
+        reloaded_customer = await self.repository.get_by_id(customer.id)
+        
+        # 5. Invalidate any list caches if they exist
+        await self._invalidate_cache(f"customer_at_phone:{reloaded_customer.phone_number}")
+        return reloaded_customer
 
     async def get_customer(self, customer_id: int) -> models.Customer:
         # 1. Try Cache
@@ -84,7 +97,7 @@ class CustomerService:
 
     async def add_address(self, customer_id: int, address_data: schemas.CustomerAddressCreate) -> models.CustomerAddress:
         """Atomic address addition."""
-        async with self.db.begin():
+        async with self._transaction_scope():
             # 1. Validation
             customer = await self.repository.get_by_id(customer_id)
             if not customer:

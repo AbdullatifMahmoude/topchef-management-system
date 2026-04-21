@@ -31,7 +31,6 @@ class Order(Base):
     order_number = Column(String(20), nullable=False)
     order_date = Column(Date, default=date.today, nullable=False)
     idempotency_key = Column(String(100), nullable=True, index=True) # Remove unique=True
-    order_seq = Column(Integer, nullable=True) # For PostgreSQL sequence tracking
     
     # Customer Info: Supports both registered customers or guest phone/name
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
@@ -64,6 +63,7 @@ class Order(Base):
 
     creator = relationship("User", foreign_keys=[created_by_user_id])
     delivery_person = relationship("User", foreign_keys=[delivery_person_id])
+    address = relationship("CustomerAddress", foreign_keys=[address_id])
 
     @property
     def creator_name(self) -> str:

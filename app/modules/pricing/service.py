@@ -36,7 +36,7 @@ class PricingService:
 
         # 3. Handle Delivery Fee
         delivery_fee = Decimal("0.00")
-        if request.order_type == OrderType.DELIVERY:
+        if request.order_type in (OrderType.DELIVERY, OrderType.HALL):
             delivery_fee = request.delivery_fee
             if delivery_fee < 0:
                 raise ValueError("Delivery fee cannot be negative")

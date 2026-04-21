@@ -58,6 +58,16 @@ async def get_order_detail(
 ):
     return await service.get_order(order_id)
 
+@router.patch("/{order_id}", response_model=schemas.OrderResponse)
+async def update_order(
+    order_id: int,
+    update_data: schemas.OrderUpdateFull,
+    service: OrderService = Depends(get_order_service),
+    current_user: any = Depends(get_current_user)
+):
+    user_id = current_user.id if current_user else None
+    return await service.update_order(order_id, update_data, current_user_id=user_id)
+
 @router.patch("/{order_id}/status", response_model=schemas.OrderResponse)
 async def update_order_status(
     order_id: int,

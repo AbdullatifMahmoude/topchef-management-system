@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from alembic import context
 from app.core.database import Base, get_sync_engine
 from app.core.config import settings
-from app.modules.menu.models import Category, Product, Variant, Addon
+from app.modules.menu.models import Category, Product, Variant
 from app.modules.users.models import User
 from app.modules.offer.models import Offer, OfferUsage
 from app.modules.orders.models import Order, OrderItem, OrderStatusHistory

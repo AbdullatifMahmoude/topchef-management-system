@@ -78,6 +78,28 @@ class OrderService:
                 if existing:
                     return existing
             
+            # Auto-create or link customer
+            if order_data.customer_phone and order_data.customer_name:
+                from app.modules.customer.service import CustomerService
+                from app.modules.customer.schemas import CustomerCreate, CustomerAddressCreate
+                
+                customer_service = CustomerService(self.db, self.redis)
+                try:
+                    existing_cust = await customer_service.get_customer_by_phone(order_data.customer_phone)
+                    order_data.customer_id = existing_cust.id
+                except NotFoundError:
+                    new_cust = await customer_service.create_customer(CustomerCreate(
+                        name=order_data.customer_name,
+                        phone_number=order_data.customer_phone
+                    ))
+                    order_data.customer_id = new_cust.id
+                
+                # Check for dynamic address
+                if getattr(order_data, 'customer_address', None):
+                    # Only create if the address_id isn't explicitly passed, or we want to overwrite
+                    new_addr = await customer_service.add_address(order_data.customer_id, CustomerAddressCreate(address=order_data.customer_address))
+                    order_data.address_id = new_addr.id
+            
             # 1. Prepare Pricing Request
             pricing_items = [
                 PricingItem(
@@ -111,7 +133,7 @@ class OrderService:
             # 3. Create Order Object (Service now handles instantiation)
             next_number = await self.repository.get_next_order_number()
             
-            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source'})
+            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address'})
             order = models.Order(**order_dict)
             
             # 4. Fill calculated financials and metadata
@@ -160,17 +182,13 @@ class OrderService:
             # Refresh with eager loading to satisfy Response schemas
             order = await self.get_order(order.id)
             
+            # Serialize for full payload 
+            order_schema = schemas.OrderResponse.model_validate(order)
+            
             # 8. Real-time Notification
             await order_events_manager.broadcast({
                 "event": "order.created",
-                "data": {
-                    "id": order.id,
-                    "order_number": order.order_number,
-                    "created_at": order.created_at.isoformat() if order.created_at else None,
-                    "source": order.order_source.value,
-                    "status": order.order_status.value,
-                    "total": str(order.total_amount)
-                }
+                "data": order_schema.model_dump(mode='json')
             })
             
             return order
@@ -206,20 +224,131 @@ class OrderService:
 
 
     async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: Optional[int] = None) -> models.Order:
-        order = await self.get_order(order_id)
-        updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
+        async with self._transaction_scope():
+            order = await self.get_order(order_id)
+            
+            # Validate status transition
+            if update_data.order_status and order.order_status != update_data.order_status:
+                if not order.can_transition_to(update_data.order_status):
+                    raise ValidationError(f"Invalid status transition from {order.order_status} to {update_data.order_status}")
+            
+            updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
+        
+        # Refresh with eager loading to satisfy Response schemas
+        completed_order = await self.get_order(updated_order.id)
+        
+        # Serialize for full payload
+        completed_schema = schemas.OrderResponse.model_validate(completed_order)
         
         # Real-time Notification for update
         await order_events_manager.broadcast({
             "event": "order.updated",
-            "data": {
-                "id": updated_order.id,
-                "order_number": updated_order.order_number,
-                "status": updated_order.order_status.value
-            }
+            "data": completed_schema.model_dump(mode='json')
         })
         
-        # Refresh with eager loading to satisfy Response schemas
+        return completed_order
+
+    async def update_order(self, order_id: int, update_data: schemas.OrderUpdateFull, current_user_id: Optional[int] = None) -> models.Order:
+        """
+        Update order with comprehensive fields.
+        Handles delivery person assignment, customer info updates, and notes.
+        """
+        async with self._transaction_scope():
+            order = await self.get_order(order_id)
+            
+            if order.order_status in [models.OrderStatus.COMPLETED, models.OrderStatus.DELIVERED, models.OrderStatus.CANCELLED]:
+                raise ValidationError(f"Cannot update an order that is {order.order_status.value}")
+            
+            # --- CUSTOMER DYNAMIC LINKING LOGIC ---
+            if update_data.customer_phone or update_data.customer_name or getattr(update_data, 'customer_address', None):
+                target_phone = update_data.customer_phone or order.customer_phone
+                target_name = update_data.customer_name or order.customer_name
+                
+                if target_phone and target_name:
+                    from app.modules.customer.service import CustomerService
+                    from app.modules.customer.schemas import CustomerCreate, CustomerAddressCreate
+                    from app.core.exceptions import NotFoundError
+                    
+                    customer_service = CustomerService(self.db, self.redis)
+                    try:
+                        existing_cust = await customer_service.get_customer_by_phone(target_phone)
+                        update_data.customer_id = existing_cust.id
+                    except NotFoundError:
+                        new_cust = await customer_service.create_customer(CustomerCreate(
+                            name=target_name,
+                            phone_number=target_phone
+                        ))
+                        update_data.customer_id = new_cust.id
+                    
+                    if getattr(update_data, 'customer_address', None):
+                        new_addr = await customer_service.add_address(update_data.customer_id, CustomerAddressCreate(address=update_data.customer_address))
+                        update_data.address_id = new_addr.id
+
+            # --- ITEM MANIPULATION LOGIC & DELIVERY FEE ---
+            needs_reprice = False
+            
+            if update_data.delivery_fee is not None and update_data.delivery_fee != order.delivery_fee:
+                order.delivery_fee = update_data.delivery_fee
+                needs_reprice = True
+
+            if update_data.items is not None:
+                needs_reprice = True
+            
+            if needs_reprice:
+                # If items are not passed, grab existing items from order
+                
+                if update_data.items is not None:
+                    await self._validate_order_items(update_data.items)
+                    pricing_items = [
+                        PricingItem(product_id=it.product_id, quantity=it.quantity, unit_price=it.unit_price) 
+                        for it in update_data.items
+                    ]
+                else:
+                    pricing_items = [
+                        PricingItem(product_id=it.product_id, quantity=it.quantity, unit_price=it.unit_price) 
+                        for it in order.items
+                    ]
+                
+                pricing_req = PricingRequest(
+                    items=pricing_items,
+                    order_type=order.order_type,
+                    delivery_fee=order.delivery_fee, # We've already updated order.delivery_fee above if provided
+                    offer_code=None, # Drop previous offers on item recalculation (simplification)
+                    customer_phone=order.customer_phone,
+                    cashier_id=current_user_id
+                )
+                
+                pricing_res = await self.pricing_service.calculate_price(pricing_req)
+                
+                from decimal import Decimal
+                if pricing_res.discount_amount < Decimal("0.00") or pricing_res.discount_amount > pricing_res.subtotal or pricing_res.total_amount < Decimal("0.00"):
+                    raise ValidationError("Invalid financial state after recalculating.")
+                
+                if update_data.items is not None:
+                    # Replace the items securely via relationship cascade
+                    order.items = []
+                    for item_data in update_data.items:
+                        item = models.OrderItem(**item_data.model_dump())
+                        item.total_price = item.quantity * item.unit_price
+                        order.items.append(item)
+                
+                # Update financials
+                order.subtotal = pricing_res.subtotal
+                order.discount_amount = pricing_res.discount_amount
+                order.delivery_fee = pricing_res.delivery_fee
+                order.total_amount = pricing_res.total_amount
+
+            # Update via repository (basic fields)
+            updated_order = await self.repository.update_order_full(order, update_data, changed_by_user_id=current_user_id)
+        
+        # Refresh with eager loading (get_order handles selectinload)
         completed_order = await self.get_order(updated_order.id)
+        completed_schema = schemas.OrderResponse.model_validate(completed_order)
+        
+        # Real-time Notification
+        await order_events_manager.broadcast({
+            "event": "order.updated",
+            "data": completed_schema.model_dump(mode='json')
+        })
         
         return completed_order

@@ -233,9 +233,10 @@ class ProductService:
     async def create_product(self, product_data: schemas.CreateProduct):
         async with self._transaction_scope():
             # Bundle checks into fewer DB trips
-            existing = await self.repo.get_by_name(product_data.product_name)
+            existing = await self.repo.get_by_name(product_data.product_name, product_data.cat_id)
+            
             if existing:
-                raise ValidationError(f"Product name '{product_data.product_name}' already exists")
+                raise ValidationError(f"Product name '{product_data.product_name}' already exists in this category")
 
             # Use cached category check for speed
             await self.category_service.get_category(product_data.cat_id)
@@ -265,13 +266,16 @@ class ProductService:
             # 1 DB Trip: Fetch product with category and variants pre-loaded
             existing = await self.get_product(product_id, check_cache=False)
             
+            target_cat_id = product_data.cat_id if product_data.cat_id else existing.cat_id
+            target_name = product_data.product_name if product_data.product_name else existing.product_name
+
             if product_data.cat_id and product_data.cat_id != existing.cat_id:
                 await self.category_service.get_category(product_data.cat_id)
 
-            if product_data.product_name and product_data.product_name != existing.product_name:
-                name_check = await self.repo.get_by_name(product_data.product_name)
-                if name_check:
-                    raise ValidationError(f"Product name '{product_data.product_name}' taken")
+            if target_name != existing.product_name or target_cat_id != existing.cat_id:
+                name_check = await self.repo.get_by_name(target_name, target_cat_id)
+                if name_check and name_check.id != existing.id:
+                    raise ValidationError(f"Product name '{target_name}' taken in this category")
 
             # Variant & Type Validation
             p_type = product_data.product_type or existing.product_type

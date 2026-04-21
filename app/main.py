@@ -14,6 +14,7 @@ from app.modules.pricing import register_pricing
 from app.modules.orders import register_orders
 from app.modules.customer import register_customer
 from app.modules.settings import register_settings
+from app.modules.comments import register_comments
 from app.modules.settings.models import AppSetting # For metadata registration
 # Infrastructure middlewares
 from app.modules.infrastructure.middlewares.auth import AuthMiddleware
@@ -44,6 +45,7 @@ register_pricing(app) # /pricing/* (public/protected)
 register_orders(app)  # /orders/* (protected)
 register_customer(app) # /customers/* (protected)
 register_settings(app) # /settings/* (admin/cashier)
+register_comments(app) # /comments/* (public - no auth required)
 
 
 @app.on_event("startup")
