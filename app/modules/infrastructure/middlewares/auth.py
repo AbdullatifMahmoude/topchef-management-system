@@ -9,11 +9,15 @@ from app.core.logging import logger
 # Public paths that don't require authentication
 PUBLIC_PATHS = {
     "/",
+    "/index.html",
+    "/dashboard.html",
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/favicon.ico",
     "/auth/login",
     "/pricing/preview",
+    "/health",
 }
 
 
@@ -26,8 +30,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_PATHS or path.startswith(("/docs", "/redoc", "/openapi.json")):
             return await call_next(request)
 
-        # ─── 2. Static / Media Bypass (Optional but good if you have images) ───
-        if path.startswith("/static") or path.startswith("/media"):
+        # ─── 2. Static / Media / Frontend Assets Bypass ───
+        if path.startswith(("/static", "/media", "/assets", "/css", "/js", "/cashier")):
             return await call_next(request)
 
         # Allow viewing categories, products, offers, and comments

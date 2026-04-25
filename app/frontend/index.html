@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ar">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>تسجيل الدخول - توب شيف</title>
+    <link rel="icon" href="/assets/توب شيف 1.png" />
+    <link rel="stylesheet" href="css/signup.css" />
+    
+  </head>
+  <body>
+    <header><h1>مطعم توب شيف للمشويات</h1></header>
+
+    <div class="container">
+      <div class="logo_title">
+        <img src="/assets/توب شيف 1.png" alt="logo" />
+        <h1>تسجيل الدخول</h1>
+      </div>
+
+      <form class="signup_form">
+        <div class="username_container">
+        <input id="username_input" type="text" placeholder="اسم المستخدم" />
+        </div>
+        <div class="password_container">
+          <div class="input_wrapper">
+            <input type="password" placeholder="كلمة المرور" id="password_input" autocomplete="current-password" />
+            <button type="button" class="eye_toggle" id="eye_btn" aria-label="إظهار كلمة المرور">
+              <!-- eye-open icon -->
+              <svg id="icon_eye_open" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                <circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <!-- eye-off icon -->
+              <svg id="icon_eye_off" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" style="display:none">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.97 9.97 0 012.12-3.584M6.53 6.53A9.97 9.97 0 0112 5c4.477 0 8.268 2.943 9.542 7a9.97 9.97 0 01-4.293 5.411M3 3l18 18"/>
+              </svg>
+            </button>
+          </div>
+          <a href=""><span class="forget_password">هل نسيت كلمة السر؟</span></a>
+        </div>
+        <button type="submit" class="login_btn">دخول</button>
+      </form>
+    </div>
+
+    <script>
+      // لو مسجل دخول بالفعل روح للصفحة المناسبة
+      const _token = localStorage.getItem("token");
+      const _role  = localStorage.getItem("role");
+      if (_token) {
+        if (_role === "cashier") {
+          window.location.replace("cashier/cashier.html");
+        } else {
+          window.location.replace("dashboard.html");
+        }
+      }
+    </script>
+    <script src="js/signup.js"></script>
+    <script>
+      // ===== Eye Toggle =====
+      const eyeBtn   = document.getElementById("eye_btn");
+      const pwdInput = document.getElementById("password_input");
+      const iconOpen = document.getElementById("icon_eye_open");
+      const iconOff  = document.getElementById("icon_eye_off");
+      eyeBtn.addEventListener("click", function () {
+        const isHidden = pwdInput.type === "password";
+        pwdInput.type    = isHidden ? "text" : "password";
+        iconOpen.style.display = isHidden ? "none"  : "block";
+        iconOff.style.display  = isHidden ? "block" : "none";
+      });
+    </script>
+  </body>
+</html>

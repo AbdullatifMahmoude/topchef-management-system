@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
     REDIS_URL: str
+    REMOTE_API: str = "https://topchef-system.fastapicloud.dev"
 
     model_config = {
         "env_file": ".env",

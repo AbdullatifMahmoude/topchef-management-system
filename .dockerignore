@@ -1,0 +1,27 @@
+# Ignore Desktop App source and builds
+desktop/
+build/
+installer/
+requirements-desktop.txt
+topchef_desktop.spec
+
+# Ignore local database and logs
+*.db
+*.sqlite
+logs/
+
+# Ignore Python environment and cache
+__pycache__/
+*.pyc
+.venv/
+env/
+.env
+.python-version
+
+# Ignore Git
+.git
+.gitignore
+
+# Ignore build artifacts
+dist/
+node_modules/

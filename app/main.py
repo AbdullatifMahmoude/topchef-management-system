@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 
 from app.core.config import settings
 from app.core.database import engine, Base
@@ -15,6 +18,7 @@ from app.modules.orders import register_orders
 from app.modules.customer import register_customer
 from app.modules.settings import register_settings
 from app.modules.comments import register_comments
+from app.modules.desktop_updates import register_desktop_updates
 from app.modules.settings.models import AppSetting # For metadata registration
 # Infrastructure middlewares
 from app.modules.infrastructure.middlewares.auth import AuthMiddleware
@@ -46,6 +50,7 @@ register_orders(app)  # /orders/* (protected)
 register_customer(app) # /customers/* (protected)
 register_settings(app) # /settings/* (admin/cashier)
 register_comments(app) # /comments/* (public - no auth required)
+register_desktop_updates(app) # /api/desktop/* (desktop update endpoints)
 
 
 @app.on_event("startup")
@@ -62,8 +67,14 @@ async def shutdown():
     await redis_client.disconnect()
 
 
+# ─── Static Files & Frontend ───
+frontend_path = os.path.join(os.path.dirname(__file__), "frontend")
+
 @app.get("/")
 def root():
+    index_file = os.path.join(frontend_path, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
     return {"message": "Welcome to RMS API"}
 
 
@@ -81,3 +92,8 @@ async def health_check():
         },
         "database": "connected"
     }
+
+# Mount the entire frontend directory as static files
+# This should be at the end to avoid intercepting API routes
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
