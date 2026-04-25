@@ -747,3 +747,65 @@ For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/St
 [2026-04-25 22:56:12] WARNING  topchef_desktop – Cloud fetch segment failed: Client error '403 Forbidden' for url 'https://topchef-system.fastapicloud.dev/user/users'
 For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
 [2026-04-25 22:56:12] INFO     topchef_desktop – Cloud pull completed successfully.
+[2026-04-25 23:31:22] INFO     topchef_desktop – LocalRepository initialized at D:\Projects\Free lance\top chef\implementation\desktop\data\topchef_local.db
+[2026-04-25 23:31:22] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-04-25 23:31:22] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-04-25 23:31:22] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-04-25 23:31:22] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-04-25 23:31:22] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-04-25 23:31:22] INFO     topchef_desktop – Connectivity monitor started.
+[2026-04-25 23:31:22] INFO     topchef_desktop – Sync engine started.
+[2026-04-25 23:31:22] INFO     topchef_desktop – Cloud WebSocket relay started.
+[2026-04-25 23:31:22] INFO     topchef_desktop – Connecting to cloud WebSocket: wss://topchef-system.fastapicloud.dev/orders/ws
+[2026-04-25 23:31:23] INFO     topchef_desktop – Tray icon started
+[2026-04-25 23:31:23] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-04-25 23:31:23] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-04-25 23:31:23] WARNING  topchef_desktop – Connectivity changed: ONLINE
+[2026-04-25 23:31:23] INFO     topchef_desktop – Reconnection detected. Sync wake-up queued.
+[2026-04-25 23:31:23] INFO     topchef_desktop – ✓ Cloud WebSocket connected.
+[2026-04-25 23:31:24] INFO     topchef_desktop – Pulling latest cloud state.
+[2026-04-25 23:31:24] INFO     topchef_desktop – Fetching cloud master data bundle.
+[2026-04-25 23:31:25] INFO     topchef_desktop – Cloud pull completed successfully.
+[2026-04-25 23:31:35] INFO     topchef_desktop – LocalRepository initialized at D:\Projects\Free lance\top chef\implementation\desktop\data\topchef_local.db
+[2026-04-25 23:31:35] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-04-25 23:31:35] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-04-25 23:31:35] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-04-25 23:31:35] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-04-25 23:31:35] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-04-25 23:31:35] INFO     topchef_desktop – Connectivity monitor started.
+[2026-04-25 23:31:35] INFO     topchef_desktop – Sync engine started.
+[2026-04-25 23:31:35] INFO     topchef_desktop – Cloud WebSocket relay started.
+[2026-04-25 23:31:35] INFO     topchef_desktop – Connecting to cloud WebSocket: wss://topchef-system.fastapicloud.dev/orders/ws
+[2026-04-25 23:31:35] INFO     topchef_desktop – Tray icon started
+[2026-04-25 23:31:35] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-04-25 23:31:36] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-04-25 23:31:36] WARNING  topchef_desktop – Connectivity changed: ONLINE
+[2026-04-25 23:31:36] INFO     topchef_desktop – ✓ Cloud WebSocket connected.
+[2026-04-25 23:31:36] INFO     topchef_desktop – Reconnection detected. Sync wake-up queued.
+[2026-04-25 23:31:36] INFO     topchef_desktop – Pulling latest cloud state.
+[2026-04-25 23:31:36] INFO     topchef_desktop – Fetching cloud master data bundle.
+[2026-04-25 23:31:38] INFO     topchef_desktop – Cloud pull completed successfully.
+[2026-04-25 23:31:58] INFO     topchef_desktop – ☁ Cloud WS event received: order.created
+[2026-04-25 23:31:58] INFO     topchef_desktop – Real-time event 'order.created' received — queuing sync.
+[2026-04-25 23:31:58] INFO     topchef_desktop – Full sync requested. reason=post-login
+[2026-04-25 23:31:58] INFO     topchef_desktop – ✓ Local WS client connected. Total: 1
+[2026-04-25 23:31:58] INFO     topchef_desktop – ☁ Cloud WS event received: order.updated
+[2026-04-25 23:31:58] INFO     topchef_desktop – Real-time event 'order.updated' received — queuing sync.
+[2026-04-25 23:32:39] INFO     topchef_desktop – Pulling latest cloud state.
+[2026-04-25 23:32:39] INFO     topchef_desktop – Fetching cloud master data bundle.
+[2026-04-25 23:32:42] WARNING  topchef_desktop – Cloud fetch segment failed: Client error '403 Forbidden' for url 'https://topchef-system.fastapicloud.dev/user/users'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
+[2026-04-25 23:32:42] INFO     topchef_desktop – Cloud pull completed successfully.
+[2026-04-25 23:33:44] INFO     topchef_desktop – Pulling latest cloud state.
+[2026-04-25 23:33:44] INFO     topchef_desktop – Fetching cloud master data bundle.
+[2026-04-25 23:33:47] WARNING  topchef_desktop – Cloud fetch segment failed: Client error '403 Forbidden' for url 'https://topchef-system.fastapicloud.dev/user/users'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
+[2026-04-25 23:33:47] INFO     topchef_desktop – Cloud pull completed successfully.
+[2026-04-25 23:34:05] INFO     topchef_desktop – ☁ Cloud WS event received: order.created
+[2026-04-25 23:34:05] INFO     topchef_desktop – Real-time event 'order.created' received — queuing sync.
+[2026-04-25 23:34:45] INFO     topchef_desktop – Pulling latest cloud state.
+[2026-04-25 23:34:45] INFO     topchef_desktop – Fetching cloud master data bundle.
+[2026-04-25 23:34:49] WARNING  topchef_desktop – Cloud fetch segment failed: Client error '403 Forbidden' for url 'https://topchef-system.fastapicloud.dev/user/users'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403
+[2026-04-25 23:34:49] INFO     topchef_desktop – Cloud pull completed successfully.
+[2026-04-25 23:34:50] INFO     topchef_desktop – ✗ Local WS client disconnected. Total: 0

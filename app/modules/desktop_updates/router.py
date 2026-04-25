@@ -28,7 +28,7 @@ from app.modules.customer.models import Customer, CustomerAddress
 from app.modules.comments.models import Comment
 from app.modules.orders.models import Order, OrderItem, OrderStatusHistory
 
-from app.modules.infrastructure.middlewares.auth import get_current_user
+from app.modules.auth.dependencies import get_current_user
 
 router = APIRouter()
 

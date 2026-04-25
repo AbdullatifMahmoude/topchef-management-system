@@ -1677,15 +1677,181 @@ function updateWebOrdersToggleUI() {
 // ===================================================
 //  Online Orders Polling & Notifications
 // ===================================================
+// ===================================================
+//  Real-Time WebSocket Connection & Fallback Polling
+// ===================================================
+let _orderWs = null;
+let _wsReconnectDelay = 1000;
+const _WS_MAX_RECONNECT_DELAY = 30000;
+let _wsConnected = false;
+
 function startOnlineOrdersPolling() {
-  if (pollingIntervalId) clearInterval(pollingIntervalId);
-  
-  // الأول fetch فوري
+  // Try WebSocket first
+  _connectOrdersWebSocket();
+
+  // Still do an initial fetch to get current state
   backgroundFetchOnlineOrders();
-  
-  // تكرار كل 10 ثوانٍ (أسرع كما طلب المستخدم)
-  pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 10000);
 }
+
+function _connectOrdersWebSocket() {
+  if (_orderWs && (_orderWs.readyState === WebSocket.CONNECTING || _orderWs.readyState === WebSocket.OPEN)) {
+    return; // Already active
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/orders/ws`;
+
+  console.log("Connecting to Orders WebSocket:", wsUrl);
+
+  try {
+    _orderWs = new WebSocket(wsUrl);
+
+    _orderWs.onopen = function() {
+      console.log("✓ Orders WebSocket connected.");
+      _wsConnected = true;
+      _wsReconnectDelay = 1000; // Reset backoff
+
+      // If we have a polling interval running, we can stop it or slow it down
+      // For now, let's stop it as we have real-time updates
+      if (pollingIntervalId) {
+        clearInterval(pollingIntervalId);
+        pollingIntervalId = null;
+        console.log("Fallback polling stopped — WebSocket active.");
+      }
+    };
+
+    _orderWs.onmessage = function(event) {
+      try {
+        const payload = JSON.parse(event.data);
+        _handleRealtimeOrderEvent(payload);
+      } catch (err) {
+        console.warn("Invalid WS message received:", err);
+      }
+    };
+
+    _orderWs.onclose = function(event) {
+      console.warn("Orders WebSocket closed. Reconnecting in", _wsReconnectDelay, "ms...");
+      _wsConnected = false;
+      _orderWs = null;
+
+      // Start fallback polling while disconnected
+      if (!pollingIntervalId) {
+        pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 10000);
+      }
+
+      setTimeout(() => {
+        if (document.visibilityState !== "hidden") {
+          _connectOrdersWebSocket();
+        }
+      }, _wsReconnectDelay);
+      
+      _wsReconnectDelay = Math.min(_wsReconnectDelay * 1.5, _WS_MAX_RECONNECT_DELAY);
+    };
+
+    _orderWs.onerror = function(err) {
+      console.error("Orders WebSocket error observed.");
+      // onclose will handle reconnection
+    };
+
+  } catch (err) {
+    console.error("Failed to establish WebSocket:", err);
+    // Fallback to polling if WS initialization fails
+    if (!pollingIntervalId) {
+      pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 10000);
+    }
+  }
+}
+
+function _handleRealtimeOrderEvent(payload) {
+  const event = payload.event;
+  const data = payload.data;
+
+  if (!event || !data) return;
+
+  console.log("☁ Real-time event:", event, data.id);
+
+  if (event === "order.created") {
+    _onOrderCreatedRealtime(data);
+  } else if (event === "order.updated") {
+    _onOrderUpdatedRealtime(data);
+  }
+}
+
+function _onOrderCreatedRealtime(order) {
+  const source = order.order_source || order.source;
+  
+  // 1. Update Online Orders List
+  if (source === "online") {
+    const exists = onlineOrdersList.find(o => o.id === order.id);
+    if (!exists) {
+      onlineOrdersList.unshift(order);
+      
+      // Notification sound for new online orders
+      if (order.order_status === "new") {
+        playNotificationSound();
+      }
+
+      const newCount = onlineOrdersList.filter(o => o.order_status === "new").length;
+      lastNewOrdersCount = newCount;
+      updateOnlineTabBadge(newCount);
+
+      const onlineLayout = document.getElementById("online_orders_layout");
+      if (onlineLayout && onlineLayout.style.display !== "none") {
+        updateOnlineStats();
+        renderOnlineOrders();
+      }
+    }
+  }
+
+  // 2. Update All Orders List (if applicable)
+  if (typeof allOrdersList !== "undefined") {
+    const existsAll = allOrdersList.find(o => o.id === order.id);
+    if (!existsAll) {
+      allOrdersList.unshift(order);
+      const allOrdersLayout = document.getElementById("all_orders_layout");
+      if (allOrdersLayout && allOrdersLayout.style.display !== "none") {
+        renderAllOrders();
+      }
+    }
+  }
+}
+
+function _onOrderUpdatedRealtime(order) {
+  // 1. Update Online Orders List
+  const onlineIdx = onlineOrdersList.findIndex(o => o.id === order.id);
+  if (onlineIdx !== -1) {
+    onlineOrdersList[onlineIdx] = { ...onlineOrdersList[onlineIdx], ...order };
+    
+    const newCount = onlineOrdersList.filter(o => o.order_status === "new").length;
+    lastNewOrdersCount = newCount;
+    updateOnlineTabBadge(newCount);
+
+    const onlineLayout = document.getElementById("online_orders_layout");
+    if (onlineLayout && onlineLayout.style.display !== "none") {
+      updateOnlineStats();
+      renderOnlineOrders();
+    }
+  }
+
+  // 2. Update All Orders List
+  if (typeof allOrdersList !== "undefined") {
+    const allIdx = allOrdersList.findIndex(o => o.id === order.id);
+    if (allIdx !== -1) {
+      allOrdersList[allIdx] = { ...allOrdersList[allIdx], ...order };
+      const allOrdersLayout = document.getElementById("all_orders_layout");
+      if (allOrdersLayout && allOrdersLayout.style.display !== "none") {
+        renderAllOrders();
+      }
+    }
+  }
+}
+
+// Reconnect when page becomes visible
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !_wsConnected) {
+    _connectOrdersWebSocket();
+  }
+});
 
 async function backgroundFetchOnlineOrders() {
   try {
@@ -1695,13 +1861,10 @@ async function backgroundFetchOnlineOrders() {
     const data = await res.json();
     const orders = data.orders || [];
     
-    // تحديث القائمة العالمية إذا كنا في تاب الأون لاين لمنع الجمود
-    // ولكن لا نعيد رندر الجدول بالكامل إلا لو كنا فاتحين التاب فعلاً
     onlineOrdersList = orders;
     
     const newCount = orders.filter(o => o.order_status === 'new').length;
     
-    // إشعار صوتي إذا زاد عدد الطلبات الجديدة
     if (newCount > lastNewOrdersCount) {
       playNotificationSound();
     }
@@ -1709,14 +1872,13 @@ async function backgroundFetchOnlineOrders() {
     lastNewOrdersCount = newCount;
     updateOnlineTabBadge(newCount);
     
-    // إذا كنت فاتح صفحة الأون لاين حالياً، حدث الإحصائيات (بدون إعادة رندر الشبكة بالكامل لتجنب تعطيل الكاشير)
     const onlineLayout = document.getElementById("online_orders_layout");
     if (onlineLayout && onlineLayout.style.display !== "none") {
        updateOnlineStats();
     }
 
   } catch (err) {
-    console.warn("Background polling error:", err);
+    console.warn("Background fetch error:", err);
   }
 }
 

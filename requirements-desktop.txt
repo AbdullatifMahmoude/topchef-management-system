@@ -22,6 +22,7 @@ python-escpos>=3.0       # ESC/POS thermal printer
 pywin32>=306             # Windows native printing fallback
 pyinstaller>=6.0         # EXE builder (dev dependency)
 httpx>=0.27              # Async HTTP client for hybrid login
+websockets>=12.0         # WebSocket client for real-time relay
 
 # ── Optional enhancements ────────────────────
 # pyperclip               # Clipboard support
