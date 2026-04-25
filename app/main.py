@@ -68,13 +68,12 @@ def root():
 
 @app.get("/health")
 async def health_check():
-    redis_status = "connected" if redis_client.redis else "disconnected"
     redis_stats = redis_client.get_stats()
 
     return {
         "status": "healthy",
         "redis": {
-            "status": redis_status,
+            "status": redis_client.status_label,
             "stats": redis_stats,
         },
         "database": "connected",

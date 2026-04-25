@@ -1,32 +1,54 @@
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import (
-    AsyncSession,
     AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
     create_async_engine,
-    async_sessionmaker
 )
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import create_engine
 
 from app.core.config import settings
 
 Base = declarative_base()
 
-engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    future=True,
-    pool_pre_ping=True,      # Check if connection is alive before using
-    pool_recycle=1800,       # Recycle connections every 30 minutes
-    pool_size=5,             # Maintain 5 background connections
-    max_overflow=10          # Allow up to 10 extra temporary connections
-)
 
+def _is_sqlite_url(url: str) -> bool:
+    return url.startswith("sqlite+aiosqlite://") or url.startswith("sqlite:///")
+
+
+def _to_sync_database_url(url: str) -> str:
+    if url.startswith("postgresql+asyncpg://"):
+        return url.replace("postgresql+asyncpg://", "postgresql://", 1).split("?")[0]
+    if url.startswith("sqlite+aiosqlite://"):
+        return url.replace("sqlite+aiosqlite://", "sqlite://", 1)
+    return url
+
+
+engine_kwargs = {
+    "echo": False,
+    "future": True,
+}
+
+if _is_sqlite_url(settings.DATABASE_URL):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    engine_kwargs.update(
+        {
+            "pool_pre_ping": True,
+            "pool_recycle": 1800,
+            "pool_size": 5,
+            "max_overflow": 10,
+        }
+    )
+
+
+engine: AsyncEngine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     engine,
     class_=AsyncSession,
     autoflush=False,
-    expire_on_commit=False
+    expire_on_commit=False,
 )
 
 
@@ -39,9 +61,7 @@ async def get_db() -> AsyncSession:
 
 
 def get_sync_engine():
-    # إزالة asyncpg و query string SSL من URL
-    sync_url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://").split("?")[0]
-    return create_engine(
-        sync_url,
-        connect_args={"sslmode":"require"}  # psycopg2 يفهم SSL
-    )
+    sync_url = _to_sync_database_url(settings.DATABASE_URL)
+    if sync_url.startswith("sqlite:///"):
+        return create_engine(sync_url, connect_args={"check_same_thread": False})
+    return create_engine(sync_url, connect_args={"sslmode": "require"})

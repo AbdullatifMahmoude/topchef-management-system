@@ -135,6 +135,14 @@ class OrderRepository:
         from app.core.exceptions import ValidationError
         
         business_date = self.get_business_date()
+        bind = self.db.bind
+        if bind is not None and bind.dialect.name == "sqlite":
+            count_query = select(func.count()).select_from(models.Order).where(
+                models.Order.order_date == business_date
+            )
+            current_count = await self.db.scalar(count_query) or 0
+            return f"{current_count + 1:04d}"
+
         seq_name = f"order_seq_{business_date.strftime('%Y_%m_%d')}"
         
         try:
