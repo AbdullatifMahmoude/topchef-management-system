@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from desktop.logger import desktop_logger as log
-from desktop.local_repository import local_repository
 
 
 class PrinterManager:
@@ -24,6 +23,8 @@ class PrinterManager:
         self._worker_thread = threading.Thread(target=self._printer_worker, daemon=True)
         self._worker_thread.start()
         self._last_order_id: Optional[int] = None
+        self._last_receipt_html: Optional[str] = None
+        self._last_receipt_name: Optional[str] = None
 
     def _printer_worker(self) -> None:
         while True:
@@ -52,27 +53,29 @@ class PrinterManager:
     def print_receipt(self, order: Dict[str, Any], receipt_type: str = "customer") -> bool:
         self._last_order_id = order.get("id")
         html_content = self.build_receipt_html(order, receipt_type)
-        local_repository.save_receipt(order["id"], html_content, receipt_type)
-        self._job_queue.put(
-            {
-                "html": html_content,
-                "document_name": f"order-{order.get('order_number') or order.get('id')}",
-            }
-        )
+        document_name = f"order-{order.get('order_number') or order.get('id')}"
+        self._last_receipt_html = html_content
+        self._last_receipt_name = document_name
+        self._job_queue.put({"html": html_content, "document_name": document_name})
         return True
 
     def print_html(self, html_content: str, document_name: str = "Top Chef Receipt") -> bool:
+        self._last_receipt_html = html_content
+        self._last_receipt_name = document_name
         self._job_queue.put({"html": html_content, "document_name": document_name})
         return True
 
     def reprint_last(self, receipt_type: str = "customer") -> bool:
-        if not self._last_order_id:
+        if not self._last_receipt_html:
             log.warning("No last order to reprint")
             return False
-        order = local_repository.get_order(self._last_order_id)
-        if not order:
-            return False
-        return self.print_receipt(order, receipt_type)
+        self._job_queue.put(
+            {
+                "html": self._last_receipt_html,
+                "document_name": self._last_receipt_name or f"reprint-{self._last_order_id or 'receipt'}",
+            }
+        )
+        return True
 
     def build_receipt_html(self, order: Dict[str, Any], receipt_type: str = "customer") -> str:
         order_number = self._value(order, "orderNumber", "order_number", "id", default="---")

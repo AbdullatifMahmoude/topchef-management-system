@@ -1320,3 +1320,4 @@ For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/St
 [2026-04-26 01:39:27] INFO     topchef_desktop – [LIST_ORDERS] Query: WHERE order_date = ? AND order_source = ? Params: ['2026-04-26', 'online']
 [2026-04-26 01:39:27] INFO     topchef_desktop – [LIST_ORDERS] Found: 18 orders
 [2026-04-26 01:39:39] INFO     topchef_desktop – [OFFLINE] Local WS client disconnected. Total: 0
+[2026-04-26 02:01:15] INFO     topchef_desktop – LocalRepository initialized at D:\Projects\Free lance\top chef\implementation\desktop\data\topchef_local.db

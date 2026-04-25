@@ -30,6 +30,7 @@ def _is_already_running() -> bool:
 
 # Ensure project root is importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+os.environ["RUNTIME_MODE"] = "desktop"
 
 from desktop.config import config
 from desktop.logger import desktop_logger as log
@@ -58,11 +59,11 @@ def main():
     splash.show()
 
     # 2. Local Server (Uvicorn)
-    from desktop.main import desktop_app
+    from app.main import app
     import uvicorn
     
     def _run_server():
-        uvicorn.run(desktop_app, host="127.0.0.1", port=config.local_port, log_level="info")
+        uvicorn.run(app, host="127.0.0.1", port=config.local_port, log_level="info")
 
     server_thread = threading.Thread(target=_run_server, daemon=True)
     server_thread.start()
@@ -71,7 +72,7 @@ def main():
     import urllib.request
 
     app_url = f"http://127.0.0.1:{config.local_port}/"
-    health_url = f"http://127.0.0.1:{config.local_port}/health/diagnostics"
+    health_url = f"http://127.0.0.1:{config.local_port}/health"
 
     def _wait_for_server(timeout_seconds: int = 20) -> bool:
         deadline = time.time() + timeout_seconds
@@ -91,18 +92,16 @@ def main():
 
     # 3. Tray
     from desktop.tray import tray_icon
-    from desktop.sync import sync_engine
     
     def _quit():
         log.info("Shutdown initiated...")
-        sync_engine.stop()
         os._exit(0)
 
     tray_icon.set_callbacks(
         on_show=lambda: None, # Handled by webview
         on_quit=_quit,
-        on_sync=sync_engine.force_sync,
-        on_test_print=lambda: None
+        on_sync=lambda: None,
+        on_test_print=thermal_printer.test_print
     )
     tray_icon.start()
 

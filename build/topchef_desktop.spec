@@ -63,14 +63,12 @@ hiddenimports = [
     "desktop",
     "desktop.config",
     "desktop.logger",
-    "desktop.local_db",
-    "desktop.sync",
     "desktop.updater",
     "desktop.printer",
     "desktop.tray",
     "desktop.splash",
-    "desktop.main",
     "app.core.enums",
+    "app.main",
 ]
 
 a = Analysis(
