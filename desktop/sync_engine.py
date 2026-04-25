@@ -60,6 +60,12 @@ class SyncEngine:
     def force_sync(self) -> None:
         self.trigger_full_sync(reason="force")
 
+    def handle_realtime_event(self, event_type: str, data: dict) -> None:
+        """Triggered by the Cloud WS Relay."""
+        if event_type in ("order.created", "order.updated"):
+            log.info("Real-time cloud event [%s] received. Triggering sync.", event_type)
+            self._wake_event.set()
+
     def get_health_status(self) -> Dict[str, object]:
         return {
             **self._stats,

@@ -17,6 +17,7 @@ from desktop.local_repository import local_repository
 from desktop.logger import desktop_logger as log
 from desktop.printer import thermal_printer
 from desktop.sync_engine import sync_engine
+from desktop.ws_relay import cloud_ws_relay, local_ws_manager
 
 
 desktop_app = FastAPI(title="Top Chef POS Local API")
@@ -108,16 +109,21 @@ def _should_refresh_local_cache(max_age_seconds: int = 300) -> bool:
 async def startup() -> None:
     auth_service.logout_runtime_session()
     sync_engine.start()
+    cloud_ws_relay.start()
 
 
 @desktop_app.on_event("shutdown")
 async def shutdown() -> None:
+    cloud_ws_relay.stop()
     sync_engine.stop()
 
 
 @desktop_app.get("/health/diagnostics")
 def get_diagnostics() -> Dict[str, Any]:
-    return sync_engine.get_health_status()
+    status = sync_engine.get_health_status()
+    status["ws_relay_connected"] = cloud_ws_relay.is_connected
+    status["ws_local_clients"] = local_ws_manager.client_count
+    return status
 
 
 @desktop_app.post("/auth/login")
@@ -260,19 +266,29 @@ def get_order(order_id: int) -> Dict[str, Any]:
 
 
 @desktop_app.post("/orders/")
-def create_order(payload: OrderIn) -> Dict[str, Any]:
+async def create_order(payload: OrderIn) -> Dict[str, Any]:
     order_data = payload.model_dump()
     if not order_data.get("order_number"):
         order_data["order_number"] = local_repository.next_order_number()
     order = local_repository.create_order(order_data)
     sync_engine.trigger_full_sync(reason="order-created", wait=False)
+    # Real-time broadcast to local frontend clients
+    await local_ws_manager.broadcast({
+        "event": "order.created",
+        "data": order
+    })
     return order
 
 
 @desktop_app.patch("/orders/{order_id}/status")
-def update_order_status(order_id: int, payload: OrderStatusUpdate) -> Dict[str, Any]:
+async def update_order_status(order_id: int, payload: OrderStatusUpdate) -> Dict[str, Any]:
     order = local_repository.update_order_status(order_id, payload.order_status)
     sync_engine.trigger_full_sync(reason="order-status-updated", wait=False)
+    # Real-time broadcast to local frontend clients
+    await local_ws_manager.broadcast({
+        "event": "order.updated",
+        "data": order
+    })
     return order
 
 
@@ -311,6 +327,24 @@ def reprint_last() -> Dict[str, Any]:
 def trigger_sync() -> Dict[str, str]:
     sync_engine.force_sync()
     return {"status": "triggered"}
+
+
+# ═══════════════════════════════════════════════════════
+#  WebSocket Endpoint — mirrors cloud /orders/ws interface
+# ═══════════════════════════════════════════════════════
+@desktop_app.websocket("/orders/ws")
+async def websocket_orders(websocket: WebSocket):
+    """Local WebSocket endpoint for real-time order notifications.
+    Identical interface to the cloud web service /orders/ws."""
+    await local_ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive by waiting for client messages
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        local_ws_manager.disconnect(websocket)
+    except Exception:
+        local_ws_manager.disconnect(websocket)
 
 
 @desktop_app.post("/pricing/preview")
