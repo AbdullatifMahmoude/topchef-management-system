@@ -114,8 +114,7 @@ class LocalRepository:
             key TEXT PRIMARY KEY,
             value_bool INTEGER,
             description TEXT,
-            updated_at TEXT,
-            last_sync_at TEXT
+            updated_at TEXT
         );
 
         CREATE TABLE IF NOT EXISTS customers (
@@ -498,14 +497,13 @@ class LocalRepository:
         for key, value in settings_payload.items():
             conn.execute(
                 """
-                INSERT INTO app_settings(key, value_bool, description, updated_at, last_sync_at)
-                VALUES (?, ?, 'Cloud synced setting', ?, ?)
+                INSERT INTO app_settings(key, value_bool, description, updated_at)
+                VALUES (?, ?, 'Cloud synced setting', ?)
                 ON CONFLICT(key) DO UPDATE SET
                     value_bool = excluded.value_bool,
-                    updated_at = excluded.updated_at,
-                    last_sync_at = excluded.last_sync_at
+                    updated_at = excluded.updated_at
                 """,
-                (key, 1 if bool(value) else 0, now, now),
+                (key, 1 if bool(value) else 0, now),
             )
 
     def _upsert_delivery_users(self, conn: sqlite3.Connection, users: List[Dict[str, Any]]) -> None:
@@ -1015,8 +1013,8 @@ class LocalRepository:
         with self.connect() as conn:
             conn.execute(
                 """
-                INSERT INTO app_settings(key, value_bool, description, updated_at, last_sync_at)
-                VALUES ('web_orders', ?, 'Cloud synced setting', ?, last_sync_at)
+                INSERT INTO app_settings(key, value_bool, description, updated_at)
+                VALUES ('web_orders', ?, 'Cloud synced setting', ?)
                 ON CONFLICT(key) DO UPDATE SET value_bool = excluded.value_bool, updated_at = excluded.updated_at
                 """,
                 (1 if enabled else 0, now),
