@@ -75,6 +75,19 @@ class PrintRequest(BaseModel):
     receipt_type: str = "customer"
 
 
+class PricingItem(BaseModel):
+    product_id: int
+    quantity: int
+    unit_price: float
+
+
+class PricingRequest(BaseModel):
+    items: List[PricingItem]
+    order_type: str = "hall"
+    delivery_fee: float = 0
+    offer_code: Optional[str] = None
+
+
 class WebOrdersSettingUpdate(BaseModel):
     value_bool: bool
 
@@ -140,6 +153,14 @@ async def get_categories(background_tasks: BackgroundTasks) -> List[Dict[str, An
     return rows
 
 
+@desktop_app.get("/menu/categories/{category_id}")
+def get_category(category_id: int) -> Dict[str, Any]:
+    category = local_repository.get_category(category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return category
+
+
 @desktop_app.get("/menu/products")
 async def get_products(background_tasks: BackgroundTasks) -> List[Dict[str, Any]]:
     rows = local_repository.get_products()
@@ -150,6 +171,14 @@ async def get_products(background_tasks: BackgroundTasks) -> List[Dict[str, Any]
     elif _should_refresh_local_cache():
         background_tasks.add_task(sync_engine.trigger_full_sync, "products-read", False)
     return rows
+
+
+@desktop_app.get("/menu/products/{product_id}")
+def get_product(product_id: int) -> Dict[str, Any]:
+    product = local_repository.get_product(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
 
 
 @desktop_app.get("/offers/")
@@ -175,6 +204,14 @@ def get_delivery_users() -> List[Dict[str, Any]]:
 @desktop_app.get("/user/users")
 def get_users() -> List[Dict[str, Any]]:
     return local_repository.get_users()
+
+
+@desktop_app.get("/user/users/{user_id}")
+def get_user(user_id: int) -> Dict[str, Any]:
+    user = local_repository.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
 
 @desktop_app.get("/customers/")
@@ -274,6 +311,17 @@ def reprint_last() -> Dict[str, Any]:
 def trigger_sync() -> Dict[str, str]:
     sync_engine.force_sync()
     return {"status": "triggered"}
+
+
+@desktop_app.post("/pricing/preview")
+def get_price_preview(payload: PricingRequest) -> Dict[str, Any]:
+    items = [item.model_dump() for item in payload.items]
+    return local_repository.calculate_pricing(
+        items=items,
+        order_type=payload.order_type,
+        delivery_fee=payload.delivery_fee,
+        offer_code=payload.offer_code
+    )
 
 
 frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app", "frontend"))

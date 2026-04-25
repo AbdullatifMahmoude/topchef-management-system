@@ -726,6 +726,51 @@ class LocalRepository:
                 product["variants"] = variant_map.get(product["id"], [])
             return products
 
+    def get_product(self, product_id: int) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            product = conn.execute(
+                "SELECT * FROM products WHERE id = ? AND is_available = 1",
+                (product_id,)
+            ).fetchone()
+            if not product:
+                return None
+            product = dict(product)
+            variants = [dict(row) for row in conn.execute(
+                "SELECT * FROM variants WHERE product_id = ?",
+                (product_id,)
+            ).fetchall()]
+            for variant in variants:
+                variant["price"] = float(variant.get("price", 0) or 0)
+            product["product_name"] = product["name"]
+            product["product_type"] = product["type"]
+            product["is_available"] = bool(product.get("is_available"))
+            product["variants"] = variants
+            return product
+
+    def get_category(self, category_id: int) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            category = conn.execute(
+                "SELECT * FROM categories WHERE id = ? AND is_active = 1",
+                (category_id,)
+            ).fetchone()
+            if not category:
+                return None
+            return dict(category)
+
+    def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            user = conn.execute(
+                "SELECT cloud_id as id, username, full_name, role, phone, is_active, created_at, updated_at FROM users WHERE cloud_id = ? AND is_active = 1",
+                (user_id,)
+            ).fetchone()
+            if not user:
+                return None
+            user = dict(user)
+            user["is_active"] = bool(user.get("is_active"))
+            if user.get("phone") is None:
+                user["phone"] = ""
+            return user
+
     def get_offers(self) -> List[Dict[str, Any]]:
         with self.connect() as conn:
             return [dict(row) for row in conn.execute(
@@ -1154,6 +1199,46 @@ class LocalRepository:
                 "INSERT INTO receipts(order_id, receipt_type, content, printed_at) VALUES (?, ?, ?, ?)",
                 (order_id, receipt_type, content, utc_now_iso()),
             )
+
+    def calculate_pricing(self, items: List[Dict[str, Any]], order_type: str = "hall", delivery_fee: float = 0, offer_code: Optional[str] = None) -> Dict[str, Any]:
+        """Calculate pricing including subtotal, discounts, and total."""
+        # Calculate subtotal
+        subtotal = sum(item.get("quantity", 0) * item.get("unit_price", 0) for item in items)
+        discount_amount = 0.0
+        
+        # Apply offer if provided
+        if offer_code:
+            with self.connect() as conn:
+                offer = conn.execute(
+                    "SELECT * FROM offers WHERE code = ? AND is_active = 1",
+                    (offer_code,)
+                ).fetchone()
+                if offer:
+                    offer = dict(offer)
+                    # Check if offer is still valid
+                    now = utc_now_iso()
+                    valid_from = offer.get("valid_from")
+                    valid_to = offer.get("valid_to")
+                    if (not valid_from or valid_from <= now) and (not valid_to or valid_to >= now):
+                        if subtotal >= (offer.get("min_order_amount") or 0):
+                            if offer["discount_type"] == "percentage":
+                                discount_amount = subtotal * (offer["discount_value"] / 100)
+                            else:  # fixed
+                                discount_amount = offer["discount_value"]
+                            
+                            # Cap discount if max_discount_amount is set
+                            if offer.get("max_discount_amount"):
+                                discount_amount = min(discount_amount, offer["max_discount_amount"])
+        
+        # Calculate total
+        total = subtotal - discount_amount + delivery_fee
+        
+        return {
+            "subtotal": round(subtotal, 2),
+            "discount_amount": round(discount_amount, 2),
+            "delivery_fee": round(delivery_fee, 2),
+            "total_amount": round(max(total, 0), 2)
+        }
 
     def _enqueue_sync(self, conn: sqlite3.Connection, entity_type: str, action: str, record_id: int, payload: Dict[str, Any]) -> None:
         now = utc_now_iso()
