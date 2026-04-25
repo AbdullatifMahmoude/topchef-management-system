@@ -66,14 +66,19 @@ class CloudAPIClient:
             self.request("GET", "/offers/", authenticated=False),
         ]
         if has_online_session:
+            role = auth_service.get_current_role()
             jobs.extend([
                 self.request("GET", "/settings/web-orders"),
                 self.request("GET", "/customers/"),
                 self.request("GET", "/orders/", params={"source": "online", "page_size": 200}),
                 self.request("GET", "/orders/", params={"source": "cashier", "page_size": 200}),
                 self.request("GET", "/user/users/delivery"),
-                self.request("GET", "/user/users"),
             ])
+            # Only admins can list all users
+            if role in ("admin", "owner", "manager"):
+                jobs.append(self.request("GET", "/user/users"))
+            else:
+                jobs.append(asyncio.sleep(0, result=[]))
         else:
             jobs.extend([
                 asyncio.sleep(0, result=True),
@@ -172,6 +177,17 @@ class CloudAPIClient:
                 "comment_text": payload["comment_text"],
             }, authenticated=False)
             local_repository.mark_comment_synced(payload["local_id"], response)
+            return
+        if action == "update_order_full":
+            cloud_order_id = local_repository.get_order_cloud_id(payload["order_id"])
+            if not cloud_order_id:
+                raise RuntimeError("Order must sync before full update upload")
+            response = await self.request(
+                "PATCH",
+                f"/orders/{cloud_order_id}",
+                json_body=payload["update_data"],
+            )
+            local_repository.mark_order_synced(payload["order_id"], response)
             return
         raise ValueError(f"Unsupported queue action: {action}")
 

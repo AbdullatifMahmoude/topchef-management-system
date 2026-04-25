@@ -2001,7 +2001,7 @@ async function fetchAllOrders() {
   grid.innerHTML = `<p style="color:var(--color-primary);text-align:center;grid-column:1/-1;padding:40px;">جاري تحميل الطلبات...</p>`;
   
   try {
-    const res = await apiFetch("/orders/?page_size=100");
+    const res = await apiFetch("/orders/?source=cashier&page_size=100");
     if (!res.ok) throw new Error("فشل تحميل الطلبات");
     
     const data = await res.json();

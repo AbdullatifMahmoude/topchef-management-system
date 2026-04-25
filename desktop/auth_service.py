@@ -64,6 +64,10 @@ class AuthService:
         token = self.get_access_token()
         return bool(self._online_session_active and token and token != "offline-session")
 
+    def get_current_role(self) -> Optional[str]:
+        session = self.session_store.load()
+        return session.get("role")
+
     async def login(self, username: str, password: str) -> Dict[str, Any]:
         online_error: Optional[Exception] = None
         try:

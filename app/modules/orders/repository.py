@@ -11,7 +11,7 @@ class OrderRepository:
         self.db = db
 
     def get_business_date(self) -> date:
-        # Force UTC+2 (Local Time for Egypt/Palestine)
+        # Business day starts at midnight (UTC+2)
         tz = timezone(timedelta(hours=2))
         return datetime.now(tz).date()
 

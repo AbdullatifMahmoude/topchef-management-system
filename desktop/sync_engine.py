@@ -27,6 +27,7 @@ class SyncEngine:
             "last_error": None,
             "is_online": "false",
         }
+        self._force_pull_pending = False
         connectivity_monitor.subscribe(self._on_connectivity_changed)
 
     def start(self) -> None:
@@ -51,6 +52,7 @@ class SyncEngine:
 
     def trigger_full_sync(self, reason: str = "manual", wait: bool = False) -> None:
         log.info("Full sync requested. reason=%s", reason)
+        self._force_pull_pending = True
         self._wake_event.set()
         if wait:
             deadline = time.time() + 20
@@ -60,10 +62,12 @@ class SyncEngine:
     def force_sync(self) -> None:
         self.trigger_full_sync(reason="force")
 
-    def handle_realtime_event(self, event_type: str, data: dict) -> None:
+    def handle_realtime_event(self, data: dict) -> None:
         """Triggered by the Cloud WS Relay."""
+        event_type = data.get("event", "unknown")
         if event_type in ("order.created", "order.updated"):
             log.info("Real-time cloud event [%s] received. Triggering sync.", event_type)
+            self._force_pull_pending = True
             self._wake_event.set()
 
     def get_health_status(self) -> Dict[str, object]:
@@ -89,9 +93,11 @@ class SyncEngine:
                 self._wake_event.clear()
                 online = connectivity_monitor.probe()
                 now = time.time()
-                if online and (now >= next_background_sync or local_repository.get_pending_sync_count() > 0):
+                if online and (now >= next_background_sync or local_repository.get_pending_sync_count() > 0 or self._force_pull_pending):
                     self._stats["last_sync_started_at"] = datetime.utcnow().isoformat()
-                    asyncio.run(self._sync_once())
+                    force = self._force_pull_pending
+                    self._force_pull_pending = False
+                    asyncio.run(self._sync_once(force_pull=force))
                     self._stats["last_sync_finished_at"] = datetime.utcnow().isoformat()
                     next_background_sync = now + 60
             except Exception as exc:
@@ -99,14 +105,22 @@ class SyncEngine:
                 log.error("Sync loop failure: %s", exc)
                 time.sleep(2)
 
-    async def _sync_once(self) -> None:
+    async def _sync_once(self, force_pull: bool = False) -> None:
         if not connectivity_monitor.is_online:
             self._stats["mode"] = "offline"
             return
-        self._stats["mode"] = "online"
+        
+        # If we have connectivity but no online session, try to restore/refresh it
+        if not auth_service.has_online_session():
+            await auth_service.refresh_access_token()
+
         if auth_service.has_online_session():
+            self._stats["mode"] = "online"
             await self._push_pending_transactions()
-        await self._pull_cloud_state()
+        else:
+            self._stats["mode"] = "offline"
+
+        await self._pull_cloud_state(force=force_pull)
 
     async def _push_pending_transactions(self) -> None:
         queue_rows = local_repository.list_ready_queue_items(limit=100)
@@ -120,11 +134,11 @@ class SyncEngine:
             self._stats["last_error"] = str(exc)
             log.warning("Pending upload stopped early: %s", exc)
 
-    async def _pull_cloud_state(self) -> None:
+    async def _pull_cloud_state(self, force: bool = False) -> None:
         now = time.time()
-        if now < self._next_allowed_pull_at:
+        if not force and now < self._next_allowed_pull_at:
             return
-        log.info("Pulling latest cloud state.")
+        log.info("Pulling latest cloud state. force=%s", force)
         try:
             payload = await cloud_api.fetch_master_data()
             self._stats["last_pull_at"] = datetime.utcnow().isoformat()

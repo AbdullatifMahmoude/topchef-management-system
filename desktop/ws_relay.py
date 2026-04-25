@@ -29,13 +29,13 @@ class LocalConnectionManager:
         await websocket.accept()
         with self._lock:
             self.active_connections.append(websocket)
-        log.info("✓ Local WS client connected. Total: %d", len(self.active_connections))
+        log.info("[OK] Local WS client connected. Total: %d", len(self.active_connections))
 
     def disconnect(self, websocket):
         with self._lock:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
-        log.info("✗ Local WS client disconnected. Total: %d", len(self.active_connections))
+        log.info("[OFFLINE] Local WS client disconnected. Total: %d", len(self.active_connections))
 
     async def broadcast(self, message: Dict[str, Any]):
         """Broadcast a message dict to all connected local frontend clients."""
@@ -147,7 +147,7 @@ class CloudWebSocketRelay:
                     close_timeout=5,
                     additional_headers={"User-Agent": "TopChefDesktopPOS/2.0"},
                 ) as ws:
-                    log.info("✓ Cloud WebSocket connected.")
+                    log.info("[OK] Cloud WebSocket connected.")
                     self._connected = True
                     self._reconnect_delay = 1.0  # Reset backoff on success
 
@@ -183,7 +183,7 @@ class CloudWebSocketRelay:
             return
 
         event_type = data.get("event", "unknown")
-        log.info("☁ Cloud WS event received: %s", event_type)
+        log.info("[CLOUD] Cloud WS event received: %s", event_type)
 
         # 1. Relay to all local frontend WebSocket clients
         await local_ws_manager.broadcast(data)

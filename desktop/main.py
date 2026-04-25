@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +18,9 @@ from desktop.logger import desktop_logger as log
 from desktop.printer import thermal_printer
 from desktop.sync_engine import sync_engine
 from desktop.ws_relay import cloud_ws_relay, local_ws_manager
+from desktop.order_service import order_service
+from desktop.customer_service import customer_service
+from desktop.pricing_service import pricing_service
 
 
 desktop_app = FastAPI(title="Top Chef POS Local API")
@@ -42,6 +45,7 @@ class OrderIn(BaseModel):
     customer_id: Optional[int] = None
     customer_phone: Optional[str] = None
     customer_name: Optional[str] = None
+    customer_address: Optional[str] = None
     customer_notes: Optional[str] = None
     internal_notes: Optional[str] = None
     total_amount: float
@@ -50,6 +54,18 @@ class OrderIn(BaseModel):
     order_number: Optional[str] = None
     idempotency_key: Optional[str] = None
     offer_code: Optional[str] = None
+
+
+class OrderUpdateFull(BaseModel):
+    delivery_person_id: Optional[int] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_notes: Optional[str] = None
+    internal_notes: Optional[str] = None
+    customer_address: Optional[str] = None
+    customer_id: Optional[int] = None
+    delivery_fee: Optional[float] = None
+    items: Optional[List[dict]] = None
 
 
 class OrderStatusUpdate(BaseModel):
@@ -108,6 +124,12 @@ def _should_refresh_local_cache(max_age_seconds: int = 300) -> bool:
 @desktop_app.on_event("startup")
 async def startup() -> None:
     auth_service.logout_runtime_session()
+    # Subscribe sync engine to cloud events for real-time triggering
+    cloud_ws_relay.subscribe(sync_engine.handle_realtime_event)
+    
+    # Attempt to restore previous session if credentials exist
+    await auth_service.refresh_access_token()
+    
     sync_engine.start()
     cloud_ws_relay.start()
 
@@ -235,31 +257,34 @@ def get_customer_by_phone(phone: str) -> Dict[str, Any]:
 
 @desktop_app.post("/customers/")
 def create_customer(payload: CustomerCreate) -> Dict[str, Any]:
-    customer = local_repository.create_customer(payload.model_dump())
-    sync_engine.trigger_full_sync(reason="customer-created", wait=False)
-    return customer
+    return customer_service.get_or_create_customer(payload.phone_number, payload.name)
 
 
 @desktop_app.post("/customers/{customer_id}/addresses")
 def add_customer_address(customer_id: int, payload: AddressCreate) -> Dict[str, Any]:
-    address = local_repository.add_customer_address(customer_id, payload.address)
-    sync_engine.trigger_full_sync(reason="address-created", wait=False)
-    return address
+    return customer_service.add_address(customer_id, payload.address)
 
 
 @desktop_app.get("/orders/")
 def list_orders(
     source: Optional[str] = None,
     status: Optional[str] = None,
+    order_date: Optional[str] = None,
     page: int = 1,
-    page_size: int = 50,
-) -> Dict[str, Any]:
-    return local_repository.list_orders(source=source, status=status, page=page, page_size=page_size)
+    page_size: int = 50
+):
+    return order_service.list_orders(
+        source=source, 
+        status=status, 
+        order_date=order_date,
+        page=page, 
+        page_size=page_size
+    )
 
 
 @desktop_app.get("/orders/{order_id}")
 def get_order(order_id: int) -> Dict[str, Any]:
-    order = local_repository.get_order(order_id)
+    order = order_service.get_order(order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
@@ -267,29 +292,17 @@ def get_order(order_id: int) -> Dict[str, Any]:
 
 @desktop_app.post("/orders/")
 async def create_order(payload: OrderIn) -> Dict[str, Any]:
-    order_data = payload.model_dump()
-    if not order_data.get("order_number"):
-        order_data["order_number"] = local_repository.next_order_number()
-    order = local_repository.create_order(order_data)
-    sync_engine.trigger_full_sync(reason="order-created", wait=False)
-    # Real-time broadcast to local frontend clients
-    await local_ws_manager.broadcast({
-        "event": "order.created",
-        "data": order
-    })
-    return order
+    return await order_service.create_order(payload.model_dump())
+
+
+@desktop_app.patch("/orders/{order_id}")
+async def update_order(order_id: int, payload: OrderUpdateFull) -> Dict[str, Any]:
+    return await order_service.update_order(order_id, payload.model_dump(exclude_unset=True))
 
 
 @desktop_app.patch("/orders/{order_id}/status")
 async def update_order_status(order_id: int, payload: OrderStatusUpdate) -> Dict[str, Any]:
-    order = local_repository.update_order_status(order_id, payload.order_status)
-    sync_engine.trigger_full_sync(reason="order-status-updated", wait=False)
-    # Real-time broadcast to local frontend clients
-    await local_ws_manager.broadcast({
-        "event": "order.updated",
-        "data": order
-    })
-    return order
+    return await order_service.update_order_status(order_id, payload.order_status)
 
 
 @desktop_app.post("/comments/")
@@ -350,7 +363,7 @@ async def websocket_orders(websocket: WebSocket):
 @desktop_app.post("/pricing/preview")
 def get_price_preview(payload: PricingRequest) -> Dict[str, Any]:
     items = [item.model_dump() for item in payload.items]
-    return local_repository.calculate_pricing(
+    return pricing_service.calculate_price(
         items=items,
         order_type=payload.order_type,
         delivery_fee=payload.delivery_fee,

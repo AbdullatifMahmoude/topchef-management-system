@@ -777,6 +777,14 @@ class LocalRepository:
                 "SELECT * FROM offers WHERE is_active = 1 ORDER BY offer_id"
             ).fetchall()]
 
+    def get_offer_by_code(self, code: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM offers WHERE code = ? AND is_active = 1",
+                (code,)
+            ).fetchone()
+            return dict(row) if row else None
+
     def get_delivery_users(self) -> List[Dict[str, Any]]:
         with self.connect() as conn:
             return [dict(row) for row in conn.execute(
@@ -983,21 +991,44 @@ class LocalRepository:
             self._decorate_order(conn, order)
             return order
 
-    def list_orders(self, source: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 50) -> Dict[str, Any]:
+    def get_business_date(self) -> str:
+        # Matches cloud business date logic (midnight shift, UTC+2)
+        from datetime import datetime, timedelta, timezone
+        tz = timezone(timedelta(hours=2))
+        return datetime.now(tz).strftime("%Y-%m-%d")
+
+    def list_orders(self, source: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 50, order_date: Optional[str] = None) -> Dict[str, Any]:
+        offset = (page - 1) * page_size
         clauses = []
-        params: List[Any] = []
+        params = []
+        
+        # Default to current business date if not provided (matches cloud)
+        if order_date is None:
+            order_date = self.get_business_date()
+        
+        if order_date != "all":
+            clauses.append("order_date = ?")
+            params.append(order_date)
+
         if source:
             clauses.append("order_source = ?")
             params.append(source)
+        elif source is None:
+            # If no source is specified, we still might want to default to something or show all.
+            # But the API usually passes a source.
+            pass
         if status:
             clauses.append("order_status = ?")
             params.append(status)
+
         where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        offset = (page - 1) * page_size
+        log.info(f"[LIST_ORDERS] Query: {where_sql} Params: {params}")
+
         with self.connect() as conn:
             total_row = conn.execute(f"SELECT COUNT(*) AS total FROM orders {where_sql}", tuple(params)).fetchone()
+            log.info(f"[LIST_ORDERS] Found: {total_row['total']} orders")
             rows = conn.execute(
-                f"SELECT * FROM orders {where_sql} ORDER BY datetime(created_at) DESC, id DESC LIMIT ? OFFSET ?",
+                f"SELECT * FROM orders {where_sql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
                 tuple(params + [page_size, offset]),
             ).fetchall()
             orders = []
@@ -1157,6 +1188,59 @@ class LocalRepository:
                 """,
                 (cloud_record["id"], cloud_record.get("order_status", "new"), now, cloud_record.get("updated_at") or now, local_id),
             )
+
+    def update_order_full(self, order_id: int, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        with self.connect() as conn:
+            now = utc_now_iso()
+            # Update main order fields
+            allowed_fields = {
+                "customer_id", "customer_phone", "customer_name", "customer_notes", 
+                "internal_notes", "delivery_fee", "subtotal", "discount_amount", 
+                "total_amount"
+            }
+            
+            sets = []
+            values = []
+            for field in allowed_fields:
+                if field in update_data:
+                    sets.append(f"{field} = ?")
+                    values.append(update_data[field])
+            
+            if sets:
+                sets.append("updated_at = ?")
+                values.append(now)
+                sets.append("pending_sync = 1")
+                sets.append("sync_status = 'pending'")
+                
+                query = f"UPDATE orders SET {', '.join(sets)} WHERE id = ?"
+                values.append(order_id)
+                conn.execute(query, tuple(values))
+            
+            # Update items if provided
+            if "items" in update_data:
+                conn.execute("DELETE FROM order_items WHERE order_id = ?", (order_id,))
+                for item in update_data["items"]:
+                    conn.execute(
+                        """
+                        INSERT INTO order_items(order_id, product_id, quantity, unit_price, total_price)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            order_id,
+                            item["product_id"],
+                            item["quantity"],
+                            float(item["unit_price"]),
+                            float(item["unit_price"]) * int(item["quantity"]),
+                        ),
+                    )
+            
+            # Enqueue sync for the full update
+            self._enqueue_sync(conn, "order", "update_order_full", order_id, {
+                "order_id": order_id,
+                "update_data": update_data
+            })
+            
+            return self.get_order(order_id)
 
     def mark_order_status_synced(self, history_id: int, order_cloud_id: Optional[int] = None) -> None:
         with self.connect() as conn:
