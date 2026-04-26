@@ -93,6 +93,7 @@ async function init() {
     renderItems();
     initWebOrdersToggle();
     startOnlineOrdersPolling();
+    initWebSocket(); // Added real-time WebSocket for instant sounds
   } catch (err) {
     console.error("API error:", err);
     document.getElementById("items_grid").innerHTML =
@@ -1683,8 +1684,55 @@ function startOnlineOrdersPolling() {
   // الأول fetch فوري
   backgroundFetchOnlineOrders();
   
-  // تكرار كل 10 ثوانٍ (أسرع كما طلب المستخدم)
-  pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 10000);
+  // تكرار كل 20 ثانية كاحتياط (الـ WebSocket سيتولى اللحظي)
+  pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 20000);
+}
+
+// ===================================================
+//  WebSocket - Real-time Notifications
+// ===================================================
+let wsConnection = null;
+
+function initWebSocket() {
+  if (wsConnection) {
+    try { wsConnection.close(); } catch(e) {}
+  }
+
+  const wsUrl = API_BASE.replace("http", "ws") + "/orders/ws";
+  console.log("Connecting to WebSocket:", wsUrl);
+  
+  wsConnection = new WebSocket(wsUrl);
+
+  wsConnection.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      console.log("WebSocket event received:", data.event);
+      
+      if (data.event === "order.created" || data.event === "order.status_changed") {
+        // تشغيل الصوت فوراً دون انتظار الـ Polling
+        playNotificationSound();
+        
+        // تحديث البيانات فوراً
+        backgroundFetchOnlineOrders();
+        
+        // إظهار توست سريع
+        if (data.event === "order.created") {
+           showToast("طلب جديد وصل الآن! 🛒", "success");
+        }
+      }
+    } catch (e) {
+      console.error("Error parsing WebSocket message:", e);
+    }
+  };
+
+  wsConnection.onclose = () => {
+    console.warn("WebSocket closed. Attempting to reconnect in 5s...");
+    setTimeout(initWebSocket, 5000);
+  };
+
+  wsConnection.onerror = (err) => {
+    console.error("WebSocket error:", err);
+  };
 }
 
 async function backgroundFetchOnlineOrders() {

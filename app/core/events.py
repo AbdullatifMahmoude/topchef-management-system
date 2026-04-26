@@ -1,6 +1,7 @@
+import asyncio
+import json
 from enum import Enum
 from typing import List, Dict, Any, Callable
-import json
 from fastapi import WebSocket
 from app.core.logging import logger
 
@@ -31,12 +32,20 @@ class EventBus:
         self._subscribers[event_name].append(callback)
 
     async def emit(self, event_name: str, data: Any = None):
+        """Emit internal event and run all subscribers in parallel."""
         if event_name in self._subscribers:
-            for callback in self._subscribers[event_name]:
-                try:
-                    await callback(data)
-                except Exception as e:
-                    logger.error(f"Error in event subscriber for {event_name}: {e}")
+            callbacks = self._subscribers[event_name]
+            if not callbacks:
+                return
+            
+            # Run all subscribers in parallel for maximum speed
+            tasks = [callback(data) for callback in callbacks]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Log any errors from subscribers
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Error in subscriber {callbacks[i].__name__} for {event_name}: {result}")
 
 # Global internal event bus instance
 event_bus = EventBus()
@@ -64,28 +73,29 @@ class ConnectionManager:
         if not self.active_connections:
             return
 
-        import asyncio
         payload = json.dumps(message)
         
         # Create send tasks for all connections
-        tasks = [connection.send_text(payload) for connection in self.active_connections]
+        # We use a wrapper to handle exceptions per-connection
+        async def _safe_send(connection: WebSocket):
+            try:
+                await connection.send_text(payload)
+                return True
+            except Exception as e:
+                logger.error(f"WebSocket send failed: {e}")
+                return connection
+
+        # Run all sends in parallel
+        tasks = [_safe_send(conn) for conn in self.active_connections]
+        results = await asyncio.gather(*tasks)
         
-        # Run all tasks in parallel and capture results
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Identify and clean up dead connections
-        dead_connections = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"Error broadcasting to WebSocket: {result}")
-                dead_connections.append(self.active_connections[i])
-        
+        # Clean up dead connections (those that returned the connection object instead of True)
+        dead_connections = [res for res in results if res is not True]
         for dead in dead_connections:
             self.disconnect(dead)
 
     def emit(self, message: Dict[str, Any]):
-        """Schedule a broadcast in the background without blocking."""
-        import asyncio
+        """Schedule a broadcast in the background without blocking the current request."""
         asyncio.create_task(self.broadcast(message))
 
 # Global manager instance for orders module
