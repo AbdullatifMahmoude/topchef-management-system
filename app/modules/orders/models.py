@@ -18,7 +18,7 @@ from sqlalchemy import (
 from app.core.enums import OrderStatus, OrderType, OrderSource
 from sqlalchemy.orm import relationship
 
-from app.core.database import Base
+from app.core.database import Base, DbEnum
 from app.modules.users.models import User
 
 # Atomic sequence for order numbering (PostgreSQL)
@@ -42,16 +42,16 @@ class Order(Base):
     address_id = Column(Integer, ForeignKey("customer_addresses.id"), nullable=True, index=True)
     
     order_type = Column(
-        SQLEnum(OrderType, values_callable=lambda enum_cls: [item.value for item in enum_cls]),
+        DbEnum(OrderType, name="ordertype"),
         nullable=False,
     )
     order_status = Column(
-        SQLEnum(OrderStatus, values_callable=lambda enum_cls: [item.value for item in enum_cls]),
+        DbEnum(OrderStatus, name="orderstatus"),
         nullable=False,
         default=OrderStatus.NEW,
     )
     order_source = Column(
-        SQLEnum(OrderSource, values_callable=lambda enum_cls: [item.value for item in enum_cls]),
+        DbEnum(OrderSource, name="ordersource"),
         nullable=False,
     )
     
@@ -126,6 +126,7 @@ class OrderStatusHistory(Base):
     __tablename__ = "order_status_history"
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    # This table uses a different enum (order_status) which is lowercase in DB
     status = Column(SQLEnum(OrderStatus, name="order_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), nullable=False)
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

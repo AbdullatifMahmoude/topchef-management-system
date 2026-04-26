@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, TypeDecorator, Enum as SA_Enum
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -10,6 +10,45 @@ from sqlalchemy.orm import declarative_base
 from app.core.config import settings
 
 Base = declarative_base()
+
+class DbEnum(TypeDecorator):
+    """
+    Handles conversion between lowercase Python enums and uppercase DB enums.
+    Usage: Column(DbEnum(MyEnum, name="my_enum_name"))
+    """
+    impl = SA_Enum
+    cache_ok = True
+
+    def __init__(self, enum_cls, **kwargs):
+        self.enum_cls = enum_cls
+        # Tell SQLAlchemy that the database values are uppercase
+        if 'values_callable' not in kwargs:
+            kwargs['values_callable'] = lambda cls: [e.value.upper() for e in cls]
+        # Ensure name is passed for PostgreSQL native enum support
+        super().__init__(enum_cls, **kwargs)
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, self.enum_cls):
+            return value.value.upper()
+        if isinstance(value, str):
+            return value.upper()
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        # value comes from DB as uppercase string
+        try:
+            # Since our enums are CaseInsensitiveEnum, this will work
+            return self.enum_cls(value)
+        except (ValueError, AttributeError):
+            # Fallback to direct lowercase lookup if needed
+            try:
+                return self.enum_cls(value.lower())
+            except:
+                return value
 
 
 def _is_sqlite_url(url: str) -> bool:

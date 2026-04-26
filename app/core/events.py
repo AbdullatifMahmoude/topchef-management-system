@@ -60,20 +60,33 @@ class ConnectionManager:
             logger.info(f"✗ WebSocket disconnected. Total: {len(self.active_connections)}")
 
     async def broadcast(self, message: Dict[str, Any]):
-        """Broadcast message to all connected clients."""
-        dead_connections = []
+        """Broadcast message to all connected clients in parallel."""
+        if not self.active_connections:
+            return
+
+        import asyncio
         payload = json.dumps(message)
         
-        for connection in self.active_connections:
-            try:
-                await connection.send_text(payload)
-            except Exception as e:
-                logger.error(f"Error broadcasting to WebSocket: {e}")
-                dead_connections.append(connection)
+        # Create send tasks for all connections
+        tasks = [connection.send_text(payload) for connection in self.active_connections]
         
-        # Cleanup broken connections
+        # Run all tasks in parallel and capture results
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Identify and clean up dead connections
+        dead_connections = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Error broadcasting to WebSocket: {result}")
+                dead_connections.append(self.active_connections[i])
+        
         for dead in dead_connections:
             self.disconnect(dead)
+
+    def emit(self, message: Dict[str, Any]):
+        """Schedule a broadcast in the background without blocking."""
+        import asyncio
+        asyncio.create_task(self.broadcast(message))
 
 # Global manager instance for orders module
 order_events_manager = ConnectionManager()

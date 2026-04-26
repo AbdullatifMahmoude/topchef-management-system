@@ -13,7 +13,7 @@ from sqlalchemy import (
     UniqueConstraint
 )
 from sqlalchemy.orm import relationship
-from app.core.database import Base
+from app.core.database import Base, DbEnum
 from enum import Enum
 from app.core.enums import ProductType 
 
@@ -42,11 +42,7 @@ class Product(Base):
     cat_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
     product_name = Column(String(100), nullable=False)
     product_type = Column(
-        SQLEnum(
-            ProductType,
-            name="product_type_enum",
-            values_callable=lambda enum_cls: [item.value for item in enum_cls],
-        ),
+        DbEnum(ProductType, name="product_type_enum"),
         nullable=False,
     )
     description = Column(String(500), nullable=True)

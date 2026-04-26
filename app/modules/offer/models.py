@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SA_Enum, Numeric, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.core.database import Base
+from app.core.database import Base, DbEnum
 from app.core.enums import DiscountType
 
 class Offer(Base):
@@ -11,10 +11,7 @@ class Offer(Base):
     code = Column(String(255), nullable=False, unique=True)
     display_name = Column(String(255), nullable=True)
     discount_type = Column(
-        SA_Enum(
-            DiscountType,
-            values_callable=lambda enum_cls: [item.value for item in enum_cls],
-        ),
+        DbEnum(DiscountType, name="discount_type"),
         nullable=False,
     )
     discount_value = Column(Numeric(10, 2), nullable=False)

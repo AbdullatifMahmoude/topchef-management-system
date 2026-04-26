@@ -1,4 +1,4 @@
-from app.core.database import Base
+from app.core.database import Base, DbEnum
 from app.core.enums import UserRole
 from sqlalchemy import (
     Column,
@@ -19,11 +19,7 @@ class User(Base):
     username = Column(String(200), unique=True, nullable= False)
     full_name = Column(String(200), nullable=True)
     role = Column(
-        SQLEnum(
-            UserRole,
-            name="user_role",
-            values_callable=lambda enum_cls: [item.value for item in enum_cls],
-        ),
+        DbEnum(UserRole, name="user_role"),
         nullable=False,
     )
     phone = Column(String(15),nullable=False, unique=True, index=True)

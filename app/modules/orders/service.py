@@ -186,7 +186,7 @@ class OrderService:
             order_schema = schemas.OrderResponse.model_validate(order)
             
             # 8. Real-time Notification
-            await order_events_manager.broadcast({
+            order_events_manager.emit({
                 "event": "order.created",
                 "data": order_schema.model_dump(mode='json')
             })
@@ -241,7 +241,7 @@ class OrderService:
         completed_schema = schemas.OrderResponse.model_validate(completed_order)
         
         # Real-time Notification for update
-        await order_events_manager.broadcast({
+        order_events_manager.emit({
             "event": "order.updated",
             "data": completed_schema.model_dump(mode='json')
         })
@@ -346,7 +346,7 @@ class OrderService:
         completed_schema = schemas.OrderResponse.model_validate(completed_order)
         
         # Real-time Notification
-        await order_events_manager.broadcast({
+        order_events_manager.emit({
             "event": "order.updated",
             "data": completed_schema.model_dump(mode='json')
         })
