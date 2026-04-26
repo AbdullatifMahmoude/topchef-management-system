@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator, AliasChoices
 from decimal import Decimal
 from app.core.enums import OrderType, OrderSource, OrderStatus
 from app.modules.customer.schemas import CustomerAddressResponse
@@ -23,7 +23,7 @@ class OrderBase(BaseModel):
     customer_phone: Optional[str] = None
     customer_name: Optional[str] = None
     order_type: OrderType
-    source: OrderSource = OrderSource.ONLINE
+    source: OrderSource = Field(OrderSource.ONLINE, validation_alias=AliasChoices("source", "order_source"))
     customer_notes: Optional[str] = None
     internal_notes: Optional[str] = None
 
