@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine
+from app.core.events import order_events_manager
 from app.core.redis import redis_client
 from app.cors import add_cors_middleware
 
@@ -48,10 +49,12 @@ async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await redis_client.connect()
+    await order_events_manager.start()
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    await order_events_manager.stop()
     await redis_client.disconnect()
 
 

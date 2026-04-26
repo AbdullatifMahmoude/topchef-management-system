@@ -86,7 +86,6 @@ async def websocket_orders(websocket: WebSocket):
             # Keep connection alive
             await websocket.receive_text()
     except WebSocketDisconnect:
-        order_events_manager.disconnect(websocket)
+        await order_events_manager.disconnect(websocket)
     except Exception:
-        order_events_manager.disconnect(websocket)
-
+        await order_events_manager.disconnect(websocket)

@@ -1,4 +1,5 @@
-const API_BASE = "https://topchef-system.fastapicloud.dev";
+const API_BASE = window.location.origin;
+const IS_DESKTOP_RUNTIME = ["127.0.0.1", "localhost"].includes(window.location.hostname);
 
 // ===================================================
 //  Global API Fetch Wrapper
@@ -1680,6 +1681,10 @@ function updateWebOrdersToggleUI() {
 // ===================================================
 function startOnlineOrdersPolling() {
   if (pollingIntervalId) clearInterval(pollingIntervalId);
+
+  if (IS_DESKTOP_RUNTIME) {
+    return;
+  }
   
   // الأول fetch فوري
   backgroundFetchOnlineOrders();
@@ -1692,6 +1697,22 @@ function startOnlineOrdersPolling() {
 //  WebSocket - Real-time Notifications
 // ===================================================
 let wsConnection = null;
+
+function mergeRealtimeOnlineOrder(order) {
+  const orderSource = order?.order_source || order?.source;
+  if (!order || orderSource !== "online") return false;
+
+  const existingIndex = onlineOrdersList.findIndex((item) => String(item.id) === String(order.id));
+  if (existingIndex >= 0) {
+    onlineOrdersList[existingIndex] = { ...onlineOrdersList[existingIndex], ...order };
+  } else {
+    onlineOrdersList.unshift(order);
+  }
+
+  updateOnlineStats();
+  renderOnlineOrders();
+  return true;
+}
 
 function initWebSocket() {
   if (wsConnection) {
@@ -1711,13 +1732,20 @@ function initWebSocket() {
       if (data.event === "order.created" || data.event === "order.status_changed") {
         // تشغيل الصوت فوراً دون انتظار الـ Polling
         playNotificationSound();
-        
-        // تحديث البيانات فوراً
-        backgroundFetchOnlineOrders();
+
+        const merged = mergeRealtimeOnlineOrder(data.data);
+        if (!merged && !IS_DESKTOP_RUNTIME) {
+          backgroundFetchOnlineOrders();
+        }
         
         // إظهار توست سريع
         if (data.event === "order.created") {
            showToast("طلب جديد وصل الآن! 🛒", "success");
+        }
+      } else if (data.event === "order.updated") {
+        const merged = mergeRealtimeOnlineOrder(data.data);
+        if (!merged && !IS_DESKTOP_RUNTIME) {
+          backgroundFetchOnlineOrders();
         }
       }
     } catch (e) {
