@@ -10,7 +10,13 @@ class Offer(Base):
     offer_id = Column(Integer, primary_key=True, index=True)
     code = Column(String(255), nullable=False, unique=True)
     display_name = Column(String(255), nullable=True)
-    discount_type = Column(SA_Enum(DiscountType), nullable=False)
+    discount_type = Column(
+        SA_Enum(
+            DiscountType,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
     discount_value = Column(Numeric(10, 2), nullable=False)
     min_order_amount = Column(Numeric(10, 2), nullable=True) # Changed to Numeric for consistency
     min_quantity = Column(Integer, nullable=True)

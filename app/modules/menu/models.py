@@ -42,7 +42,13 @@ class Product(Base):
     cat_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
     product_name = Column(String(100), nullable=False)
     product_type = Column(
-        SQLEnum(ProductType, name="product_type_enum"), nullable=False)
+        SQLEnum(
+            ProductType,
+            name="product_type_enum",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
     description = Column(String(500), nullable=True)
     is_available = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -71,6 +77,5 @@ class Variant(Base):
 
     
     product = relationship("Product", back_populates="variants")
-
 
 

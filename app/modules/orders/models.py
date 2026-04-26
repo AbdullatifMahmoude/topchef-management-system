@@ -41,9 +41,19 @@ class Order(Base):
     delivery_person_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     address_id = Column(Integer, ForeignKey("customer_addresses.id"), nullable=True, index=True)
     
-    order_type = Column(SQLEnum(OrderType), nullable=False)
-    order_status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.NEW)
-    order_source = Column(SQLEnum(OrderSource), nullable=False)
+    order_type = Column(
+        SQLEnum(OrderType, values_callable=lambda enum_cls: [item.value for item in enum_cls]),
+        nullable=False,
+    )
+    order_status = Column(
+        SQLEnum(OrderStatus, values_callable=lambda enum_cls: [item.value for item in enum_cls]),
+        nullable=False,
+        default=OrderStatus.NEW,
+    )
+    order_source = Column(
+        SQLEnum(OrderSource, values_callable=lambda enum_cls: [item.value for item in enum_cls]),
+        nullable=False,
+    )
     
     subtotal = Column(Numeric(10, 2), nullable=False, default=0)
     discount_amount = Column(Numeric(10, 2), nullable=False, default=0)

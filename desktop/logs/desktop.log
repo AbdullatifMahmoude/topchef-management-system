@@ -1321,3 +1321,19 @@ For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/St
 [2026-04-26 01:39:27] INFO     topchef_desktop – [LIST_ORDERS] Found: 18 orders
 [2026-04-26 01:39:39] INFO     topchef_desktop – [OFFLINE] Local WS client disconnected. Total: 0
 [2026-04-26 02:01:15] INFO     topchef_desktop – LocalRepository initialized at D:\Projects\Free lance\top chef\implementation\desktop\data\topchef_local.db
+[2026-04-26 02:31:53] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-04-26 02:31:53] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-04-26 02:31:53] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-04-26 02:31:53] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-04-26 02:31:53] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-04-26 02:31:55] INFO     topchef_desktop – Tray icon started
+[2026-04-26 02:31:55] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-04-26 02:31:55] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-04-26 02:34:22] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-04-26 02:34:22] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-04-26 02:34:22] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-04-26 02:34:22] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-04-26 02:34:22] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-04-26 02:34:24] INFO     topchef_desktop – Tray icon started
+[2026-04-26 02:34:24] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-04-26 02:34:24] INFO     topchef_desktop – Starting pywebview event loop.
