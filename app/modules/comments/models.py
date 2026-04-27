@@ -12,7 +12,7 @@ class Comment(Base):
     comment_text = Column(Text, nullable=False)
     created_at = Column(
         DateTime, 
-        default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None),
+        default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None),
         nullable=False
     )
 

@@ -62,8 +62,8 @@ class Order(Base):
     
     customer_notes = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None))
 
     items = relationship(
         "OrderItem",
@@ -128,7 +128,7 @@ class OrderStatusHistory(Base):
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
     # This table uses a different enum (order_status) which is lowercase in DB
     status = Column(SQLEnum(OrderStatus, name="order_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
-    changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=2))).replace(tzinfo=None), nullable=False)
+    changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     order = relationship("Order", backref="status_history")

@@ -11,9 +11,12 @@ class OrderRepository:
         self.db = db
 
     def get_business_date(self) -> date:
-        # Business day starts at midnight (UTC+2)
-        tz = timezone(timedelta(hours=2))
-        return datetime.now(tz).date()
+        # Business shift starts at 5am (UTC+3)
+        tz = timezone(timedelta(hours=3))
+        now = datetime.now(tz)
+        if now.hour < 5:
+            return (now - timedelta(days=1)).date()
+        return now.date()
 
 
     async def get_by_id(self, order_id: int) -> Optional[models.Order]:
@@ -40,7 +43,7 @@ class OrderRepository:
 
     async def get_by_number(self, order_number: str, order_date: Optional[date] = None) -> Optional[models.Order]:
         if order_date is None:
-            order_date = date.today()
+            order_date = self.get_business_date()
         query = select(models.Order).options(
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
@@ -200,7 +203,7 @@ class OrderRepository:
         for field, value in update_dict.items():
             setattr(order, field, value)
         
-        tz = timezone(timedelta(hours=2))
+        tz = timezone(timedelta(hours=3))
         order.updated_at = datetime.now(tz).replace(tzinfo=None)
         
         # Record history if status changed
@@ -228,7 +231,7 @@ class OrderRepository:
             setattr(order, field, value)
         
         # Update timestamp
-        tz = timezone(timedelta(hours=2))
+        tz = timezone(timedelta(hours=3))
         order.updated_at = datetime.now(tz).replace(tzinfo=None)
         
         self.db.add(order)
