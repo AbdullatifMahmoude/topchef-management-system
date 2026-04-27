@@ -27,6 +27,20 @@ class DbEnum(TypeDecorator):
         # Ensure name is passed for PostgreSQL native enum support
         super().__init__(enum_cls, **kwargs)
 
+    def result_processor(self, dialect, coltype):
+        # Bypass SA_Enum.result_processor because it raises LookupError if the DB
+        # value doesn't exactly match the uppercase values in _object_lookup.
+        # SQLite offline DB might return lowercase strings.
+        import sqlalchemy
+        string_processor = sqlalchemy.String().result_processor(dialect, coltype)
+
+        def process(value):
+            if string_processor and value is not None:
+                value = string_processor(value)
+            return self.process_result_value(value, dialect)
+
+        return process
+
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
@@ -95,6 +109,12 @@ async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         try:
             yield session
+            if session.in_transaction():
+                await session.commit()
+        except Exception:
+            if session.in_transaction():
+                await session.rollback()
+            raise
         finally:
             await session.close()
 
