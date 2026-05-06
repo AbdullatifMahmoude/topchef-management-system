@@ -1,6 +1,5 @@
-from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Tuple
 from app.modules.orders.repository import OrderRepository
 from app.modules.orders import schemas, models
 from app.modules.pricing.service import PricingService
@@ -8,8 +7,6 @@ from app.modules.settings.service import SettingsService
 from app.modules.pricing.schemas import PricingRequest, PricingItem
 from app.modules.offer.service import OfferService
 from app.core.exceptions import ValidationError, NotFoundError
-from app.modules.auth.repository import AuthRepository
-
 import contextlib
 
 from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore

@@ -6,7 +6,6 @@ Falls back to sensible defaults when keys are missing.
 """
 
 import json
-import os
 import sys
 import uuid
 from pathlib import Path
