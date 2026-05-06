@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
     REDIS_URL: str | None = None
     REMOTE_API: str = Field(default_factory=_default_remote_api)
+    TERMINAL_ID: str = Field(default=os.getenv("TERMINAL_ID", "T1"))
 
     @field_validator("RUNTIME_MODE", mode="before")
     @classmethod

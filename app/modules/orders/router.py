@@ -79,13 +79,13 @@ async def update_order_status(
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)
 
 @router.websocket("/ws")
-async def websocket_orders(websocket: WebSocket):
-    await order_events_manager.connect(websocket)
+@router.websocket("/ws/{channel}")
+async def websocket_orders(websocket: WebSocket, channel: str = "default"):
+    await order_events_manager.connect(websocket, channel)
     try:
         while True:
             # Keep connection alive
             await websocket.receive_text()
-    except WebSocketDisconnect:
-        await order_events_manager.disconnect(websocket)
     except Exception:
-        await order_events_manager.disconnect(websocket)
+        # Catching everything including WebSocketDisconnect
+        await order_events_manager.disconnect(websocket, channel)

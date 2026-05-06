@@ -16,6 +16,8 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.logging import logger
+from app.core.config import settings
+from pydantic import BaseModel
 from .service import get_latest_version, get_changelog, get_download_path
 from .schemas import VersionInfo, ChangelogResponse, DesktopSyncPayload, SyncResult, MasterDataResponse
 
@@ -144,6 +146,206 @@ async def desktop_sync(
 
     accepted_count = len(payload.orders) + len(payload.customers) + len(payload.comments)
     return SyncResult(accepted=accepted_count, rejected=0, errors=[])
+
+
+class OutboxEventPayload(BaseModel):
+    event_id: int
+    event_type: str
+    topic: str
+    payload: str
+    created_at: datetime
+
+class OutboxSyncRequest(BaseModel):
+    device_id: str
+    events: List[OutboxEventPayload]
+
+class HeartbeatRequest(BaseModel):
+    device_id: str
+    version: Optional[str] = None
+
+@router.post("/sync/events", response_model=SyncResult)
+async def desktop_sync_events(
+    payload: OutboxSyncRequest,
+    db: AsyncSession = Depends(get_db),
+    x_desktop_token: Optional[str] = Header(None),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Processes Outbox events chronologically from a desktop client.
+    """
+    if _DESKTOP_API_TOKEN and x_desktop_token != _DESKTOP_API_TOKEN and not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    logger.info(f"Received {len(payload.events)} outbox events from device {payload.device_id}")
+    accepted = 0
+    rejected = 0
+    errors = []
+    
+    import json
+    from app.modules.orders.schemas import OrderCreate, OrderUpdateFull
+    from app.modules.orders.service import OrderService
+    from app.modules.orders.models import Order, ProcessedEvent
+    
+    order_service = OrderService(db)
+    
+    for event in sorted(payload.events, key=lambda e: e.created_at):
+        try:
+            # Check if event already processed for this device
+            stmt = select(ProcessedEvent).where(
+                and_(
+                    ProcessedEvent.device_id == payload.device_id,
+                    ProcessedEvent.event_id == event.event_id
+                )
+            )
+            existing_processed = await db.execute(stmt)
+            if existing_processed.scalar_one_or_none():
+                accepted += 1
+                continue
+
+            event_data = json.loads(event.payload)
+            # Only process if we are indeed the cloud server
+            if event.event_type == "ORDER_CREATED":
+                # Ensure idempotency via key if present
+                idempotency_key = event_data.get("idempotency_key")
+                if not idempotency_key:
+                    idempotency_key = f"{payload.device_id}_{event.event_id}"
+                
+                # Check if it already exists via idempotency_key as secondary safety
+                existing = await db.execute(select(Order).where(Order.idempotency_key == idempotency_key))
+                if existing.scalar_one_or_none():
+                    db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    accepted += 1
+                    continue
+                
+                try:
+                    await order_service.create_order(OrderCreate(**event_data), current_user_id=current_user.id if current_user else None)
+                    db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    accepted += 1
+                except Exception as e:
+                    rejected += 1
+                    errors.append(f"ORDER_CREATED error: {str(e)}")
+            elif event.event_type == "ORDER_UPDATED":
+                # Handle updates via idempotency or versioning
+                # For now, we assume standard updates
+                accepted += 1
+                db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+            else:
+                rejected += 1
+                errors.append(f"Unknown event type: {event.event_type}")
+            
+            await db.flush() # Ensure we record progress within the transaction
+        except Exception as e:
+            rejected += 1
+            errors.append(str(e))
+    
+    await db.commit()
+    return SyncResult(accepted=accepted, rejected=rejected, errors=errors)
+
+
+@router.post("/sync/heartbeat")
+async def desktop_heartbeat(
+    payload: HeartbeatRequest,
+    db: AsyncSession = Depends(get_db),
+    x_desktop_token: Optional[str] = Header(None)
+):
+    """
+    Updates the last_seen timestamp for a device.
+    """
+    if _DESKTOP_API_TOKEN and x_desktop_token != _DESKTOP_API_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    from app.modules.orders.models import ActiveDevice
+    
+    stmt = select(ActiveDevice).where(ActiveDevice.device_id == payload.device_id)
+    device = (await db.execute(stmt)).scalar_one_or_none()
+    
+    if not device:
+        device = ActiveDevice(device_id=payload.device_id, version=payload.version)
+        db.add(device)
+    else:
+        device.version = payload.version
+        device.last_seen = datetime.now() # onupdate handles this but we force it
+        
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.get("/sync/status")
+async def get_sync_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns sync metrics.
+    On Desktop: shows Outbox stats.
+    On Cloud: shows ProcessedEvent stats.
+    """
+    if settings.RUNTIME_MODE == "desktop":
+        from app.modules.orders.models import OutboxEvent, OutboxEventStatus
+        from sqlalchemy import func
+        
+        # Summary counts
+        stmt = select(
+            OutboxEvent.status,
+            func.count(OutboxEvent.id)
+        ).group_by(OutboxEvent.status)
+        
+        results = await db.execute(stmt)
+        stats = {status.value if hasattr(status, 'value') else str(status): count for status, count in results.all()}
+        
+        # Latest failures for review
+        stmt_failed = select(OutboxEvent).where(OutboxEvent.status == OutboxEventStatus.FAILED).order_by(OutboxEvent.created_at.desc()).limit(20)
+        failed_items = (await db.execute(stmt_failed)).scalars().all()
+        
+        return {
+            "mode": "desktop",
+            "stats": stats,
+            "failed_events": [
+                {
+                    "id": e.id,
+                    "event_type": e.event_type,
+                    "topic": e.topic,
+                    "error": e.error_message,
+                    "retry_count": e.retry_count,
+                    "created_at": e.created_at.isoformat() if e.created_at else None
+                } for e in failed_items
+            ]
+        }
+    else:
+        from app.modules.orders.models import ProcessedEvent, ActiveDevice
+        from sqlalchemy import func
+        
+        # Get counts from ProcessedEvent
+        stmt_counts = select(
+            ProcessedEvent.device_id,
+            func.count(ProcessedEvent.id)
+        ).group_by(ProcessedEvent.device_id)
+        
+        results_counts = await db.execute(stmt_counts)
+        device_counts = {device: count for device, count in results_counts.all()}
+        
+        # Get actual active devices
+        try:
+            stmt_active = select(ActiveDevice)
+            results_active = await db.execute(stmt_active)
+            active_list = results_active.scalars().all()
+        except Exception as e:
+            logger.warning(f"Could not fetch active devices: {e}")
+            active_list = []
+        
+        device_stats = []
+        for dev in active_list:
+            device_stats.append({
+                "device_id": dev.device_id,
+                "count": device_counts.get(dev.device_id, 0),
+                "last_seen": dev.last_seen.isoformat() if dev.last_seen else None,
+                "version": dev.version
+            })
+            
+        return {
+            "mode": "cloud",
+            "device_stats": device_stats
+        }
 
 
 # ──────────────────────── Version & Download ────────────────────────

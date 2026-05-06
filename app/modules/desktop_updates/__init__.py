@@ -13,6 +13,6 @@ def register_desktop_updates(app: FastAPI) -> None:
     """Register desktop update endpoints under /api/desktop prefix."""
     app.include_router(
         desktop_updates_router,
-        prefix="/api/desktop",
+        prefix="/desktop-updates",
         tags=["Desktop Updates"],
     )

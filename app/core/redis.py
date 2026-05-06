@@ -30,7 +30,11 @@ class InMemoryCache:
         entry = self._store.get(key)
         return entry[0] if entry else None
 
-    async def set(self, key: str, value: Any, ex: Optional[int] = None) -> bool:
+    async def set(self, key: str, value: Any, ex: Optional[int] = None, nx: bool = False) -> bool:
+        if nx and key in self._store:
+            self._purge_if_expired(key)
+            if key in self._store:
+                return False
         expires_at = time.time() + ex if ex else None
         self._store[key] = (value, expires_at)
         return True
@@ -243,6 +247,43 @@ class RedisClient:
             "total_operations": 0,
             "avg_response_time": 0.0,
         }
+
+    async def acquire_leader_lock(self, lock_name: str, instance_id: str, ttl_seconds: int = 30) -> bool:
+        """
+        Attempts to acquire a distributed lock for leader election.
+        Returns True if acquired or already held by this instance.
+        """
+        if not self.redis or self.backend_name == "memory":
+            return True # Always leader in single-instance mode
+            
+        lock_key = f"leader_lock:{lock_name}"
+        try:
+            # SET lock_key instance_id NX EX ttl
+            acquired = await self.redis.set(lock_key, instance_id, nx=True, ex=ttl_seconds)
+            if acquired:
+                return True
+            
+            # Check if we already hold it (heartbeat)
+            current_holder = await self.redis.get(lock_key)
+            if current_holder == instance_id:
+                await self.redis.expire(lock_key, ttl_seconds)
+                return True
+                
+            return False
+        except Exception as e:
+            logger.error(f"Error acquiring leader lock: {e}")
+            return False
+
+    async def release_leader_lock(self, lock_name: str, instance_id: str):
+        if not self.redis:
+            return
+        lock_key = f"leader_lock:{lock_name}"
+        try:
+            current_holder = await self.redis.get(lock_key)
+            if current_holder == instance_id:
+                await self.redis.delete(lock_key)
+        except Exception as e:
+            logger.error(f"Error releasing leader lock: {e}")
 
 
 redis_client = RedisClient()

@@ -126,9 +126,53 @@ class OrderStatusHistory(Base):
     __tablename__ = "order_status_history"
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
-    # This table uses a different enum (order_status) which is lowercase in DB
-    status = Column(SQLEnum(OrderStatus, name="order_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    # This table uses the same enum as orders
+    status = Column(DbEnum(OrderStatus, name="order_status"), nullable=False)
     changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     order = relationship("Order", backref="status_history")
+
+class OutboxEventStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    FAILED = "FAILED"
+    COMPLETED = "COMPLETED"
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_events"
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(100), nullable=False) # e.g. "ORDER_CREATED"
+    topic = Column(String(100), nullable=False)      # e.g. "orders.cashier"
+    payload = Column(Text, nullable=False)           # JSON string payload
+    status = Column(
+        DbEnum(OutboxEventStatus, name="outbox_event_status"),
+        default=OutboxEventStatus.PENDING,
+        nullable=False
+    )
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
+    processed_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        Index('idx_outbox_status', 'status'),
+    )
+
+class ProcessedEvent(Base):
+    __tablename__ = "processed_events"
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String(100), nullable=False)
+    event_id = Column(Integer, nullable=False)
+    processed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint('device_id', 'event_id', name='uq_device_event'),
+    )
+
+class ActiveDevice(Base):
+    __tablename__ = "active_devices"
+    device_id = Column(String(100), primary_key=True)
+    last_seen = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None))
+    version = Column(String(20), nullable=True)
+    ip_address = Column(String(50), nullable=True)

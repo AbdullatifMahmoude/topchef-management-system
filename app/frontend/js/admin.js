@@ -33,6 +33,10 @@ function showPage(pageId) {
     btn.classList.toggle("active", btn.getAttribute("data-page") === pageId);
   });
 
+  if (pageId === "events") {
+    if (typeof refreshSyncStatus === "function") refreshSyncStatus();
+  }
+
   history.pushState({ page: pageId }, "", "#" + pageId);
 }
 
@@ -51,7 +55,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // --- زرار الأحداث ---
   const eventsBtn = document.getElementById("goeventspage");
   if (eventsBtn) {
-    eventsBtn.addEventListener("click", () => alert("صفحة الأحداث قيد التطوير"));
+    eventsBtn.addEventListener("click", () => showPage("events"));
   }
 
   // --- موديل الأصناف ---
@@ -111,7 +115,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // --- تحديد الصفحة الأولى ---
   const hash = window.location.hash.replace("#", "");
-  const validPages = ["home", "items", "categories", "delivery", "reports", "offers"];
+  const validPages = ["home", "items", "categories", "delivery", "reports", "offers", "events"];
   showPage(validPages.includes(hash) ? hash : "home");
 
   // --- Back/Forward ---

@@ -136,15 +136,17 @@ class OrderRepository:
         from app.core.database import engine
         from app.core.logging import logger
         from app.core.exceptions import ValidationError
+        from app.core.config import settings
         
         business_date = self.get_business_date()
+        prefix = settings.TERMINAL_ID
         bind = self.db.bind
         if bind is not None and bind.dialect.name == "sqlite":
             count_query = select(func.count()).select_from(models.Order).where(
                 models.Order.order_date == business_date
             )
             current_count = await self.db.scalar(count_query) or 0
-            return f"{current_count + 1:04d}"
+            return f"{prefix}-{current_count + 1:04d}"
 
         seq_name = f"order_seq_{business_date.strftime('%Y_%m_%d')}"
         
@@ -152,7 +154,7 @@ class OrderRepository:
             # Try to get next value from the daily sequence
             result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
             seq_value = result.scalar()
-            return f"{seq_value:04d}"
+            return f"{prefix}-{seq_value:04d}"
         except Exception as e:
             # If sequence doesn't exist for the day, try to create it
             if seq_name in str(e).lower() or "does not exist" in str(e).lower() or "relation" in str(e).lower():
@@ -167,7 +169,7 @@ class OrderRepository:
                     # Retry after creation
                     result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
                     seq_value = result.scalar()
-                    return f"{seq_value:04d}"
+                    return f"{prefix}-{seq_value:04d}"
                 except Exception as create_err:
                     logger.error(f"Critical: Failed to self-heal sequence: {create_err}")
             

@@ -1,4 +1,4 @@
-// print.js - ملف مسؤول عن طباعة فاتورة الكاشير بحجم 80 ملي - نسخة محسنة لتوفير الورق وسرعة الطباعة
+// print.js - ملف مسؤول عن طباعة فاتورة الكاشير بحجم 80 ملي -الطباعة
 function printReceipt(orderData) {
   const orderNumber = orderData.orderNumber || orderData.order_number || orderData.id || "---";
   let cashierName = orderData.creator_name || orderData.cashierName || "---";
@@ -60,8 +60,8 @@ function printReceipt(orderData) {
       <table class="items">
         <thead>
           <tr>
-            <th class="item-name">الصنف</th>
             <th class="qty">ك</th>
+            <th class="item-name">الصنف</th>
             <th class="price">سعر</th>
             <th class="total">إجمالي</th>
           </tr>
@@ -69,9 +69,9 @@ function printReceipt(orderData) {
         <tbody>
           ${(orderData.cart || []).map(c => `
             <tr>
+              <td class="qty">${c.qty || 0}</td>
               <td class="item-name">${c.item ? c.item.name : '---'}</td>
-              <td class="qty">${c.qty || 0} x</td>
-              <td class="price">${Number(c.item ? c.item.price : 0).toFixed(0)}</td>
+              <td class="price">${Number(c.item ? c.item.price : 0).toFixed(0)}x </td>
               <td class="total">${((c.qty || 0) * (c.item ? c.item.price : 0)).toFixed(0)}</td>
             </tr>
           `).join('')}
@@ -201,15 +201,6 @@ function printReceipt(orderData) {
   doc.write(html);
   doc.close();
   
-  // ✅ Silent Print for Desktop App
-  if (window.pywebview && window.pywebview.api && window.pywebview.api.print_silent) {
-    window.pywebview.api.print_silent(html);
-    // Remove the iframe since we don't need it for silent printing
-    setTimeout(() => { document.body.removeChild(iframe); }, 100);
-    return;
-  }
-
-  // 🌐 Normal Browser Print (with dialog)
   setTimeout(() => {
     iframe.contentWindow.focus();
     iframe.contentWindow.print();

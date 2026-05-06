@@ -12,12 +12,17 @@ import os
 import time
 import threading
 import socket
+import asyncio
 import webbrowser
-from pathlib import Path
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 
 # Singleton Lock Check
 _LOCK_PORT = 19283 # Arbitrary port for socket lock
 _lock_socket = None
+_auth_header_cache = None
+_sync_lock = None
+_order_query_cache = {}  # {query_hash: {"timestamp": float, "response": dict}}
 
 def _is_already_running() -> bool:
     global _lock_socket
@@ -61,6 +66,175 @@ def main():
     # 2. Local Server (Uvicorn)
     from app.main import app
     import uvicorn
+    import asyncio
+    import httpx
+    import time
+    from fastapi.responses import JSONResponse
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    # Global variables for caching and background sync
+    global _sync_lock
+    if _sync_lock is None:
+        _sync_lock = asyncio.Lock()
+        
+    from app.core.sync import sync_manager
+    from app.core.cloud_client import cloud_client
+
+    async def _desktop_sync_loop():
+        """Background synchronization engine running constantly with outbox draining."""
+        from desktop.config import config
+        from app.core.database import AsyncSessionLocal
+        from sqlalchemy import select
+        import json
+        import platform
+        
+        server_url = config.server_url.rstrip("/")
+        device_id = platform.node()
+        loop_counter = 0
+        
+        while True:
+            from app.core.events import outbox_sync_trigger
+            try:
+                await asyncio.wait_for(outbox_sync_trigger.wait(), timeout=60.0)
+                outbox_sync_trigger.clear()
+                # Wait briefly to let the DB transaction commit before querying Outbox
+                await asyncio.sleep(0.2)
+            except asyncio.TimeoutError:
+                pass
+            
+            loop_counter += 1
+            if not _auth_header_cache:
+                continue
+            
+            async with _sync_lock:
+                headers = {"Authorization": _auth_header_cache}
+                
+                try:
+                    from app.modules.orders.models import OutboxEvent, OutboxEventStatus
+                    
+                    async with AsyncSessionLocal() as db:
+                        # 1. Drain Outbox
+                        result = await db.execute(
+                            select(OutboxEvent)
+                            .where(OutboxEvent.status == OutboxEventStatus.PENDING)
+                            .order_by(OutboxEvent.created_at.asc())
+                            .limit(50)
+                        )
+                        pending_events = result.scalars().all()
+                        
+                        if pending_events:
+                            payload = {
+                                "device_id": device_id,
+                                "events": [
+                                    {
+                                        "event_id": e.id,
+                                        "event_type": e.event_type,
+                                        "topic": e.topic,
+                                        "payload": e.payload,
+                                        "created_at": e.created_at.isoformat()
+                                    }
+                                    for e in pending_events
+                                ]
+                            }
+                            
+                            success = await cloud_client.post("/desktop-updates/sync/events", payload)
+                            if success:
+                                # Mark completed
+                                from datetime import datetime, timezone, timedelta
+                                for e in pending_events:
+                                    e.status = OutboxEventStatus.COMPLETED
+                                    e.processed_at = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+                                await db.commit()
+                                log.info(f"📤 Outbox: Successfully synced {len(pending_events)} events to cloud.")
+                        
+                        # 2. Periodic Polling (Fallback only)
+                        if sync_manager.should_poll():
+                            log.info("📡 WebSocket inactive. Performing fallback HTTP poll for online orders...")
+                            # The UI polling already triggers the proxy in Middleware
+                            pass
+
+                        # 3. Periodic Heartbeat (Every 120s)
+                        if loop_counter % 120 == 0:
+                            heartbeat_payload = {
+                                "device_id": settings.TERMINAL_ID,
+                                "version": settings.VERSION,
+                                "os": platform.system()
+                            }
+                            await cloud_client.post("/desktop-updates/sync/heartbeat", heartbeat_payload)
+
+                        # 4. Global Counter Reset
+                        if loop_counter >= 1200: # Reset every ~20 mins
+                            loop_counter = 0
+                                
+                except Exception as e:
+                    log.error(f"Desktop background sync loop failed: {e}")
+
+    # Replace the existing lifespan with a wrapper that includes the desktop sync loop
+    original_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def desktop_lifespan(app: FastAPI):
+        # 1. Start the desktop sync loop in the background
+        sync_task = asyncio.create_task(_desktop_sync_loop())
+        
+        # 2. Run the original app lifespan
+        async with original_lifespan(app):
+            yield
+            
+        # 3. Cleanup
+        sync_task.cancel()
+        try:
+            await sync_task
+        except asyncio.CancelledError:
+            pass
+
+    app.router.lifespan_context = desktop_lifespan
+
+    class DesktopSyncMiddleware(BaseHTTPMiddleware):
+        """
+        Intercepts and suppresses redundant polling when WebSocket is active.
+        Ensures Cloud is the source of truth for orders.
+        """
+        async def dispatch(self, request, call_next):
+            path = request.url.path
+            method = request.method
+            
+            # 1. Update Auth Cache
+            auth_header = request.headers.get("authorization")
+            if auth_header:
+                global _auth_header_cache
+                _auth_header_cache = auth_header
+                cloud_client.update_token(auth_header)
+
+            # 2. Poll Suppression & Redundancy Check
+            if method == "GET" and sync_manager.suppress_poll(path):
+                # Return cached response if available to avoid any traffic
+                query_hash = f"cache_{path}_{request.query_params}"
+                cache_entry = _order_query_cache.get(query_hash)
+                
+                if cache_entry and (time.time() - cache_entry["timestamp"]) < 10.0:
+                    return JSONResponse(content=cache_entry["response"])
+                
+                # If it's a sync status request, return a lightweight "WS_ACTIVE" status
+                if "/sync/status" in path:
+                    status_data = {"status": "ok", "mode": "websocket", "syncing": True}
+                    _order_query_cache[query_hash] = {"timestamp": time.time(), "response": status_data}
+                    return JSONResponse(content=status_data)
+
+            # 3. Cloud Proxy for Orders (Strict Source of Truth)
+            if path in ("/orders/", "/orders") and method == "GET":
+                source = request.query_params.get("source")
+                if source in ("online", "OrderSource.ONLINE"):
+                    params = dict(request.query_params)
+                    json_data = await cloud_client.get("/orders/", params=params)
+                    if json_data:
+                        query_hash = f"cache_{path}_{request.query_params}"
+                        _order_query_cache[query_hash] = {"timestamp": time.time(), "response": json_data}
+                        return JSONResponse(content=json_data)
+
+            return await call_next(request)
+
+    app.add_middleware(DesktopSyncMiddleware)
     
     def _run_server():
         uvicorn.run(app, host="127.0.0.1", port=config.local_port, log_level="info")

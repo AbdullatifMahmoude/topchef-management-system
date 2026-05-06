@@ -495,6 +495,67 @@
         </div>
       </div>
 
+      <!-- ===== صفحة الأحداث والمزامنة ===== -->
+      <div class="page-content" id="page-events" style="display: none">
+        <div class="title_btn">
+          <div class="title">
+            <h1>حالة المزامنة والربط</h1>
+            <h2>مراقبة تدفق البيانات بين الجهاز والسحابة</h2>
+          </div>
+          <button class="add_btn" style="background: var(--color-primary); color: #000;" onclick="refreshSyncStatus()">تحديث الحالة</button>
+        </div>
+        
+        <div class="container1" id="sync_stats_container" style="margin-bottom: 20px;">
+           <!-- سيتم تحميل الكروت هنا -->
+        </div>
+
+        <div id="failed_events_section" style="display:none">
+          <div class="table_structure_unified">
+            <div style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 style="color: #e74c3c; margin: 0; font-size: 16px;">أحداث فشلت مزامنتها (DLQ)</h3>
+                <p style="font-size: 11px; opacity: 0.6; margin: 5px 0 0 0;">هذه الأحداث توقفت بعد محاولات فاشلة متكررة. تتطلب مراجعة إدارية.</p>
+              </div>
+            </div>
+            <div class="table_scroll_unified">
+              <table class="orders_table" id="failed_events_table">
+                <thead>
+                  <tr>
+                    <th>المعرف</th>
+                    <th>النوع</th>
+                    <th>الموضوع</th>
+                    <th>الخطأ</th>
+                    <th>المحاولات</th>
+                    <th>التوقيت</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <div id="cloud_device_stats" style="display:none">
+          <div class="table_structure_unified">
+             <div style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+              <h3 style="margin: 0; font-size: 16px;">إحصائيات الأجهزة المتصلة (السحابة)</h3>
+            </div>
+            <div class="table_scroll_unified">
+              <table class="orders_table" id="device_stats_table">
+                <thead>
+                  <tr>
+                    <th>معرف الجهاز</th>
+                    <th>إجمالي الأحداث المستلمة</th>
+                    <th>الحالة</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== صفحة العروض ===== -->
       <div class="page-content" id="page-offers" style="display: none">
         <div class="title_btn_offers">
@@ -749,7 +810,7 @@
       <script src="js/offer.js"></script>
       
       <script src="js/chart.js"></script>
-      
+      <script src="js/sync_monitoring.js"></script>
       <script src="js/admin.js"></script>
       <script>
         // ===== عرض اسم المستخدم =====

@@ -48,6 +48,8 @@ let onlineOrdersSearchTerm = '';
 let lastNewOrdersCount = 0;
 let pollingIntervalId = null;
 let isNotificationSoundEnabled = true;
+let socket = null;
+let lastSocketOrderUpdate = Date.now();
 
 // نوع الطلب: null | 'dine_in' | 'takeaway' | 'delivery'
 let orderType = null;
@@ -93,8 +95,12 @@ async function init() {
     renderTabs();
     renderItems();
     initWebOrdersToggle();
+    
+    // Connect for real-time updates
+    setupWebSocket();
+    
+    // Polling as a robust fallback
     startOnlineOrdersPolling();
-    initWebSocket(); // Added real-time WebSocket for instant sounds
   } catch (err) {
     console.error("API error:", err);
     document.getElementById("items_grid").innerHTML =
@@ -1679,88 +1685,130 @@ function updateWebOrdersToggleUI() {
 // ===================================================
 //  Online Orders Polling & Notifications
 // ===================================================
-function startOnlineOrdersPolling() {
-  if (pollingIntervalId) clearInterval(pollingIntervalId);
-
-  if (IS_DESKTOP_RUNTIME) {
-    return;
-  }
-  
-  // الأول fetch فوري
-  backgroundFetchOnlineOrders();
-  
-  // تكرار كل 20 ثانية كاحتياط (الـ WebSocket سيتولى اللحظي)
-  pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 20000);
-}
-
 // ===================================================
-//  WebSocket - Real-time Notifications
+//  WebSocket - Real-time updates
 // ===================================================
-let wsConnection = null;
-
-function mergeRealtimeOnlineOrder(order) {
-  const orderSource = order?.order_source || order?.source;
-  if (!order || orderSource !== "online") return false;
-
-  const existingIndex = onlineOrdersList.findIndex((item) => String(item.id) === String(order.id));
-  if (existingIndex >= 0) {
-    onlineOrdersList[existingIndex] = { ...onlineOrdersList[existingIndex], ...order };
-  } else {
-    onlineOrdersList.unshift(order);
+function setupWebSocket() {
+  if (socket) {
+    socket.close();
   }
 
-  updateOnlineStats();
-  renderOnlineOrders();
-  return true;
-}
-
-function initWebSocket() {
-  if (wsConnection) {
-    try { wsConnection.close(); } catch(e) {}
-  }
-
-  const wsUrl = API_BASE.replace("http", "ws") + "/orders/ws";
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/orders/ws/cashier`;
+  
   console.log("Connecting to WebSocket:", wsUrl);
-  
-  wsConnection = new WebSocket(wsUrl);
+  socket = new WebSocket(wsUrl);
 
-  wsConnection.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      console.log("WebSocket event received:", data.event);
-      
-      if (data.event === "order.created" || data.event === "order.status_changed") {
-        // تشغيل الصوت فوراً دون انتظار الـ Polling
-        playNotificationSound();
-
-        const merged = mergeRealtimeOnlineOrder(data.data);
-        if (!merged && !IS_DESKTOP_RUNTIME) {
-          backgroundFetchOnlineOrders();
-        }
-        
-        // إظهار توست سريع
-        if (data.event === "order.created") {
-           showToast("طلب جديد وصل الآن! 🛒", "success");
-        }
-      } else if (data.event === "order.updated") {
-        const merged = mergeRealtimeOnlineOrder(data.data);
-        if (!merged && !IS_DESKTOP_RUNTIME) {
-          backgroundFetchOnlineOrders();
-        }
-      }
-    } catch (e) {
-      console.error("Error parsing WebSocket message:", e);
+  socket.onopen = () => {
+    console.log("WebSocket connected successfully");
+    // Reduce polling frequency when socket is active to save resources
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 60000); // 1 minute safety check
     }
   };
 
-  wsConnection.onclose = () => {
-    console.warn("WebSocket closed. Attempting to reconnect in 5s...");
-    setTimeout(initWebSocket, 5000);
+  socket.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      handleSocketEvent(payload);
+    } catch (err) {
+      console.error("Error parsing WebSocket message:", err);
+    }
   };
 
-  wsConnection.onerror = (err) => {
+  socket.onclose = (e) => {
+    console.warn("WebSocket disconnected. Code:", e.code, "Reason:", e.reason);
+    // Restore fast polling while socket is down
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 30000); // Increased to 30s
+    }
+    // Exponential backoff for reconnection
+    setTimeout(setupWebSocket, 5000);
+  };
+
+  socket.onerror = (err) => {
     console.error("WebSocket error:", err);
   };
+}
+
+function handleSocketEvent(payload) {
+  const { event, data } = payload;
+  if (!data || !data.id) return;
+
+  const eventName = typeof event === 'string' ? event : (payload.type || '');
+  console.log("Real-time event:", eventName, data.id);
+
+  // 1. Update internal state
+  let hasChanged = false;
+
+  // Handle Order Created
+  if (eventName === "order.created") {
+    const isOnline = data.source === "online" || data.source === "OrderSource.ONLINE";
+    if (isOnline) {
+      if (!onlineOrdersList.find(o => o.id === data.id)) {
+        onlineOrdersList.unshift(data);
+        hasChanged = true;
+        playNotificationSound();
+        showToast("طلب أونلاين جديد! #" + (data.order_number || data.id), "success");
+      }
+    }
+    // Also track in all orders if loaded
+    if (typeof allOrdersList !== 'undefined' && !allOrdersList.find(o => o.id === data.id)) {
+        allOrdersList.unshift(data);
+        hasChanged = true;
+    }
+  } 
+  // Handle Order Updated / Status Changed
+  else if (eventName === "order.updated" || eventName === "order.status_changed") {
+    const oIdx = onlineOrdersList.findIndex(o => o.id === data.id);
+    if (oIdx !== -1) {
+      onlineOrdersList[oIdx] = { ...onlineOrdersList[oIdx], ...data };
+      hasChanged = true;
+    }
+    
+    if (typeof allOrdersList !== 'undefined') {
+      const aIdx = allOrdersList.findIndex(o => o.id === data.id);
+      if (aIdx !== -1) {
+        allOrdersList[aIdx] = { ...allOrdersList[aIdx], ...data };
+        hasChanged = true;
+      }
+    }
+    
+    if (hasChanged) {
+        showToast(`تحديث طلب #${data.order_number || data.id}: ${data.order_status}`, "success");
+    }
+  }
+
+  // 2. Trigger UI Refresh if we are on a relevant tab
+  if (hasChanged) {
+    const onlineLayout = document.getElementById("online_orders_layout");
+    const allLayout = document.getElementById("all_orders_layout");
+
+    if (onlineLayout && onlineLayout.style.display !== "none") {
+      updateOnlineStats();
+      renderOnlineOrders();
+    }
+    if (allLayout && allLayout.style.display !== "none") {
+      renderAllOrders();
+    }
+    
+    // Update count badge
+    const newOnlineCount = onlineOrdersList.filter(o => o.order_status === 'new').length;
+    updateOnlineTabBadge(newOnlineCount);
+    lastNewOrdersCount = newOnlineCount;
+  }
+}
+
+function startOnlineOrdersPolling() {
+  if (pollingIntervalId) clearInterval(pollingIntervalId);
+  
+  backgroundFetchOnlineOrders();
+  
+  // تكرار كل 30 ثانية كاحتياطي، أو 60 ثانية لو السوكيت شغال
+  const interval = (socket && socket.readyState === WebSocket.OPEN) ? 60000 : 30000;
+  pollingIntervalId = setInterval(backgroundFetchOnlineOrders, interval);
 }
 
 async function backgroundFetchOnlineOrders() {
@@ -2623,7 +2671,14 @@ let editModalState = {
   originalOrder: null,
   cart: [],
   activeCatId: null,
-  sourceList: ''
+  sourceList: '',
+  orderType: null,
+  selectedDelivery: null,
+  selectedDeliveryFee: null,
+  selectedDineInFee: null,
+  customerName: '',
+  customerPhone: '',
+  customerAddress: ''
 };
 
 function openEditOrderModal(orderId, sourceList) {
@@ -2642,6 +2697,29 @@ function openEditOrderModal(orderId, sourceList) {
   editModalState.originalOrder = order;
   editModalState.activeCatId = categories.length > 0 ? categories[0].id : null;
   editModalState.sourceList = sourceList;
+  
+  // Initialize order type and fees for the "mini cashier"
+  editModalState.orderType = (order.order_type === 'hall') ? 'dine_in' : order.order_type;
+  editModalState.selectedDelivery = order.delivery_person_id ? { id: order.delivery_person_id, name: order.delivery_person_name } : null;
+  
+  if (editModalState.orderType === 'delivery') {
+    editModalState.selectedDeliveryFee = parseFloat(order.delivery_fee) || 0;
+    editModalState.selectedDineInFee = null;
+  } else if (editModalState.orderType === 'dine_in') {
+    editModalState.selectedDineInFee = parseFloat(order.delivery_fee) || 0;
+    editModalState.selectedDeliveryFee = null;
+    editModalState.selectedDelivery = null;
+  } else {
+    editModalState.selectedDeliveryFee = null;
+    editModalState.selectedDineInFee = null;
+    editModalState.selectedDelivery = null;
+  }
+
+  // Initialize customer info for editing
+  editModalState.customerName = order.customer_name || '';
+  editModalState.customerPhone = order.customer_phone || '';
+  editModalState.customerAddress = (typeof order.address === 'object' && order.address !== null) ? order.address.address : (order.customer_address || order.address || '');
+
   editModalState.cart = (order.items || []).map(item => {
     let prod = products.find(p => p.id === item.product_id);
     let name = prod ? prod.product_name : `صنف #${item.product_id}`;
@@ -2674,12 +2752,12 @@ function renderEditOrderModal() {
   const overlay = document.createElement("div");
   overlay.id = "edit_order_modal_overlay";
   overlay.style.cssText = `
-    position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px);
+    position:fixed; inset:0; background:rgba(0,0,0,0.4);
     display:flex; align-items:center; justify-content:center; z-index:11000; padding: 20px;
   `;
 
   overlay.innerHTML = `
-    <div style="background:var(--color-bg); width:98vw; max-width:1300px; height:95vh; border-radius:16px; border:1px solid var(--color-primary); display:flex; flex-direction:column; overflow:hidden; position:relative; direction:rtl; box-shadow:0 20px 80px rgba(0,0,0,0.8);">
+    <div style="background:var(--color-bg); width:90vw; max-width:1150px; height:85vh; border-radius:16px; border:1px solid var(--color-primary); display:flex; flex-direction:column; overflow:hidden; position:relative; direction:rtl; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
       
       <!-- Modal Navigation Header (Mirroring Navbar theme) -->
       <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 32px; background:linear-gradient(180deg, #c79a4a 0%, #7a4f1a 100%); direction:rtl;">
@@ -2700,14 +2778,52 @@ function renderEditOrderModal() {
         </div>
 
         <!-- Left Section: Cart (Total Container) -->
-        <div class="total_container" id="edit_modal_cart_container" style="height:100%;">
-          <div class="total_header">
+        <div class="total_container" id="edit_modal_cart_container" style="height:100%; display:flex; flex-direction:column; overflow:hidden;">
+          <div class="total_header" style="flex-shrink:0;">
             <h1>ملخص التعديل</h1>
           </div>
           
-          <div class="total_cards" id="edit_modal_cart_list"></div>
+          <div style="flex:1; overflow-y:auto; padding:0 0 10px 0;">
+            <!-- Mini Customer Info Card (Matching Cashier Style) -->
+            <div id="edit_modal_customer_form" style="padding: 0 16px; margin-bottom: 12px; display: ${editModalState.orderType ? 'block' : 'none'};">
+               <div class="delivery_customer_card" style="margin-top: 0; box-shadow: none; border: 1px solid rgba(201,168,76,0.2);">
+                  <div class="dcf_title" id="edit_modal_dcf_title">
+                     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                     </svg>
+                     ${editModalState.orderType === 'delivery' ? 'تعديل بيانات عميل الديليفري' : 'تعديل بيانات العميل (اختياري)'}
+                  </div>
+                  <div class="dcf_field">
+                     <span class="dcf_label">📞 رقم التليفون</span>
+                     <input type="tel" class="dcf_input" placeholder="01xxxxxxxxx" maxlength="11" 
+                        value="${editModalState.customerPhone}" 
+                        oninput="editModalState.customerPhone = this.value" />
+                  </div>
+                  <div class="dcf_field">
+                     <span class="dcf_label">👤 الاسم</span>
+                     <input type="text" class="dcf_input" placeholder="اسم العميل" 
+                        value="${editModalState.customerName}" 
+                        oninput="editModalState.customerName = this.value" />
+                  </div>
+                  <div class="dcf_field">
+                     <span class="dcf_label">📍 العنوان</span>
+                     <input type="text" class="dcf_input" placeholder="العنوان بالتفصيل" 
+                        value="${editModalState.customerAddress}" 
+                        oninput="editModalState.customerAddress = this.value" />
+                  </div>
+               </div>
+            </div>
+            
+            <div class="total_cards" id="edit_modal_cart_list" style="padding:0 16px;"></div>
+          </div>
 
-          <div class="total_footer">
+          <div class="total_footer" style="flex-shrink:0;">
+            <!-- Badge نوع الطلب -->
+            <div id="edit_modal_order_type_badge" class="order_type_badge" style="display: none; margin-bottom: 8px;"></div>
+
+            <!-- زراير نوع الطلب -->
+            <div id="edit_modal_order_type_btns" class="order_type_btns" style="margin-bottom: 8px;"></div>
+
             <div class="total_sum">
               <h1>إجمالي الأصناف الكاشير:</h1>
               <h2 id="edit_modal_items_total">0 ج.م</h2>
@@ -2720,6 +2836,9 @@ function renderEditOrderModal() {
         </div>
 
       </div>
+      
+      <!-- Sub-modal container for delivery/dine-in selection -->
+      <div id="edit_modal_sub_container" class="delivery_modal_container" style="display: none; z-index: 12000; position: absolute; inset: 0;"></div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -2727,6 +2846,246 @@ function renderEditOrderModal() {
   renderEditModalCategories();
   renderEditModalItems();
   renderEditModalCart();
+  renderEditModalOrderTypeButtons();
+  renderEditModalOrderTypeBadge();
+}
+
+// --------------------------- Edit Modal Mini Cashier Logic ---------------------------
+
+function renderEditModalOrderTypeButtons() {
+  const container = document.getElementById("edit_modal_order_type_btns");
+  if (!container) return;
+  container.innerHTML = "";
+
+  ORDER_TYPES.forEach(t => {
+    const btn = document.createElement("button");
+    const isActive = editModalState.orderType === t.key;
+    btn.className = "order_type_btn" + (isActive ? " active" : "");
+    btn.textContent = t.label;
+    btn.onclick = () => selectOrderTypeInEditModal(t.key);
+    container.appendChild(btn);
+  });
+}
+
+function renderEditModalOrderTypeBadge() {
+  const badge = document.getElementById("edit_modal_order_type_badge");
+  if (!badge) return;
+
+  if (!editModalState.orderType) {
+    badge.style.display = "none";
+    badge.innerHTML = "";
+    return;
+  }
+
+  badge.style.display = "flex";
+
+  if (editModalState.orderType === "delivery" && editModalState.selectedDelivery && editModalState.selectedDeliveryFee !== null) {
+    badge.innerHTML = `
+      <span class="badge_icon"></span>
+      <span class="badge_name">${editModalState.selectedDelivery.name}</span>
+      <span class="badge_fee">رسوم توصيل: ${editModalState.selectedDeliveryFee} ج.م</span>
+      <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
+    `;
+  } else if (editModalState.orderType === "takeaway") {
+    badge.innerHTML = `
+      <span class="badge_icon"></span>
+      <span class="badge_name">تيك اواي</span>
+      <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
+    `;
+  } else if (editModalState.orderType === "dine_in") {
+    badge.innerHTML = `
+      <span class="badge_icon"></span>
+      <span class="badge_name">صالة</span>
+      ${editModalState.selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${editModalState.selectedDineInFee} ج.م</span>` : ''}
+      <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
+    `;
+  } else if (editModalState.orderType === "delivery") {
+    badge.innerHTML = `
+      <span class="badge_icon"></span>
+      <span class="badge_name" style="color:var(--color-subtext);font-size:12px">لم يتم اختيار الدليفري بعد</span>
+      <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
+    `;
+  }
+}
+
+function clearOrderTypeInEditModal() {
+  editModalState.selectedDelivery = null;
+  editModalState.selectedDeliveryFee = null;
+  editModalState.selectedDineInFee = null;
+  editModalState.orderType = null;
+  
+  const customerForm = document.getElementById("edit_modal_customer_form");
+  if (customerForm) customerForm.style.display = "none";
+
+  renderEditModalOrderTypeBadge();
+  renderEditModalOrderTypeButtons();
+  renderEditModalCart();
+}
+
+function selectOrderTypeInEditModal(type) {
+  const customerForm = document.getElementById("edit_modal_customer_form");
+  if (customerForm) {
+    customerForm.style.display = "block";
+    const title = document.getElementById("edit_modal_dcf_title");
+    if (title) {
+       title.innerHTML = `
+         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+         </svg>
+         ${type === 'delivery' ? 'تعديل بيانات عميل الديليفري' : 'تعديل بيانات العميل (اختياري)'}
+       `;
+    }
+  }
+
+  if (type === "delivery") {
+    showDeliveryModalInEditModal();
+  } else if (type === "dine_in") {
+    showDineInFeeSelectorInEditModal();
+  } else {
+    editModalState.orderType = type;
+    editModalState.selectedDelivery = null;
+    editModalState.selectedDeliveryFee = null;
+    editModalState.selectedDineInFee = null;
+    renderEditModalOrderTypeBadge();
+    renderEditModalOrderTypeButtons();
+    renderEditModalCart();
+  }
+}
+
+async function showDeliveryModalInEditModal() {
+  const container = document.getElementById("edit_modal_sub_container");
+  if (!container) return;
+
+  container.style.display = "flex";
+  container.innerHTML = `
+    <div class="delivery_modal">
+      <div class="delivery_modal_header">
+        <h2>اختر الدليفري (تعديل)</h2>
+        <button class="delivery_modal_close" onclick="closeEditModalSub()">✕</button>
+      </div>
+      <div class="delivery_modal_body" id="edit_modal_delivery_names_list">
+        <p style="color:var(--color-subtext);text-align:center;font-size:13px">جاري التحميل...</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    let riders = _deliveryRidersCache;
+    if (!riders) {
+      const res = await apiFetch("/user/users/delivery", { suppress401: true });
+      if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
+      const users = await res.json();
+      riders = Array.isArray(users) ? users.filter(u => u.role === "delivery" && u.is_active) : [];
+      _deliveryRidersCache = riders;
+    }
+    renderDeliveryNamesInEditModal(riders);
+  } catch (err) {
+    console.error("خطأ في جلب الدليفري:", err);
+    const list = document.getElementById("edit_modal_delivery_names_list");
+    if (list) list.innerHTML = `<p style="color:#e40411;text-align:center;font-size:12px;padding:10px">فشل تحميل المناديب</p>`;
+  }
+}
+
+function renderDeliveryNamesInEditModal(riders) {
+  const list = document.getElementById("edit_modal_delivery_names_list");
+  if (!list) return;
+
+  if (!riders || riders.length === 0) {
+    list.innerHTML = `<p style="color:var(--color-subtext);text-align:center;font-size:13px">لا يوجد دليفري متاح</p>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  riders.forEach(r => {
+    const btn = document.createElement("button");
+    btn.className = "delivery_name_btn";
+    btn.textContent = r.full_name || r.username;
+    btn.onclick = () => showDeliveryFeeSelectorInEditModal({ id: r.id, name: r.full_name || r.username });
+    list.appendChild(btn);
+  });
+}
+
+function showDeliveryFeeSelectorInEditModal(rider) {
+  const list = document.getElementById("edit_modal_delivery_names_list");
+  if (!list) return;
+
+  const fees = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+
+  list.innerHTML = `
+    <button onclick="showDeliveryModalInEditModal()" style="
+      background:transparent;border:none;color:var(--color-subtext);
+      font-family:Cairo,sans-serif;font-size:13px;cursor:pointer;
+      display:flex;align-items:center;gap:4px;margin-bottom:8px;padding:0;
+    ">← رجوع</button>
+    <p style="color:var(--color-primary);font-size:14px;font-weight:700;text-align:center;margin-bottom:12px">${rider.name}</p>
+    <p style="color:var(--color-subtext);font-size:12px;text-align:center;margin-bottom:10px">اختر رسوم التوصيل</p>
+  `;
+
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:8px;";
+
+  fees.forEach(fee => {
+    const btn = document.createElement("button");
+    btn.className = "delivery_fee_btn";
+    btn.textContent = `${fee} ج.م`;
+    btn.onclick = () => {
+      editModalState.selectedDelivery = { id: rider.id, name: rider.name };
+      editModalState.selectedDeliveryFee = fee;
+      editModalState.orderType = "delivery";
+      closeEditModalSub();
+      renderEditModalOrderTypeBadge();
+      renderEditModalOrderTypeButtons();
+      renderEditModalCart();
+    };
+    grid.appendChild(btn);
+  });
+
+  list.appendChild(grid);
+}
+
+function showDineInFeeSelectorInEditModal() {
+  const container = document.getElementById("edit_modal_sub_container");
+  if (!container) return;
+
+  const fees = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+
+  container.style.display = "flex";
+  container.innerHTML = `
+    <div class="delivery_modal">
+      <div class="delivery_modal_header">
+        <h2>رسوم الصالة (تعديل)</h2>
+        <button class="delivery_modal_close" onclick="closeEditModalSub()">✕</button>
+      </div>
+      <div class="delivery_modal_body">
+        <p style="color:var(--color-subtext);font-size:13px;text-align:center;margin-bottom:16px">اختر قيمة رسوم الخدمة</p>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+          ${fees.map(fee => `
+            <button class="delivery_fee_btn" onclick="selectDineInFeeInEditModal(${fee})">${fee} ج.م</button>
+          `).join('')}
+          <button class="delivery_fee_btn" onclick="selectDineInFeeInEditModal(0)" style="background:rgba(255,255,255,0.05);color:var(--color-subtext)">بدون</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function selectDineInFeeInEditModal(fee) {
+  editModalState.selectedDineInFee = fee;
+  editModalState.selectedDeliveryFee = null;
+  editModalState.selectedDelivery = null;
+  editModalState.orderType = "dine_in";
+  closeEditModalSub();
+  renderEditModalOrderTypeBadge();
+  renderEditModalOrderTypeButtons();
+  renderEditModalCart();
+}
+
+function closeEditModalSub() {
+  const container = document.getElementById("edit_modal_sub_container");
+  if (container) {
+    container.style.display = "none";
+    container.innerHTML = "";
+  }
 }
 
 // --------------------------- Edit Modal Cat & Items ---------------------------
@@ -2853,7 +3212,23 @@ function renderEditModalCart() {
     list.appendChild(card);
   });
 
-  totalEl.textContent = totalNum.toFixed(2) + " ج.م";
+  updateEditModalGrandTotal();
+}
+
+function updateEditModalGrandTotal() {
+  const totalEl = document.getElementById("edit_modal_items_total");
+  if (!totalEl) return;
+
+  const itemsTotal = editModalState.cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
+  let fee = 0;
+  if (editModalState.orderType === "delivery" && editModalState.selectedDeliveryFee !== null) {
+    fee = editModalState.selectedDeliveryFee;
+  } else if (editModalState.orderType === "dine_in" && editModalState.selectedDineInFee !== null) {
+    fee = editModalState.selectedDineInFee;
+  }
+
+  const grandTotal = itemsTotal + fee;
+  totalEl.textContent = grandTotal.toFixed(2) + " ج.م";
 }
 
 function removeFromEditModalCart(idx) {
@@ -2914,53 +3289,100 @@ async function updateEditOrderConfirm() {
   const confirmed = await showCustomActionConfirm("هل أنت متأكد من حفظ التعديلات على هذا الطلب؟");
   if (!confirmed) return;
 
-  // إغلاق المودال فوراً لتوفير استجابة سريعة للواجهة
-  const modal = document.getElementById("edit_order_modal_overlay");
-  if (modal) modal.remove();
-
   showGlobalLoader(true);
 
   try {
     const orig = editModalState.originalOrder;
 
-    // تجهيز الأصناف الجديدة
-    const newItems = editModalState.cart.map(c => ({
-      product_id: c.item.originalProductId || c.item.id,
-      quantity: c.qty,
-      unit_price: c.item.price
-    }));
+    // تجهيز الأصناف الجديدة (نفس منطق الكاشير الأساسي للتعامل مع الـ variants)
+    const newItems = editModalState.cart.map(c => {
+      let prodId = c.item.originalProductId || c.item.id;
+      if (typeof prodId === 'string' && prodId.includes('_')) {
+        prodId = parseInt(prodId.split('_')[0], 10);
+      } else {
+        prodId = parseInt(prodId, 10);
+      }
+      return {
+        product_id: prodId,
+        quantity: c.qty,
+        unit_price: c.item.price
+      };
+    });
+
+    const mappedOrderType = editModalState.orderType === "dine_in" ? "hall" : editModalState.orderType;
 
     // تجهيز حمولة البيانات (Payload) للـ PATCH
     const payload = {
       customer_id: orig.customer_id,
-      customer_name: orig.customer_name,
-      customer_phone: orig.customer_phone,
-      order_type: orig.order_type,
+      customer_name: editModalState.customerName,
+      customer_phone: editModalState.customerPhone,
+      order_type: mappedOrderType,
       source: orig.source,
       customer_notes: orig.customer_notes,
       internal_notes: orig.internal_notes,
       items: newItems,
       address_id: orig.address_id,
-      customer_address: (typeof orig.address === 'object' && orig.address !== null) ? orig.address.address : (orig.customer_address || orig.address || null),
-      delivery_person_id: orig.delivery_person_id,
-      delivery_fee: orig.delivery_fee,
+      customer_address: editModalState.customerAddress,
+      delivery_person_id: editModalState.selectedDelivery ? editModalState.selectedDelivery.id : null,
+      delivery_fee: (editModalState.orderType === "delivery" ? editModalState.selectedDeliveryFee : (editModalState.orderType === "dine_in" ? editModalState.selectedDineInFee : 0)),
       offer_code: orig.offer_code || null
     };
 
-    // إرسال طلب التحديث (PATCH) على نفس الطلب
+    // إرسال طلب التحديث (PATCH)
     const res = await apiFetch(`/orders/${orig.id}`, {
       method: "PATCH",
       body: JSON.stringify(payload)
     });
 
-    if (!res.ok) throw new Error("فشل تحديث الطلب في الباك إند");
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      console.error("API Error during update:", errData);
+      throw new Error("فشل تحديث الطلب في الباك إند");
+    }
 
     const updatedOrder = await res.json();
     showToast("تم تعديل الطلب بنجاح ✓", "success");
 
-    // طباعة الفاتورة المعدلة فوراً
+    // إغلاق المودال بعد النجاح
+    const modal = document.getElementById("edit_order_modal_overlay");
+    if (modal) modal.remove();
+
+    // Prepare fully populated local order object
+    const itemsTotal = newItems.reduce((sum, item) => sum + (parseFloat(item.unit_price) * parseInt(item.quantity)), 0);
+    const deliveryFee = (editModalState.orderType === "delivery" ? editModalState.selectedDeliveryFee : (editModalState.orderType === "dine_in" ? editModalState.selectedDineInFee : 0)) || 0;
+    
+    const updatedLocalOrder = {
+      ...orig,
+      ...updatedOrder,
+      items: newItems,
+      order_type: mappedOrderType,
+      delivery_fee: deliveryFee,
+      customer_name: editModalState.customerName,
+      customer_phone: editModalState.customerPhone,
+      customer_address: editModalState.customerAddress,
+      delivery_person_id: editModalState.selectedDelivery ? editModalState.selectedDelivery.id : null,
+      delivery_person_name: editModalState.selectedDelivery ? editModalState.selectedDelivery.name : null,
+      total_amount: itemsTotal + deliveryFee
+    };
+
+    // تحديث القائمة المحلية فوراً لضمان ظهور التعديلات في الكارد (Card)
+    if (editModalState.sourceList === 'online') {
+      const idx = onlineOrdersList.findIndex(o => o.id === orig.id);
+      if (idx !== -1) {
+        onlineOrdersList[idx] = updatedLocalOrder;
+        renderOnlineOrders();
+      }
+    } else {
+      const idx = allOrdersList.findIndex(o => o.id === orig.id);
+      if (idx !== -1) {
+        allOrdersList[idx] = updatedLocalOrder;
+        renderAllOrders();
+      }
+    }
+
+    // طباعة الفاتورة المعدلة
     if (typeof printReceipt === "function") {
-      const cartMapped = (updatedOrder.items || []).map(item => {
+      const cartMapped = (updatedLocalOrder.items || []).map(item => {
         let prod = products.find(p => p.id === item.product_id);
         let variantName = "";
         if (prod && prod.variants) {
@@ -2978,17 +3400,12 @@ async function updateEditOrderConfirm() {
       });
 
       const printData = {
-        ...updatedOrder,
-        cart: cartMapped
+        ...updatedLocalOrder,
+        cart: cartMapped,
+        itemsTotal: itemsTotal
       };
 
       printReceipt(printData);
-    }
-
-    if (editModalState.sourceList === 'online') {
-      fetchOnlineOrders();
-    } else {
-      fetchAllOrders();
     }
   } catch (err) {
     console.error(err);

@@ -36,6 +36,21 @@ class OrderService:
             async with self.db.begin():
                 yield
 
+    def _record_outbox_event(self, event_type: str, data: dict):
+        """Records an event in the outbox queue to be synced to the cloud if running in desktop mode."""
+        import os
+        import json
+        if os.environ.get("RUNTIME_MODE") == "desktop":
+            # Avoid cyclic imports
+            from app.modules.orders.models import OutboxEvent, OutboxEventStatus
+            outbox_record = OutboxEvent(
+                event_type=event_type,
+                topic="orders.local",
+                payload=json.dumps(data),
+                status=OutboxEventStatus.PENDING
+            )
+            self.db.add(outbox_record)
+
     async def _validate_order_items(self, items: List[schemas.OrderItemCreate]):
         """Validate products exist and are available."""
         from app.modules.menu.service import ProductService
@@ -181,11 +196,18 @@ class OrderService:
             
             # Serialize for full payload 
             order_schema = schemas.OrderResponse.model_validate(order)
+            payload_data = order_schema.model_dump(mode='json')
             
-            # 8. Real-time Notification
+            # Record Outbox Event for syncing
+            self._record_outbox_event("ORDER_CREATED", payload_data)
+            
+            # 8. Real-time Notification and Sync Trigger
+            from app.core.events import outbox_sync_trigger
+            outbox_sync_trigger.set()
+            
             order_events_manager.emit({
                 "event": "order.created",
-                "data": order_schema.model_dump(mode='json')
+                "data": payload_data
             })
             
             return order
@@ -231,16 +253,23 @@ class OrderService:
             
             updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
         
-        # Refresh with eager loading to satisfy Response schemas
-        completed_order = await self.get_order(updated_order.id)
+            # Refresh with eager loading to satisfy Response schemas
+            completed_order = await self.get_order(updated_order.id)
+            
+            # Serialize for full payload
+            completed_schema = schemas.OrderResponse.model_validate(completed_order)
+            payload_data = completed_schema.model_dump(mode='json')
+            
+            # Record Outbox Event for syncing
+            self._record_outbox_event("ORDER_UPDATED", payload_data)
         
-        # Serialize for full payload
-        completed_schema = schemas.OrderResponse.model_validate(completed_order)
+        # Real-time Notification for update and Sync Trigger
+        from app.core.events import outbox_sync_trigger
+        outbox_sync_trigger.set()
         
-        # Real-time Notification for update
         order_events_manager.emit({
             "event": "order.updated",
-            "data": completed_schema.model_dump(mode='json')
+            "data": payload_data
         })
         
         return completed_order
@@ -341,11 +370,18 @@ class OrderService:
         # Refresh with eager loading (get_order handles selectinload)
         completed_order = await self.get_order(updated_order.id)
         completed_schema = schemas.OrderResponse.model_validate(completed_order)
+        payload_data = completed_schema.model_dump(mode='json')
         
-        # Real-time Notification
+        # Record Outbox Event for syncing
+        self._record_outbox_event("ORDER_UPDATED", payload_data)
+        
+        # Real-time Notification and Sync Trigger
+        from app.core.events import outbox_sync_trigger
+        outbox_sync_trigger.set()
+        
         order_events_manager.emit({
             "event": "order.updated",
-            "data": completed_schema.model_dump(mode='json')
+            "data": payload_data
         })
         
         return completed_order
