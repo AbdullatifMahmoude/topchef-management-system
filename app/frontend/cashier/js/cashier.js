@@ -1409,6 +1409,42 @@ function renderOnlineOrdersState() {
   renderOnlineOrders();
 }
 
+/**
+ * Manually fetch all orders from the API (used by Refresh buttons)
+ */
+async function fetchAllOrders() {
+    showGlobalLoader(true);
+    try {
+        const response = await apiFetch("/orders/?page=1&page_size=500");
+        if (!response.ok) throw new Error("Failed to fetch orders");
+        
+        const data = await response.json();
+        const orders = Array.isArray(data.orders) ? data.orders : [];
+        
+        allOrdersList = orders;
+        onlineOrdersList = orders.filter(isOnlineOrder);
+        
+        updateOnlineStats();
+        renderOnlineOrders();
+        renderAllOrders();
+        updateOnlineTabBadge(onlineOrdersList.filter(o => o.order_status === 'new').length);
+        
+        showToast("تم تحديث البيانات بنجاح", "success");
+    } catch (err) {
+        console.error("Error refreshing orders:", err);
+        showToast("فشل تحديث البيانات", "error");
+    } finally {
+        showGlobalLoader(false);
+    }
+}
+
+/**
+ * Alias for fetchAllOrders to satisfy the online orders refresh button
+ */
+async function fetchOnlineOrders() {
+    await fetchAllOrders();
+}
+
 function updateOnlineStats() {
   const newCount = onlineOrdersList.filter(o => o.order_status === 'new').length;
   //جاهز = confirmed, مكتمل = completed. For stats, let's show confirmed as ready in progress?
@@ -1676,9 +1712,13 @@ function updateWebOrdersToggleUI() {
 // ===================================================
 
 function updateConnectionStatus(status) {
+  console.log("🔄 UI Connection Status Change:", status);
   const dot = document.getElementById("ws_status_dot");
   const text = document.getElementById("ws_status_text");
-  if (!dot || !text) return;
+  if (!dot || !text) {
+    console.warn("⚠️ Connection status elements not found in DOM");
+    return;
+  }
 
   if (status === "connected") {
     dot.style.background = "#2ecc71"; // Green
