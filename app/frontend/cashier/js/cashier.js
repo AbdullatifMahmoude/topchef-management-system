@@ -74,6 +74,9 @@ let _phoneSearchTimeout = null;
 //  Init
 // ===================================================
 async function init() {
+  // Start WebSocket connection early
+  setupWebSocket();
+  
   showGlobalLoader(true);
 
   try {
@@ -96,9 +99,6 @@ async function init() {
     renderTabs();
     renderItems();
     initWebOrdersToggle();
-    
-    // Connect for real-time updates
-    setupWebSocket();
   } catch (err) {
     console.error("API error:", err);
     document.getElementById("items_grid").innerHTML =
@@ -1674,11 +1674,30 @@ function updateWebOrdersToggleUI() {
 // ===================================================
 //  WebSocket - Real-time updates
 // ===================================================
+
+function updateConnectionStatus(status) {
+  const dot = document.getElementById("ws_status_dot");
+  const text = document.getElementById("ws_status_text");
+  if (!dot || !text) return;
+
+  if (status === "connected") {
+    dot.style.background = "#2ecc71"; // Green
+    text.textContent = "متصل مباشر";
+  } else if (status === "disconnected") {
+    dot.style.background = "#e74c3c"; // Red
+    text.textContent = "غير متصل (إعادة محاولة)";
+  } else {
+    dot.style.background = "#f1c40f"; // Yellow
+    text.textContent = "جاري الاتصال...";
+  }
+}
 function setupWebSocket() {
   if (reconnectTimerId) {
     clearTimeout(reconnectTimerId);
     reconnectTimerId = null;
   }
+  
+  updateConnectionStatus("connecting");
 
   if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) {
     return;
@@ -1687,32 +1706,56 @@ function setupWebSocket() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${protocol}//${window.location.host}/orders/ws/cashier`;
   
-  console.log("Connecting to WebSocket:", wsUrl);
+  console.log("📡 Attempting WebSocket connection:", wsUrl);
   const ws = new WebSocket(wsUrl);
   socket = ws;
 
+  // Safety Timeout: if it doesn't open in 5s, close and retry
+  const connectTimeoutId = setTimeout(() => {
+    if (ws.readyState === WebSocket.CONNECTING) {
+      console.warn("⚠️ WebSocket connection timed out (5s). Retrying...");
+      ws.close();
+    }
+  }, 5000);
+
   ws.onopen = () => {
-    console.log("WebSocket connected successfully");
+    clearTimeout(connectTimeoutId);
+    console.log("✅ WebSocket connected successfully (Cashier)");
+    updateConnectionStatus("connected");
   };
 
   ws.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data);
+      if (payload.type !== "HEARTBEAT" && payload.type !== "HEARTBEAT_ACK") {
+          console.debug("📥 Received WS message:", payload.type);
+      }
       handleSocketEvent(payload);
     } catch (err) {
-      console.error("Error parsing WebSocket message:", err);
+      console.error("❌ Error parsing WebSocket message:", err);
     }
   };
 
   ws.onclose = (e) => {
+    clearTimeout(connectTimeoutId);
     if (socket !== ws) return;
-    console.warn("WebSocket disconnected. Code:", e.code, "Reason:", e.reason);
+    console.warn(`🔴 WebSocket disconnected. Code: ${e.code}, Reason: ${e.reason || 'None'}`);
     socket = null;
-    reconnectTimerId = setTimeout(setupWebSocket, 2000);
+    updateConnectionStatus("disconnected");
+    
+    // Exponential backoff or simple delay
+    if (!reconnectTimerId) {
+        reconnectTimerId = setTimeout(() => {
+            reconnectTimerId = null;
+            setupWebSocket();
+        }, 3000);
+    }
   };
 
   ws.onerror = (err) => {
-    console.error("WebSocket error:", err);
+    clearTimeout(connectTimeoutId);
+    console.error("❌ WebSocket error details:", err);
+    updateConnectionStatus("disconnected");
   };
 }
 
@@ -1731,6 +1774,14 @@ function handleSocketEvent(payload) {
     renderOnlineOrders();
     renderAllOrders();
     updateOnlineTabBadge(onlineOrdersList.filter(o => o.order_status === 'new').length);
+    updateConnectionStatus("connected");
+    return;
+  }
+
+  if (payload.type === "SYNC_COMPLETE") {
+    console.log("Desktop master data sync complete, refreshing menu and orders...");
+    init(); // This re-fetches products and categories
+    fetchAllOrders();
     return;
   }
 

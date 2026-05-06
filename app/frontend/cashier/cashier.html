@@ -18,7 +18,13 @@
     <nav>
       <div class="nav_logo">
         <img src="/assets/توب شيف 1@2x.png" alt="logo" />
-        <h1>مطعم توب شيف</h1>
+        <div style="display: flex; flex-direction: column;">
+          <h1 style="margin-bottom: 2px;">مطعم توب شيف</h1>
+          <div id="ws_status_badge" style="display:flex; align-items:center; gap:6px; font-size: 10px; opacity: 0.8;">
+             <div id="ws_status_dot" style="width:7px; height:7px; border-radius:50%; background: #f1c40f;"></div>
+             <span id="ws_status_text">جاري الاتصال...</span>
+          </div>
+        </div>
       </div>
       <div class="nav_tabs">
         <button id="tab_local" class="nav_tab active" onclick="switchMainTab('local')">طلبات المحل</button>

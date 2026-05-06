@@ -98,14 +98,21 @@ async def websocket_orders(
     try:
         if channel in {"cashier", "admin", "default"}:
             total, orders = await service.list_orders_paginated(page=1, page_size=500)
+            
+            validated_orders = []
+            for order in orders:
+                try:
+                    validated_orders.append(
+                        schemas.OrderResponse.model_validate(order).model_dump(mode="json")
+                    )
+                except Exception as e:
+                    logger.warning(f"Skipping malformed order {getattr(order, 'id', 'unknown')} in WS snapshot: {e}")
+
             await websocket.send_json({
                 "type": "ORDER_SNAPSHOT",
                 "data": {
                     "total": total,
-                    "orders": [
-                        schemas.OrderResponse.model_validate(order).model_dump(mode="json")
-                        for order in orders
-                    ],
+                    "orders": validated_orders,
                 },
             })
 

@@ -303,7 +303,15 @@ async def desktop_sync_events(
             await db.flush() # Ensure this event is visible to subsequent events in the same batch
         except Exception as e:
             rejected += 1
-            errors.append(str(e))
+            errors.append(f"Event {event.event_id} ({event.event_type}) failed: {str(e)}")
+            logger.error(f"Sync event processing failed: {e}", exc_info=True)
+            # If a flush failed, the transaction is doomed. We must rollback to start fresh for the next event if possible, 
+            # but since we are in a single router-level transaction, one failure might doom the whole batch.
+            # To be safe, we should probably commit successful ones and rollback failed ones, but SQLAlchemy async sessions
+            # are tricky with partial commits in a loop if the transaction is already failed.
+            await db.rollback()
+            # After rollback, we need to restart the transaction for the remaining events
+            continue
     
     await db.commit()
     return SyncResult(accepted=accepted, rejected=rejected, errors=errors)

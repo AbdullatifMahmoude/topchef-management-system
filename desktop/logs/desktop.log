@@ -761,3 +761,57 @@
 [2026-05-07 00:41:21] INFO     topchef_desktop – Launching desktop window via pywebview.
 [2026-05-07 00:41:21] INFO     topchef_desktop – Starting pywebview event loop.
 [2026-05-07 00:41:57] INFO     topchef_desktop – Cloud reconciliation applied 662 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 382, 'customer_addresses': 2, 'comments': 6, 'orders': 6, 'order_items': 12, 'order_status_history': 6}
+[2026-05-07 00:55:42] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 00:55:42] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 00:55:42] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 00:55:42] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 00:55:42] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 00:55:44] INFO     topchef_desktop – Tray icon started
+[2026-05-07 00:55:44] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 00:55:44] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 00:56:05] INFO     topchef_desktop – Cloud reconciliation applied 325 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 6, 'order_items': 12, 'order_status_history': 6}
+[2026-05-07 01:01:07] INFO     topchef_desktop – Cloud reconciliation applied 178 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 7, 'order_items': 14, 'order_status_history': 6}
+[2026-05-07 01:06:10] INFO     topchef_desktop – Cloud reconciliation applied 182 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 8, 'order_items': 16, 'order_status_history': 7}
+[2026-05-07 01:10:38] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 01:10:38] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 01:10:39] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 01:10:39] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 01:10:39] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 01:10:40] INFO     topchef_desktop – Tray icon started
+[2026-05-07 01:10:40] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 01:10:40] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 01:10:57] INFO     topchef_desktop – Cloud reconciliation applied 332 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 8, 'order_items': 16, 'order_status_history': 7}
+[2026-05-07 01:12:12] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 01:16:14] INFO     topchef_desktop – Cloud reconciliation applied 185 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 9, 'order_items': 18, 'order_status_history': 7}
+[2026-05-07 01:21:17] INFO     topchef_desktop – Cloud reconciliation applied 185 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 9, 'order_items': 18, 'order_status_history': 7}
+[2026-05-07 01:37:27] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 01:37:28] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 01:37:28] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 01:37:28] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 01:37:28] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 01:37:30] INFO     topchef_desktop – Tray icon started
+[2026-05-07 01:37:30] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 01:37:30] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 01:38:04] INFO     topchef_desktop – Cloud reconciliation applied 335 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 9, 'order_items': 18, 'order_status_history': 7}
+[2026-05-07 01:45:04] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 01:45:04] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 01:45:04] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 01:45:04] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 01:45:04] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 01:45:06] INFO     topchef_desktop – Tray icon started
+[2026-05-07 01:45:06] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 01:45:06] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 01:45:40] INFO     topchef_desktop – Cloud reconciliation applied 335 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 9, 'order_items': 18, 'order_status_history': 7}
+[2026-05-07 01:45:58] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 01:46:00] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 01:47:04] INFO     topchef_desktop – 📤 Outbox: Successfully synced 2 events to cloud.
+[2026-05-07 01:47:49] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 01:56:01] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 01:56:01] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 01:56:01] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 01:56:02] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 01:56:02] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 01:56:03] INFO     topchef_desktop – Tray icon started
+[2026-05-07 01:56:03] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 01:56:03] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 01:56:19] INFO     topchef_desktop – Cloud reconciliation applied 341 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 4, 'comments': 6, 'orders': 10, 'order_items': 19, 'order_status_history': 9}

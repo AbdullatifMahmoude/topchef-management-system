@@ -1,6 +1,7 @@
 import enum
 from datetime import date, datetime, timezone, timedelta
 
+from typing import Optional
 from sqlalchemy import (
     Column,
     Integer,
@@ -86,6 +87,12 @@ class Order(Base):
         if self.delivery_person:
             return self.delivery_person.full_name or self.delivery_person.username
         return "Unknown"
+
+    @property
+    def customer_address(self) -> Optional[str]:
+        if self.address:
+            return self.address.address
+        return None
 
     __table_args__ = (
         UniqueConstraint('idempotency_key', 'order_date', name='uq_idempotency_per_day'),

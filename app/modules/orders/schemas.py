@@ -91,6 +91,9 @@ class OrderResponse(OrderBase):
     items: List[OrderItemResponse]
     creator_name: Optional[str] = None
     delivery_person_name: Optional[str] = None
+    delivery_person_id: Optional[int] = None
+    address_id: Optional[int] = None
+    customer_address: Optional[str] = None
     address: Optional[CustomerAddressResponse] = None
 
     @model_validator(mode='after')
