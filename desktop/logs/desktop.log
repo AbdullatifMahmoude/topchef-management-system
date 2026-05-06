@@ -153,3 +153,162 @@
 [2026-05-06 16:04:43] INFO     topchef_desktop – Tray icon started
 [2026-05-06 16:04:43] INFO     topchef_desktop – Launching desktop window via pywebview.
 [2026-05-06 16:04:43] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 17:17:27] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 17:17:27] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 17:17:27] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 17:17:27] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 17:17:27] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 17:17:29] INFO     topchef_desktop – Tray icon started
+[2026-05-06 17:17:29] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 17:17:29] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 17:17:50] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:17:52] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:17:55] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:17:57] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:17:59] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:01] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:04] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:06] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:08] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:10] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:12] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:15] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:17] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:19] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:20] INFO     topchef_desktop – 📤 Outbox: Successfully synced 2 events to cloud.
+[2026-05-06 17:18:21] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:23] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:25] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:27] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:29] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:31] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:34] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:36] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:38] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:40] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:42] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:45] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:47] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:49] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:51] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:54] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:56] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:18:58] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:19:00] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:19:03] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:19:05] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.id
+[SQL: INSERT INTO products (id, cat_id, product_name, product_type, description, is_available, created_at, update_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)]
+[parameters: (52, 5, 'كبدة وكلاوي مقلي(طاسة)', 'VARIANT', '', 1, '2026-04-18 23:49:50.147781', '2026-05-05 23:16:55.692278')]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 17:23:44] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 17:23:44] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 17:23:45] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 17:23:45] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 17:23:45] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 17:23:46] INFO     topchef_desktop – Tray icon started
+[2026-05-06 17:23:46] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 17:23:46] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 17:24:22] INFO     topchef_desktop – Cloud reconciliation applied 653 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 381, 'customer_addresses': 2, 'comments': 6, 'orders': 6, 'order_items': 10, 'order_status_history': 0}
+[2026-05-06 17:25:23] INFO     topchef_desktop – Cloud reconciliation applied 167 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 6, 'order_items': 10, 'order_status_history': 0}

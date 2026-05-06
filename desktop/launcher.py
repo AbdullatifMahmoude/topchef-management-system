@@ -79,23 +79,26 @@ def main():
         
     from app.core.sync import sync_manager
     from app.core.cloud_client import cloud_client
+    from app.core.config import settings
 
     async def _desktop_sync_loop():
         """Background synchronization engine running constantly with outbox draining."""
-        from desktop.config import config
         from app.core.database import AsyncSessionLocal
+        from app.core.desktop_reconcile import apply_master_data_snapshot
         from sqlalchemy import select
-        import json
         import platform
         
-        server_url = config.server_url.rstrip("/")
-        device_id = platform.node()
+        device_id = config.device_id
         loop_counter = 0
+        last_master_data_sync_at = None
+        force_master_pull = True
+        last_heartbeat_at = 0.0
         
         while True:
             from app.core.events import outbox_sync_trigger
             try:
-                await asyncio.wait_for(outbox_sync_trigger.wait(), timeout=60.0)
+                wait_timeout = 1.0 if force_master_pull else 60.0
+                await asyncio.wait_for(outbox_sync_trigger.wait(), timeout=wait_timeout)
                 outbox_sync_trigger.clear()
                 # Wait briefly to let the DB transaction commit before querying Outbox
                 await asyncio.sleep(0.2)
@@ -107,8 +110,6 @@ def main():
                 continue
             
             async with _sync_lock:
-                headers = {"Authorization": _auth_header_cache}
-                
                 try:
                     from app.modules.orders.models import OutboxEvent, OutboxEventStatus
                     
@@ -137,8 +138,11 @@ def main():
                                 ]
                             }
                             
-                            success = await cloud_client.post("/desktop-updates/sync/events", payload)
-                            if success:
+                            sync_result = await cloud_client.post_json("/desktop-updates/sync/events", payload)
+                            accepted = int((sync_result or {}).get("accepted", 0))
+                            rejected = int((sync_result or {}).get("rejected", 0))
+                            errors = (sync_result or {}).get("errors", [])
+                            if sync_result and rejected == 0 and accepted >= len(pending_events):
                                 # Mark completed
                                 from datetime import datetime, timezone, timedelta
                                 for e in pending_events:
@@ -146,21 +150,59 @@ def main():
                                     e.processed_at = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
                                 await db.commit()
                                 log.info(f"📤 Outbox: Successfully synced {len(pending_events)} events to cloud.")
-                        
-                        # 2. Periodic Polling (Fallback only)
+                            else:
+                                for e in pending_events:
+                                    e.retry_count = (e.retry_count or 0) + 1
+                                    if e.retry_count >= 5:
+                                        e.status = OutboxEventStatus.FAILED
+                                        e.error_message = "; ".join(errors[:3]) if errors else "Cloud did not accept the outbox batch"
+                                await db.commit()
+                                log.warning(
+                                    "Outbox: cloud did not fully accept batch accepted=%s rejected=%s pending=%s errors=%s",
+                                    accepted,
+                                    rejected,
+                                    len(pending_events),
+                                    errors[:3],
+                                )
+
+                        # 2. Pull cloud authoritative data into the local database.
+                        if force_master_pull or loop_counter >= 1:
+                            params = {}
+                            if last_master_data_sync_at:
+                                params["since"] = last_master_data_sync_at
+
+                            snapshot = await cloud_client.get("/desktop-updates/master-data", params=params)
+                            if snapshot:
+                                stats = await apply_master_data_snapshot(db, snapshot)
+                                last_master_data_sync_at = snapshot.get("timestamp") or last_master_data_sync_at
+                                force_master_pull = False
+                                changed = sum(stats.values())
+                                if changed:
+                                    log.info("Cloud reconciliation applied %s rows: %s", changed, stats)
+                            elif force_master_pull:
+                                log.warning("Initial cloud reconciliation could not run; will retry on next sync tick.")
+
+                        # 3. Periodic Polling (Fallback only)
                         if sync_manager.should_poll():
                             log.info("📡 WebSocket inactive. Performing fallback HTTP poll for online orders...")
-                            # The UI polling already triggers the proxy in Middleware
-                            pass
+                            snapshot = await cloud_client.get("/desktop-updates/master-data")
+                            if snapshot:
+                                stats = await apply_master_data_snapshot(db, snapshot)
+                                last_master_data_sync_at = snapshot.get("timestamp") or last_master_data_sync_at
+                                force_master_pull = False
+                                changed = sum(stats.values())
+                                if changed:
+                                    log.info("Fallback reconciliation applied %s rows: %s", changed, stats)
 
-                        # 3. Periodic Heartbeat (Every 120s)
-                        if loop_counter % 120 == 0:
+                        # 3. Periodic Heartbeat
+                        if time.monotonic() - last_heartbeat_at >= 60:
                             heartbeat_payload = {
-                                "device_id": settings.TERMINAL_ID,
+                                "device_id": device_id,
                                 "version": settings.VERSION,
                                 "os": platform.system()
                             }
-                            await cloud_client.post("/desktop-updates/sync/heartbeat", heartbeat_payload)
+                            if await cloud_client.post("/desktop-updates/sync/heartbeat", heartbeat_payload):
+                                last_heartbeat_at = time.monotonic()
 
                         # 4. Global Counter Reset
                         if loop_counter >= 1200: # Reset every ~20 mins
@@ -237,7 +279,14 @@ def main():
     app.add_middleware(DesktopSyncMiddleware)
     
     def _run_server():
-        uvicorn.run(app, host="127.0.0.1", port=config.local_port, log_level="info")
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=config.local_port,
+            log_level="info",
+            ws_ping_interval=20,
+            ws_ping_timeout=20,
+        )
 
     server_thread = threading.Thread(target=_run_server, daemon=True)
     server_thread.start()

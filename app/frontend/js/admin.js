@@ -148,3 +148,14 @@ function filterTable(value, tbodySelector, emptyMessage) {
   }
   if (message) message.style.display = found ? "none" : "";
 }
+
+setInterval(() => {
+  const eventsPage = document.getElementById("page-events");
+  if (
+    eventsPage &&
+    eventsPage.style.display !== "none" &&
+    typeof refreshSyncStatus === "function"
+  ) {
+    refreshSyncStatus();
+  }
+}, 30000);

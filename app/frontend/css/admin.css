@@ -390,6 +390,59 @@ body {
   font-weight: bold;
 }
 
+#device_stats_table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+#device_stats_table th,
+#device_stats_table td {
+  vertical-align: middle;
+}
+
+#device_stats_table th:first-child,
+#device_stats_table td:first-child {
+  width: 34%;
+  direction: ltr;
+  text-align: center;
+}
+
+#device_stats_table th:nth-child(2),
+#device_stats_table td:nth-child(2) {
+  width: 22%;
+}
+
+#device_stats_table th:nth-child(3),
+#device_stats_table td:nth-child(3) {
+  width: 24%;
+}
+
+#device_stats_table th:nth-child(4),
+#device_stats_table td:nth-child(4) {
+  width: 20%;
+}
+
+#device_stats_table .status_completed,
+#device_stats_table .status_cancelled {
+  display: inline-flex;
+  min-width: 90px;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+#device_stats_table .status_completed {
+  background: rgba(46, 204, 113, 0.12);
+  border: 1px solid rgba(46, 204, 113, 0.35);
+}
+
+#device_stats_table .status_cancelled {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.12);
+  border: 1px solid rgba(231, 76, 60, 0.35);
+}
+
 /* ============================================
    Header & Title
    ============================================ */

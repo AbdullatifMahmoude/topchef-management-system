@@ -7,12 +7,12 @@ Features:
 3. Secure Token Validation.
 """
 
-from fastapi import APIRouter, HTTPException, Query, Header, Depends
+from fastapi import APIRouter, HTTPException, Query, Header, Depends, Request
 from fastapi.responses import FileResponse
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.core.logging import logger
@@ -56,7 +56,14 @@ async def get_master_data(
     async def _fetch_incremental(model):
         stmt = select(model)
         # Handle different timestamp column names
-        ts_col = "updated_at" if hasattr(model, "updated_at") else ("created_at" if hasattr(model, "created_at") else None)
+        if hasattr(model, "updated_at"):
+            ts_col = "updated_at"
+        elif hasattr(model, "update_at"):
+            ts_col = "update_at"
+        elif hasattr(model, "created_at"):
+            ts_col = "created_at"
+        else:
+            ts_col = None
         
         if since and ts_col:
             stmt = stmt.where(getattr(model, ts_col) > since)
@@ -79,6 +86,8 @@ async def get_master_data(
         customers=await _fetch_incremental(Customer),
         customer_addresses=await _fetch_incremental(CustomerAddress),
         comments=await _fetch_incremental(Comment),
+        orders=await _fetch_incremental(Order),
+        order_items=await _fetch_incremental(OrderItem),
         order_status_history=await _fetch_incremental(OrderStatusHistory),
     )
 
@@ -245,6 +254,7 @@ async def desktop_sync_events(
 @router.post("/sync/heartbeat")
 async def desktop_heartbeat(
     payload: HeartbeatRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     x_desktop_token: Optional[str] = Header(None)
 ):
@@ -265,6 +275,9 @@ async def desktop_heartbeat(
     else:
         device.version = payload.version
         device.last_seen = datetime.now() # onupdate handles this but we force it
+
+    if request.client:
+        device.ip_address = request.client.host
         
     await db.commit()
     return {"status": "ok"}
@@ -334,17 +347,24 @@ async def get_sync_status(
             active_list = []
         
         device_stats = []
+        online_cutoff = datetime.now() - timedelta(minutes=2)
         for dev in active_list:
             device_stats.append({
                 "device_id": dev.device_id,
                 "count": device_counts.get(dev.device_id, 0),
                 "last_seen": dev.last_seen.isoformat() if dev.last_seen else None,
-                "version": dev.version
+                "version": dev.version,
+                "ip_address": dev.ip_address,
+                "online": bool(dev.last_seen and dev.last_seen >= online_cutoff),
             })
+
+        device_stats.sort(key=lambda dev: dev.get("last_seen") or "", reverse=True)
             
         return {
             "mode": "cloud",
-            "device_stats": device_stats
+            "device_stats": device_stats,
+            "total_devices": len(device_stats),
+            "online_devices": sum(1 for dev in device_stats if dev.get("online")),
         }
 
 

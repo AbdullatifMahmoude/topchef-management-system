@@ -40,6 +40,8 @@ class MasterDataResponse(BaseModel):
     customers: List[dict]
     customer_addresses: List[dict]
     comments: List[dict]
+    orders: List[dict]
+    order_items: List[dict]
     order_status_history: List[dict]
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 

@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,8 +86,14 @@ async def websocket_orders(websocket: WebSocket, channel: str = "default"):
     await order_events_manager.connect(websocket, channel)
     try:
         while True:
-            # Keep connection alive
-            await websocket.receive_text()
+            message = await websocket.receive_text()
+            try:
+                payload = json.loads(message)
+            except json.JSONDecodeError:
+                continue
+
+            if payload.get("type") == "heartbeat":
+                await websocket.send_text(json.dumps({"type": "heartbeat_ack"}))
     except Exception:
         # Catching everything including WebSocketDisconnect
         await order_events_manager.disconnect(websocket, channel)
