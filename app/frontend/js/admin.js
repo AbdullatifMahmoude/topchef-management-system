@@ -33,6 +33,10 @@ function showPage(pageId) {
     btn.classList.toggle("active", btn.getAttribute("data-page") === pageId);
   });
 
+  if (pageId === "home") {
+    if (typeof refreshDashboard === "function") refreshDashboard();
+  }
+
   if (pageId === "events") {
     if (typeof refreshSyncStatus === "function") refreshSyncStatus();
   }

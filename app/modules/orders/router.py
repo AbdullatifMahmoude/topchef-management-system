@@ -60,6 +60,13 @@ async def get_order_detail(
 ):
     return await service.get_order(order_id)
 
+@router.get("/dashboard/stats")
+async def get_dashboard_stats(
+    service: OrderService = Depends(get_order_service),
+    current_user: any = Depends(get_current_user)
+):
+    return await service.get_today_stats()
+
 @router.patch("/{order_id}", response_model=schemas.OrderResponse)
 async def update_order(
     order_id: int,

@@ -229,6 +229,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (pendingDeleteId) deleteCategory(pendingDeleteId);
   });
 
+  // ===== EXPOSE GLOBAL =====
+  window.refreshCategoriesPage = loadCategories;
+
   // ===== INIT =====
   loadCategories();
 })();

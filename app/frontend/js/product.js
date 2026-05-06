@@ -376,6 +376,10 @@
     renderTable(filtered);
   });
 
+  // ===== EXPOSE GLOBAL =====
+  window.refreshProducts = loadProducts;
+  window.refreshCategories = loadCategories;
+
   // ===== INIT =====
   loadCategories().then(() => loadProducts());
 })();

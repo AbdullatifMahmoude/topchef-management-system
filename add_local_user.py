@@ -1,0 +1,56 @@
+
+from passlib.context import CryptContext
+import sqlite3
+import os
+from datetime import datetime
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def add_user():
+    db_path = "desktop/data/topchef_local.db"
+    if not os.path.exists(db_path):
+        print(f"Error: {db_path} not found.")
+        return
+
+    username = "Abdullatif"
+    password = "Abdullatif@1234"
+    full_name = "Abdullatif"
+    role = "admin"
+    phone = "01000000000"
+    hashed_password = get_password_hash(password)
+    now = datetime.now().isoformat()
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    try:
+        # Check if user already exists
+        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        existing = cursor.fetchone()
+
+        if existing:
+            print(f"User {username} already exists. Updating password.")
+            cursor.execute("""
+                UPDATE users 
+                SET hashed_password = ?, updated_at = ?
+                WHERE username = ?
+            """, (hashed_password, now, username))
+        else:
+            print(f"Adding user {username}...")
+            cursor.execute("""
+                INSERT INTO users (username, full_name, role, phone, hashed_password, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+            """, (username, full_name, role, phone, hashed_password, now, now))
+        
+        conn.commit()
+        print("Success!")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    add_user()

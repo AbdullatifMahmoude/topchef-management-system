@@ -312,3 +312,6 @@ class OrderService:
             "data": payload_data
         })
         return completed_order
+
+    async def get_today_stats(self) -> dict:
+        return await self.repository.get_today_stats()

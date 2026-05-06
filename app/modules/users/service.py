@@ -131,6 +131,8 @@ class UserService:
             if data.role == UserRole.DELIVERY:
                 await self._invalidate_delivery_cache()
             logger.info(f"User created: username='{data.username}', role={data.role}")
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "USER_UPDATED", "data": schemas.UserResponse.model_validate(createuser).model_dump(mode='json')})
         return schemas.UserResponse.model_validate(createuser)
 
     async def update_user(self, user_id: int , data:schemas.UpdateUser):
@@ -165,6 +167,8 @@ class UserService:
                     await self._invalidate_delivery_cache()
             
             logger.info(f"User updated: id={user_id}, fields={list(update_data.keys())}")
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "USER_UPDATED", "data": schemas.UserResponse.model_validate(updateuser).model_dump(mode='json')})
         return schemas.UserResponse.model_validate(updateuser)
 
     async def delete_user(self, userid: int):
@@ -202,6 +206,8 @@ class UserService:
                     await self._invalidate_delivery_cache()
                 
             logger.info(f"User active status toggled: id={user_id}, now_active={toggle.is_active}")
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "USER_UPDATED", "data": schemas.UserResponse.model_validate(toggle).model_dump(mode='json')})
         return schemas.UserResponse.model_validate(toggle)
 
 

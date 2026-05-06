@@ -242,6 +242,9 @@
     eyeOffIcon.style.display = isHidden ? "block" : "none";
   });
 
+  // ===== EXPOSE GLOBAL =====
+  window.refreshUsers = loadUsers;
+
   // ===== INIT =====
   loadUsers();
 })();

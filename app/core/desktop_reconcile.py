@@ -134,6 +134,12 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
         )
         return result.scalar_one_or_none()
 
+    if model is Variant and row.get("name") and row.get("product_id") is not None:
+        result = await session.execute(
+            select(Variant).where(Variant.name == row["name"], Variant.product_id == row["product_id"])
+        )
+        return result.scalar_one_or_none()
+
     if model is Offer and row.get("code"):
         result = await session.execute(select(Offer).where(Offer.code == row["code"]))
         return result.scalar_one_or_none()
@@ -147,6 +153,11 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
     mapper = inspect(model)
     primary_key_names = {column.name for column in mapper.primary_key}
     
+    # Models that MUST have their IDs preserved to maintain relationships
+    # Orders and related items will still have their IDs managed locally to avoid collisions
+    # when creating orders on multiple devices simultaneously.
+    PRESERVE_ID_MODELS = {User, Category, Product, Variant, Offer, AppSetting}
+    
     for row in rows:
         values = _column_payload(model, row)
         if not values:
@@ -157,16 +168,16 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
         try:
             async with session.begin_nested():
                 if existing is None:
-                    # We strip INTEGER primary keys to let local SQLite generate its own.
-                    # But we KEEP String primary keys (like in AppSetting).
+                    # Decide whether to keep the server ID or let SQLite generate a new one
                     insert_values = {}
                     for k, v in values.items():
                         is_pk = k in primary_key_names
                         col = mapper.columns.get(k)
-                        # Only strip if it's a single integer PK (typical auto-increment ID)
                         is_int_pk = is_pk and col is not None and isinstance(col.type, Integer)
                         
-                        if is_int_pk:
+                        # Strip integer IDs ONLY for non-master models (like Orders, Customers)
+                        # so that multiple devices can create them locally without collision.
+                        if is_int_pk and model not in PRESERVE_ID_MODELS:
                             continue
                         insert_values[k] = v
                     

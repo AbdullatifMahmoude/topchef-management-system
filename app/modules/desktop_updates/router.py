@@ -248,6 +248,16 @@ async def desktop_sync_events(
                         except Exception:
                             pass
                     
+                    # 1.5 Fallback: Try by remote ID if number fails
+                    if not cloud_order and event_data.get("id"):
+                        try:
+                            fallback_order = await order_service.repository.get_by_id(int(event_data.get("id")))
+                            # Verify that the order number matches to prevent ID collision mismatches
+                            if fallback_order and fallback_order.order_number == order_number:
+                                cloud_order = fallback_order
+                        except Exception:
+                            pass
+
                     # 2. Update if found
                     if cloud_order:
                         from app.modules.orders.schemas import OrderUpdateFull, OrderUpdate
@@ -260,26 +270,29 @@ async def desktop_sync_events(
                         )
                         
                         # Apply status updates if present
-                        cloud_status_str = getattr(cloud_order.order_status, "value", str(cloud_order.order_status))
-                        if "order_status" in event_data and event_data["order_status"] != cloud_status_str:
+                        # Robust comparison: extract value and normalize to lower case
+                        current_status = str(getattr(cloud_order.order_status, "value", cloud_order.order_status)).lower()
+                        new_status = str(event_data.get("order_status", "")).lower()
+
+                        if new_status and new_status != current_status:
                             try:
                                 await order_service.update_order_status(
                                     cloud_order.id,
                                     OrderUpdate(
-                                        order_status=event_data["order_status"],
+                                        order_status=new_status,
                                         delivery_person_id=event_data.get("delivery_person_id"),
                                         internal_notes=event_data.get("internal_notes")
                                     ),
                                     current_user_id=current_user.id if current_user else None
                                 )
                             except Exception as status_e:
-                                errors.append(f"ORDER_UPDATED status error: {str(status_e)}")
+                                errors.append(f"ORDER_UPDATED status error for #{order_number}: {str(status_e)}")
                                 
                         db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                         accepted += 1
                     else:
                         rejected += 1
-                        errors.append(f"ORDER_UPDATED error: Order {order_number} for {order_date_str} not found in cloud")
+                        errors.append(f"ORDER_UPDATED error: Order {order_number} (ID: {event_data.get('id')}) for {order_date_str} not found in cloud")
                 except Exception as e:
                     rejected += 1
                     errors.append(f"ORDER_UPDATED error: {str(e)}")

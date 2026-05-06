@@ -1775,17 +1775,30 @@ function handleSocketEvent(payload) {
         hasChanged = true;
       }
     }
-    
     if (hasChanged) {
         showToast(`تحديث طلب #${data.order_number || data.id}: ${data.order_status}`, "success");
     }
+  }
+
+  // Real-time Menu Updates
+  if (payload.type === "PRODUCT_UPDATED") {
+    apiFetch("/menu/products").then(res => res.json()).then(prods => {
+       products = Array.isArray(prods) ? prods : (prods.data || []);
+       renderItems();
+    });
+  } else if (payload.type === "CATEGORY_UPDATED") {
+    apiFetch("/menu/categories").then(res => res.json()).then(cats => {
+       categories = Array.isArray(cats) ? cats.filter(c => c.is_active) : [];
+       renderTabs();
+       renderItems();
+    });
   }
 
   // 2. Trigger UI Refresh if we are on a relevant tab
   if (hasChanged) {
     const onlineLayout = document.getElementById("online_orders_layout");
     const allLayout = document.getElementById("all_orders_layout");
-
+    
     if (onlineLayout && onlineLayout.style.display !== "none") {
       updateOnlineStats();
       renderOnlineOrders();

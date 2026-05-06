@@ -102,6 +102,8 @@ class CategoryService:
             logger.info(f"Menu Category created: '{category_data.cat_name}'")
             await self._invalidate_cache()
 
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": createcat.id, "cat_name": createcat.cat_name}})
         return schemas.CategoryResponse.model_validate(createcat)
 
     async def update_category(self, cat_id: int, cat_data: schemas.UpdateCategory):
@@ -118,6 +120,8 @@ class CategoryService:
             logger.info(f"Menu Category updated: id={cat_id}")
             await self._invalidate_cache()
 
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": updatecat.id, "cat_name": updatecat.cat_name}})
         return schemas.CategoryResponse.model_validate(updatecat)
 
     async def delete_category(self, category_id: int):
@@ -143,6 +147,8 @@ class CategoryService:
             logger.info(f"Menu Category status toggled: id={category_id}, now_active={toggle.is_active}")
             await self._invalidate_cache()
 
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": toggle.id, "cat_name": toggle.cat_name}})
         return schemas.CategoryResponse.model_validate(toggle)
 
 
@@ -259,6 +265,8 @@ class ProductService:
             logger.info(f"Menu Product created: '{product_data.product_name}'")
             await self._invalidate_cache()
 
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(product_model).model_dump(mode='json')})
         return schemas.ProductResponse.model_validate(product_model)
 
     async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
@@ -299,6 +307,8 @@ class ProductService:
             logger.info(f"Menu Product updated: id={product_id}")
             await self._invalidate_cache()
             
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(existing).model_dump(mode='json')})
         return schemas.ProductResponse.model_validate(existing)
 
     async def delete_product(self, product_id: int):
@@ -324,5 +334,7 @@ class ProductService:
             logger.info(f"Menu Product status toggled: id={product_id}, now_available={toggle.is_available}")
             await self._invalidate_cache()
             
+        from app.core.events import order_events_manager
+        order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(toggle).model_dump(mode='json')})
         return schemas.ProductResponse.model_validate(toggle)
 

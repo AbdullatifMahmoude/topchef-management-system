@@ -1,34 +1,36 @@
 <!doctype html>
 <html lang="ar">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin - توب شيف</title>
-    <link rel="icon" href="/assets/توب شيف 1.png" />
-    <link rel="stylesheet" href="css/admin.css?v=20260506-devices" />
-  </head>
-  <body>
-    <div class="layout">
-      <!-- ===== السايد منيو الثابت ===== -->
-      <div class="sidemenu">
-        <div class="logo_title">
-          <h1><span style="color: white">مطعم </span> توب شيف</h1>
-          <img src="/assets/توب شيف 1.png" alt="" />
-        </div>
-        <div class="menu_btn">
-          <button class="side_btn" data-page="home">الرئيسية</button>
-          <button class="side_btn" data-page="items">إدارة الأصناف</button>
-          <button class="side_btn" data-page="categories">التصنيفات</button>
-          <button class="side_btn" data-page="delivery">المستخدمين</button>
-          <button class="side_btn" data-page="reports">التقارير</button>
-          <button class="side_btn" data-page="offers">العروض</button>
-          <button class="side_btn" id="goeventspage">الاحداث</button>
-        </div>
-        <div class="logo_bottom">
-          <h1>
-            مرحبا: <span style="color: #ffe701" id="admin_username">...</span>
-          </h1>
-          <button id="logout_btn" style="
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin - توب شيف</title>
+  <link rel="icon" href="/assets/توب شيف 1.png" />
+  <link rel="stylesheet" href="css/admin.css?v=20260506-devices" />
+</head>
+
+<body>
+  <div class="layout">
+    <!-- ===== السايد منيو الثابت ===== -->
+    <div class="sidemenu">
+      <div class="logo_title">
+        <h1><span style="color: white">مطعم </span> توب شيف</h1>
+        <img src="/assets/توب شيف 1.png" alt="" />
+      </div>
+      <div class="menu_btn">
+        <button class="side_btn" data-page="home">الرئيسية</button>
+        <button class="side_btn" data-page="items">إدارة الأصناف</button>
+        <button class="side_btn" data-page="categories">التصنيفات</button>
+        <button class="side_btn" data-page="delivery">المستخدمين</button>
+        <button class="side_btn" data-page="reports">التقارير</button>
+        <button class="side_btn" data-page="offers">العروض</button>
+        <button class="side_btn" id="goeventspage">الاحداث</button>
+      </div>
+      <div class="logo_bottom">
+        <h1>
+          مرحبا: <span style="color: #ffe701" id="admin_username">...</span>
+        </h1>
+        <button id="logout_btn" style="
             margin-top: 12px;
             width: 100%;
             padding: 10px;
@@ -41,818 +43,776 @@
             font-family: inherit;
             transition: background 0.2s;
           " onmouseover="this.style.background='rgba(231,76,60,0.3)'"
-             onmouseout="this.style.background='rgba(231,76,60,0.15)'">
-            ⏻ تسجيل الخروج
-          </button>
+          onmouseout="this.style.background='rgba(231,76,60,0.15)'">
+          ⏻ تسجيل الخروج
+        </button>
+      </div>
+    </div>
+
+    <div class="page-content" id="page-home" style="display: none">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div class="title">
+          <h1 style="margin:0;">الرئيسية</h1>
+          <p style="margin:0; font-size:12px; opacity:0.6;">إحصائيات وطلبات اليوم مباشرة</p>
+        </div>
+        <div id="ws_status_badge" style="display:flex; align-items:center; gap:8px; background: rgba(255,255,255,0.05); padding: 6px 12px; border-radius: 20px; font-size: 11px;">
+           <div id="ws_status_dot" style="width:8px; height:8px; border-radius:50%; background: #999;"></div>
+           <span id="ws_status_text">جاري الاتصال...</span>
         </div>
       </div>
-
-      <!-- ===== صفحة الرئيسية ===== -->
-      <div class="page-content" id="page-home" style="display: none">
-        <div class="container1">
-          <div class="card">
-            <h1>عدد الطلبات</h1>
-            <h2>طلب اليوم 200</h2>
-            <span>8% من أمس</span>
-          </div>
-          <div class="card">
-            <h1>إجمالي المبيعات اليوم</h1>
-            <h2>3000 ج.م</h2>
-            <span>25% من امس</span>
-          </div>
-          <div class="card">
-            <h1>أكتر صنف مبيعا</h1>
-            <h2>كبده مقلية</h2>
-            <span>50 طلب</span>
-          </div>
+      
+      <div class="container1">
+        <div class="card">
+          <h1>عدد الطلبات</h1>
+          <h2 id="stat_total_orders">0</h2>
+          <span id="stat_total_orders_trend">--</span>
         </div>
-        <div class="container2">
-          <div class="card">
-            <h1>الطلبات المكتمله</h1>
-            <h2>طلب اليوم 150</h2>
-          </div>
-          <div class="card">
-            <h1>الطلبات الملغية</h1>
-            <h2>10 طلبات</h2>
-            <span>5% من امس</span>
-          </div>
-          <div class="card">
-            <h1>الطلبات الجاريه</h1>
-            <h2>40 طلب</h2>
-          </div>
+        <div class="card">
+          <h1>إجمالي المبيعات اليوم</h1>
+          <h2 id="stat_total_sales">0 ج.م</h2>
+          <span id="stat_total_sales_trend">--</span>
         </div>
-         <div class="table_structure_unified">
-          <div class="table_scroll_unified">
-            <table class="orders_table">
-              <thead>
-                <tr>
-                  <th>رقم الطلب</th>
-                  <th>العميل</th>
-                  <th>الاصناف</th>
-                  <th>المجموع</th>
-                  <th>الحالة</th>
-                  <th>الوقت</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>#5</td>
-                  <td>محمد السيد</td>
-                  <td>2 كبدة , 3 كفته , 1/2 فرخه مشوية</td>
-                  <td>200ج</td>
-                  <td class="status_new">جديد</td>
-                  <td>10:30م</td>
-                </tr>
-                <tr>
-                  <td>#5</td>
-                  <td>محمد السيد</td>
-                  <td>2 كبدة , 3 كفته , 1/2 فرخه مشوية</td>
-                  <td>200ج</td>
-                  <td class="status_new">جديد</td>
-                  <td>10:30م</td>
-                </tr>
-                <tr>
-                  <td>#5</td>
-                  <td>محمد السيد</td>
-                  <td>2 كبدة , 3 كفته , 1/2 فرخه مشوية</td>
-                  <td>200ج</td>
-                  <td class="status_new">جديد</td>
-                  <td>10:30م</td>
-                </tr>
-                <tr>
-                  <td>#5</td>
-                  <td>محمد السيد</td>
-                  <td>2 كبدة , 3 كفته , 1/2 فرخه مشوية</td>
-                  <td>200ج</td>
-                  <td class="status_new">جديد</td>
-                  <td>10:30م</td>
-                </tr>
-                <tr>
-                  <td>#5</td>
-                  <td>محمد السيد</td>
-                  <td>2 كبدة , 3 كفته , 1/2 فرخه مشوية</td>
-                  <td>200ج</td>
-                  <td class="status_new">جديد</td>
-                  <td>10:30م</td>
-                </tr>
-                <tr>
-                  <td>#4</td>
-                  <td>أحمد علي</td>
-                  <td>1 كبدة , 2 كفته , 1/4 فرخه مشوية</td>
-                  <td>150ج</td>
-                  <td class="status_completed">مكتمل</td>
-                  <td>9:45م</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="card">
+          <h1>أكتر صنف مبيعا</h1>
+          <h2 id="stat_top_product">---</h2>
+          <span id="stat_top_product_count">0 طلب</span>
         </div>
       </div>
+      <div class="container2">
+        <div class="card">
+          <h1>الطلبات المكتمله</h1>
+          <h2 id="stat_completed_orders">0</h2>
+        </div>
+        <div class="card">
+          <h1>الطلبات الملغية</h1>
+          <h2 id="stat_cancelled_orders">0</h2>
+          <span id="stat_cancelled_trend">--</span>
+        </div>
+        <div class="card">
+          <h1>الطلبات الجاريه</h1>
+          <h2 id="stat_active_orders">0</h2>
+        </div>
+      </div>
+      <div class="table_structure_unified">
+        <div class="table_scroll_unified">
+          <table class="orders_table" id="home_orders_table">
+            <thead>
+              <tr>
+                <th>رقم الطلب</th>
+                <th>العميل</th>
+                <th>الاصناف</th>
+                <th>المجموع</th>
+                <th>الحالة</th>
+                <th>الوقت</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="6" style="text-align:center; padding:40px; opacity:0.5;">جاري تحميل الطلبات...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
-      <!-- ===== صفحة إدارة الأصناف ===== -->
-      <div class="page-content" id="page-items" style="display: none">
-        <div class="title_btn">
-          <div class="title">
-            <h1>قائمة الاصناف</h1>
-            <h2>إدارة جميع أصناف المطعم</h2>
-          </div>
-          <button class="add_btn">+ إضافه صنف</button>
+    <!-- ===== صفحة إدارة الأصناف ===== -->
+    <div class="page-content" id="page-items" style="display: none">
+      <div class="title_btn">
+        <div class="title">
+          <h1>قائمة الاصناف</h1>
+          <h2>إدارة جميع أصناف المطعم</h2>
         </div>
-        <div class="table_structure_unified">
-          <div class="search_unified_wrapper">
-            <input class="search-bar" type="text" placeholder="🔍 بحث عن صنف" />
-          </div>
-          <div class="table_scroll_unified">
-            <table class="orders_table_items">
-              <thead>
-                <tr class="no_borer_bottom">
-                  <th>الصنف</th>
-                  <th>التصنيف</th>
-                  <th>السعر</th>
-                  <th>الحالة</th>
-                  <th>الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
+        <button class="add_btn">+ إضافه صنف</button>
+      </div>
+      <div class="table_structure_unified">
+        <div class="search_unified_wrapper">
+          <input class="search-bar" type="text" placeholder="🔍 بحث عن صنف" />
         </div>
-        <div class="modal">
-          <div class="modal_container">
-            <div class="exit"><img src="/assets/Export.png" alt="" /></div>
-            <div class="logo_title_modal">
-              <img src="/assets/توب شيف 1.png" alt="" />
-              <h1>أضف صنف جديد</h1>
-            </div>
-            <div class="form_modal">
-              <form id="productForm">
-                <div class="name_desc">
-                  <input class="inp" type="text" placeholder="اسم الصنف" />
-                  
-                </div>
-                <input
-                    class="inp"
-                    type="text"
-                    id="desc_input"
-                    placeholder="وصف الصنف"
-                  />
+        <div class="table_scroll_unified">
+          <table class="orders_table_items">
+            <thead>
+              <tr class="no_borer_bottom">
+                <th>الصنف</th>
+                <th>التصنيف</th>
+                <th>السعر</th>
+                <th>الحالة</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal">
+        <div class="modal_container">
+          <div class="exit"><img src="/assets/Export.png" alt="" /></div>
+          <div class="logo_title_modal">
+            <img src="/assets/توب شيف 1.png" alt="" />
+            <h1>أضف صنف جديد</h1>
+          </div>
+          <div class="form_modal">
+            <form id="productForm">
+              <div class="name_desc">
+                <input class="inp" type="text" placeholder="اسم الصنف" />
 
-                <select id="cat_select"></select>
-                <select id="size_type">
-                  <option value="">نسخه البيع</option>
-                  <option value="one">حجم واحد</option>
-                  <option value="many">اكثر من حجم</option>
-                </select>
-                <input
-                  class="inp"
-                  type="text"
-                  placeholder="السعر"
-                  id="single_price"
-                />
-                <div id="multi_sizes_container"></div>
-                <div class="bttns-form">
-                  <button type="button" id="add_size_btn" style="display: none">
-                    +
-                  </button>
-                  <button type="submit" class="save_btn">إضافة</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-        <div class="warning_modal" style="display: none">
-          <div class="modal_container_warning">
-            <div class="warning_exit">
-              <img src="/assets/Export.png" alt="" />
-            </div>
-            <div class="warning_container">
-              <h1>تحذير</h1>
-              <p>هل أنت متأكد من حذف هذا الصنف؟</p>
-            </div>
-            <div class="bttns"><button class="confirm_btn">موافق</button></div>
+              </div>
+              <input class="inp" type="text" id="desc_input" placeholder="وصف الصنف" />
+
+              <select id="cat_select"></select>
+              <select id="size_type">
+                <option value="">نسخه البيع</option>
+                <option value="one">حجم واحد</option>
+                <option value="many">اكثر من حجم</option>
+              </select>
+              <input class="inp" type="text" placeholder="السعر" id="single_price" />
+              <div id="multi_sizes_container"></div>
+              <div class="bttns-form">
+                <button type="button" id="add_size_btn" style="display: none">
+                  +
+                </button>
+                <button type="submit" class="save_btn">إضافة</button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
+      <div class="warning_modal" style="display: none">
+        <div class="modal_container_warning">
+          <div class="warning_exit">
+            <img src="/assets/Export.png" alt="" />
+          </div>
+          <div class="warning_container">
+            <h1>تحذير</h1>
+            <p>هل أنت متأكد من حذف هذا الصنف؟</p>
+          </div>
+          <div class="bttns"><button class="confirm_btn">موافق</button></div>
+        </div>
+      </div>
+    </div>
 
-      <!-- ===== صفحة التصنيفات ===== -->
-      <div class="page-content" id="page-categories" style="display: none">
-        <div class="title_btn">
-          <div class="title">
-            <h1>قائمة التصنيفات</h1>
-            <h2>إدارة جميع تصنيفات المطعم</h2>
-          </div>
-          <button class="add_category_btn">+ إضافه تصنيف</button>
+    <!-- ===== صفحة التصنيفات ===== -->
+    <div class="page-content" id="page-categories" style="display: none">
+      <div class="title_btn">
+        <div class="title">
+          <h1>قائمة التصنيفات</h1>
+          <h2>إدارة جميع تصنيفات المطعم</h2>
         </div>
-        <div class="table_structure_unified">
-          <div class="table_scroll_unified">
-            <table class="orders_table">
-              <thead>
-                <tr class="no_borer_bottom">
-                  <th>التصنيف</th>
-                  <th>عدد الاصناف</th>
-                  <th>الحالة</th>
-                  <th>الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
+        <button class="add_category_btn">+ إضافه تصنيف</button>
+      </div>
+      <div class="table_structure_unified">
+        <div class="table_scroll_unified">
+          <table class="orders_table">
+            <thead>
+              <tr class="no_borer_bottom">
+                <th>التصنيف</th>
+                <th>عدد الاصناف</th>
+                <th>الحالة</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
-        <div class="category_modal">
-          <div class="modal_container">
-            <div class="category_exit">
-              <img src="/assets/Export.png" alt="" />
-            </div>
-            <div class="logo_title_modal">
-              <img src="/assets/توب شيف 1.png" alt="" />
-              <h1>أضف تصنيف جديد</h1>
-            </div>
-            <div class="form_category_modal">
-              <input type="text" placeholder=" اسم التصنيف" />
-              <!-- <div class="status">
+      </div>
+      <div class="category_modal">
+        <div class="modal_container">
+          <div class="category_exit">
+            <img src="/assets/Export.png" alt="" />
+          </div>
+          <div class="logo_title_modal">
+            <img src="/assets/توب شيف 1.png" alt="" />
+            <h1>أضف تصنيف جديد</h1>
+          </div>
+          <div class="form_category_modal">
+            <input type="text" placeholder=" اسم التصنيف" />
+            <!-- <div class="status">
               <p>الحالة</p>
               <div class="switch" id="switch_cat"><div class="circle"></div></div>
             </div> -->
-            </div>
-            <div class="bttns">
-              <button class="add_category_btn">حفظ</button>
-              <button class="cancel_category_btn">إلغاء</button>
-            </div>
           </div>
-        </div>
-        <div class="warning_modal">
-          <div class="modal_container_warning">
-            <div class="warning_exit">
-              <img src="/assets/Export.png" alt="" />
-            </div>
-            <div class="warning_container">
-              <h1>تحذير</h1>
-              <p>اذا تم حذف التصنيف يتم حذف جميع الاصناف بداخله تلقائيا</p>
-            </div>
-            <div class="bttns"><button class="confirm_btn">موافق</button></div>
+          <div class="bttns">
+            <button class="add_category_btn">حفظ</button>
+            <button class="cancel_category_btn">إلغاء</button>
           </div>
         </div>
       </div>
-
-      <!-- ===== صفحة المستخدمين ===== -->
-      <div class="page-content" id="page-delivery" style="display: none">
-        <div class="title_btn">
-          <div class="title">
-            <h1>قائمة الدليفري</h1>
-            <h2>إدارة جميع المستخدمين</h2>
-          </div>
-          <button class="add_btn_delivery">+ إضافه مستخدم</button>
-        </div>
-        <div class="table_structure_unified">
-          <div class="table_scroll_unified">
-            <table class="orders_table_delivery" >
-              <thead>
-                <tr class="no_borer_bottom">
-                  <th>الاسم بالكامل</th>
-                  <th>اسم المستخدم</th>
-                  <th>رقم التليفون</th>
-                  <th>الوظيفه</th>
-                  <th>الحالة</th>
-                  <th>الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="delivery_modal">
-          <div class="modal_container_delivery">
-            <div class="exit"><img src="/assets/Export.png" alt="" /></div>
-            <div class="logo_title_modal_delivery">
-              <img src="/assets/توب شيف 1.png" alt="" />
-              <h1>أضف دليفري جديد</h1>
-            </div>
-            <div class="form_modal_delivery">
-              <form class="delivery_form">
-                <input type="text" placeholder="الاسم بالكامل" id="full_name_input" />
-                <input type="text" placeholder="اسم المستخدم" id="username_input" />
-                <select name="role" id="role">
-                  <option value="admin">ادمن</option>
-                  <option value="delivery">دليفري</option>
-                  <option value="cashier">كاشير</option>
-                </select>
-                <input type="text" placeholder="رقم التليفون" />
-                <div class="password_wrapper">
-                  <input type="password" placeholder="كلمه السر" />
-                  <span class="toggle_password">
-                    <svg class="eye_icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                    <svg class="eye_off_icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
-                    </svg>
-                  </span>
-                </div>
-                <div class="bttns">
-                  <button type="submit" class="save_delivery_btn">حفظ</button>
-                  <button class="cancel_category_btn">إلغاء</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-        <div class="warning_modal" style="display: none">
-          <div class="modal_container_warning">
-            <div class="warning_exit">
-              <img src="/assets/Export.png" alt="" />
-            </div>
-            <div class="warning_container">
-              <h1>تحذير</h1>
-              <p>هل أنت متأكد من حذف هذا المستخدم؟</p>
-            </div>
-            <div class="bttns"><button class="confirm_btn">موافق</button></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== صفحة التقارير ===== -->
-      <div class="page-content" id="page-reports" style="display: none">
-        <div class="reports_btn">
-          <button id="monthlyBtn" class="filter-btn" data-period="month">
-            شهري
-          </button>
-          <button id="weeklyBtn" class="filter-btn" data-period="week">
-            أسبوعي
-          </button>
-          <button id="dailyBtn" class="filter-btn" data-period="day">
-            يومي
-          </button>
-        </div>
-        <div class="container1_reports">
-          <div class="card_reports">
-            <h1>إجمالي المبيعات</h1>
-            <h2>3000 ج.م</h2>
-            <span>25% من امس</span>
-          </div>
-          <div class="card_reports">
-            <h1>عدد طلبات الصالة</h1>
-            <h2>25 طلب</h2>
-            <span>25% من امس</span>
-          </div>
-          <div class="card_reports">
-            <h1>أكتر صنف مبيعا</h1>
-            <h2>كبده مقلية</h2>
-            <span>50 طلب</span>
-          </div>
-        </div>
-        <div class="container2_reports">
-          <div class="card_reports">
-            <h1>عدد الطلبات الملغية</h1>
-            <h2>طلب اليوم 10</h2>
-          </div>
-          <div class="card_reports">
-            <h1>عدد الطلبات المكتملة</h1>
-            <h2>150 طلبات</h2>
-            <span>5% من امس</span>
-          </div>
-          <div class="card_reports">
-            <h1>أكتر تصنف مبيعا</h1>
-            <h2>السندوتشات</h2>
-            <span>50 طلب</span>
-          </div>
-        </div>
-        <div class="container3_reports">
-          <div class="card_reports">
-            <h1>عدد طلبات الدليفري</h1>
-            <h2>50 طلب</h2>
-            <span>15% من امس</span>
-          </div>
-          <div class="card_reports">
-            <h1>عدد اقل الاصناف مبيعا</h1>
-            <h2>5 صنف</h2>
-          </div>
-          <div class="card_reports">
-            <h1>اقل التصنيفات مبيعا</h1>
-            <h2>1 تصنيف</h2>
-          </div>
-        </div>
-        <div class="reports_modal">
-          <div class="exit_reports_modal">
+      <div class="warning_modal">
+        <div class="modal_container_warning">
+          <div class="warning_exit">
             <img src="/assets/Export.png" alt="" />
           </div>
-          <div class="title_report"></div>
-          <div class="logo_report">
-            <img src="/assets/توب شيف 1@2x.png" alt="" />
+          <div class="warning_container">
+            <h1>تحذير</h1>
+            <p>اذا تم حذف التصنيف يتم حذف جميع الاصناف بداخله تلقائيا</p>
           </div>
-          <!-- <div class="reports_modal_container">
+          <div class="bttns"><button class="confirm_btn">موافق</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== صفحة المستخدمين ===== -->
+    <div class="page-content" id="page-delivery" style="display: none">
+      <div class="title_btn">
+        <div class="title">
+          <h1>قائمة الدليفري</h1>
+          <h2>إدارة جميع المستخدمين</h2>
+        </div>
+        <button class="add_btn_delivery">+ إضافه مستخدم</button>
+      </div>
+      <div class="table_structure_unified">
+        <div class="table_scroll_unified">
+          <table class="orders_table_delivery">
+            <thead>
+              <tr class="no_borer_bottom">
+                <th>الاسم بالكامل</th>
+                <th>اسم المستخدم</th>
+                <th>رقم التليفون</th>
+                <th>الوظيفه</th>
+                <th>الحالة</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="delivery_modal">
+        <div class="modal_container_delivery">
+          <div class="exit"><img src="/assets/Export.png" alt="" /></div>
+          <div class="logo_title_modal_delivery">
+            <img src="/assets/توب شيف 1.png" alt="" />
+            <h1>أضف دليفري جديد</h1>
+          </div>
+          <div class="form_modal_delivery">
+            <form class="delivery_form">
+              <input type="text" placeholder="الاسم بالكامل" id="full_name_input" />
+              <input type="text" placeholder="اسم المستخدم" id="username_input" />
+              <select name="role" id="role">
+                <option value="admin">ادمن</option>
+                <option value="delivery">دليفري</option>
+                <option value="cashier">كاشير</option>
+              </select>
+              <input type="text" placeholder="رقم التليفون" />
+              <div class="password_wrapper">
+                <input type="password" placeholder="كلمه السر" />
+                <span class="toggle_password">
+                  <svg class="eye_icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg class="eye_off_icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" style="display:none">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                </span>
+              </div>
+              <div class="bttns">
+                <button type="submit" class="save_delivery_btn">حفظ</button>
+                <button class="cancel_category_btn">إلغاء</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="warning_modal" style="display: none">
+        <div class="modal_container_warning">
+          <div class="warning_exit">
+            <img src="/assets/Export.png" alt="" />
+          </div>
+          <div class="warning_container">
+            <h1>تحذير</h1>
+            <p>هل أنت متأكد من حذف هذا المستخدم؟</p>
+          </div>
+          <div class="bttns"><button class="confirm_btn">موافق</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== صفحة التقارير ===== -->
+    <div class="page-content" id="page-reports" style="display: none">
+      <div class="reports_btn">
+        <button id="monthlyBtn" class="filter-btn" data-period="month">
+          شهري
+        </button>
+        <button id="weeklyBtn" class="filter-btn" data-period="week">
+          أسبوعي
+        </button>
+        <button id="dailyBtn" class="filter-btn" data-period="day">
+          يومي
+        </button>
+      </div>
+      <div class="container1_reports">
+        <div class="card_reports">
+          <h1>إجمالي المبيعات</h1>
+          <h2>3000 ج.م</h2>
+          <span>25% من امس</span>
+        </div>
+        <div class="card_reports">
+          <h1>عدد طلبات الصالة</h1>
+          <h2>25 طلب</h2>
+          <span>25% من امس</span>
+        </div>
+        <div class="card_reports">
+          <h1>أكتر صنف مبيعا</h1>
+          <h2>كبده مقلية</h2>
+          <span>50 طلب</span>
+        </div>
+      </div>
+      <div class="container2_reports">
+        <div class="card_reports">
+          <h1>عدد الطلبات الملغية</h1>
+          <h2>طلب اليوم 10</h2>
+        </div>
+        <div class="card_reports">
+          <h1>عدد الطلبات المكتملة</h1>
+          <h2>150 طلبات</h2>
+          <span>5% من امس</span>
+        </div>
+        <div class="card_reports">
+          <h1>أكتر تصنف مبيعا</h1>
+          <h2>السندوتشات</h2>
+          <span>50 طلب</span>
+        </div>
+      </div>
+      <div class="container3_reports">
+        <div class="card_reports">
+          <h1>عدد طلبات الدليفري</h1>
+          <h2>50 طلب</h2>
+          <span>15% من امس</span>
+        </div>
+        <div class="card_reports">
+          <h1>عدد اقل الاصناف مبيعا</h1>
+          <h2>5 صنف</h2>
+        </div>
+        <div class="card_reports">
+          <h1>اقل التصنيفات مبيعا</h1>
+          <h2>1 تصنيف</h2>
+        </div>
+      </div>
+      <div class="reports_modal">
+        <div class="exit_reports_modal">
+          <img src="/assets/Export.png" alt="" />
+        </div>
+        <div class="title_report"></div>
+        <div class="logo_report">
+          <img src="/assets/توب شيف 1@2x.png" alt="" />
+        </div>
+        <!-- <div class="reports_modal_container">
             <canvas id="itemsChart"></canvas>
             <canvas id="categoriesChart"></canvas>
           </div> -->
-          <div class="table_structure_reports">
-            <table class="orders_table_reports">
-              <thead>
-                <tr>
-                  <th>رقم الطلب</th>
-                  <th>نوع الطلب</th>
-                  <th>الاصناف</th>
-                  <th>المجموع</th>
-                  <th>الوقت</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>#5</td>
-                  <td>صالة</td>
-                  <td>2 كبدة , 3 كفته</td>
-                  <td>200ج</td>
-                  <td>10:30م</td>
-                </tr>
-                <tr>
-                  <td>#5</td>
-                  <td>دليفري</td>
-                  <td>2 كبدة , 3 كفته</td>
-                  <td>200ج</td>
-                  <td>10:30م</td>
-                </tr>
-                <tr>
-                  <td>#5</td>
-                  <td>اون لاين</td>
-                  <td>2 كبدة , 3 كفته</td>
-                  <td>200ج</td>
-                  <td>10:30م</td>
-                </tr>
-                <tr class="final_row">
-                  <td>#4</td>
-                  <td>دليفري</td>
-                  <td>1 كبدة , 2 كفته</td>
-                  <td>150ج</td>
-                  <td>9:45م</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="printBtn">
-            <button id="printBtn">طباعة التقرير</button>
-          </div>
+        <div class="table_structure_reports">
+          <table class="orders_table_reports">
+            <thead>
+              <tr>
+                <th>رقم الطلب</th>
+                <th>نوع الطلب</th>
+                <th>الاصناف</th>
+                <th>المجموع</th>
+                <th>الوقت</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>#5</td>
+                <td>صالة</td>
+                <td>2 كبدة , 3 كفته</td>
+                <td>200ج</td>
+                <td>10:30م</td>
+              </tr>
+              <tr>
+                <td>#5</td>
+                <td>دليفري</td>
+                <td>2 كبدة , 3 كفته</td>
+                <td>200ج</td>
+                <td>10:30م</td>
+              </tr>
+              <tr>
+                <td>#5</td>
+                <td>اون لاين</td>
+                <td>2 كبدة , 3 كفته</td>
+                <td>200ج</td>
+                <td>10:30م</td>
+              </tr>
+              <tr class="final_row">
+                <td>#4</td>
+                <td>دليفري</td>
+                <td>1 كبدة , 2 كفته</td>
+                <td>150ج</td>
+                <td>9:45م</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="printBtn">
+          <button id="printBtn">طباعة التقرير</button>
         </div>
       </div>
+    </div>
 
-      <!-- ===== صفحة الأحداث والمزامنة ===== -->
-      <div class="page-content" id="page-events" style="display: none">
-        <div class="title_btn">
-          <div class="title">
-            <h1>حالة المزامنة والربط</h1>
-            <h2>مراقبة تدفق البيانات بين الجهاز والسحابة</h2>
-          </div>
-          <button class="add_btn" style="background: var(--color-primary); color: #000;" onclick="refreshSyncStatus()">تحديث الحالة</button>
+    <!-- ===== صفحة الأحداث والمزامنة ===== -->
+    <div class="page-content" id="page-events" style="display: none">
+      <div class="title_btn">
+        <div class="title">
+          <h1>حالة المزامنة والربط</h1>
+          <h2>مراقبة تدفق البيانات بين الجهاز والسحابة</h2>
         </div>
-        
-        <div class="container1" id="sync_stats_container" style="margin-bottom: 20px;">
-           <!-- سيتم تحميل الكروت هنا -->
-        </div>
-
-        <div id="failed_events_section" style="display:none">
-          <div class="table_structure_unified">
-            <div style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
-              <div>
-                <h3 style="color: #e74c3c; margin: 0; font-size: 16px;">أحداث فشلت مزامنتها (DLQ)</h3>
-                <p style="font-size: 11px; opacity: 0.6; margin: 5px 0 0 0;">هذه الأحداث توقفت بعد محاولات فاشلة متكررة. تتطلب مراجعة إدارية.</p>
-              </div>
-            </div>
-            <div class="table_scroll_unified">
-              <table class="orders_table" id="failed_events_table">
-                <thead>
-                  <tr>
-                    <th>المعرف</th>
-                    <th>النوع</th>
-                    <th>الموضوع</th>
-                    <th>الخطأ</th>
-                    <th>المحاولات</th>
-                    <th>التوقيت</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        
-        <div id="cloud_device_stats" style="display:none">
-          <div class="table_structure_unified">
-             <div style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-              <h3 style="margin: 0; font-size: 16px;">إحصائيات الأجهزة المتصلة (السحابة)</h3>
-            </div>
-            <div class="table_scroll_unified">
-              <table class="orders_table" id="device_stats_table">
-                <thead>
-                  <tr>
-                    <th>معرف الجهاز</th>
-                    <th>إجمالي الأحداث المستلمة</th>
-                    <th>الحالة</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <button class="add_btn" style="background: var(--color-primary); color: #000;"
+          onclick="refreshSyncStatus()">تحديث الحالة</button>
       </div>
 
-      <!-- ===== صفحة العروض ===== -->
-      <div class="page-content" id="page-offers" style="display: none">
-        <div class="title_btn_offers">
-          <div class="title_offers">
-            <h1>قائمة العروض</h1>
-            <h2>إدارة جميع العروض</h2>
+      <div class="container1" id="sync_stats_container" style="margin-bottom: 20px;">
+        <!-- سيتم تحميل الكروت هنا -->
+      </div>
+
+      <div id="failed_events_section" style="display:none">
+        <div class="table_structure_unified">
+          <div
+            style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <h3 style="color: #e74c3c; margin: 0; font-size: 16px;">أحداث فشلت مزامنتها (DLQ)</h3>
+              <p style="font-size: 11px; opacity: 0.6; margin: 5px 0 0 0;">هذه الأحداث توقفت بعد محاولات فاشلة متكررة.
+                تتطلب مراجعة إدارية.</p>
+            </div>
           </div>
-          <button class="add_btn_offers">+ إضافه عرض</button>
-        </div>
-        <div class="table_structure_offers">
-          <div class="search_offers_wrapper">
-            <input
-              class="search-bar-offers"
-              type="text"
-              placeholder="🔍 بحث عن عرض"
-            />
-          </div>
-          <div class="offers_table_scroll">
-            <table class="orders_table_offers">
+          <div class="table_scroll_unified">
+            <table class="orders_table" id="failed_events_table">
               <thead>
-                <tr class="offers_head_row">
-                  <th>كود العرض</th>
+                <tr>
+                  <th>المعرف</th>
                   <th>النوع</th>
-                  <th>قيمة الخصم</th>
-                  <th>أقل طلب</th>
-                  <th>أقصى خصم</th>
-                  <th>مرات الاستخدام</th>
-                  <th>لكل عميل</th>
-                  <th>صالح من</th>
-                  <th>صالح إلى</th>
-                  <th>الحالة</th>
-                  <th>الإجراءات</th>
+                  <th>الموضوع</th>
+                  <th>الخطأ</th>
+                  <th>المحاولات</th>
+                  <th>التوقيت</th>
                 </tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
         </div>
-        <div class="offers_modal">
-          <div class="offers_modal_container">
-            <div class="offers_exit">
-              <img src="/assets/Export.png" alt="" />
-            </div>
-            <div class="logo_title_modal_offers">
-              <img src="/assets/توب شيف 1.png" alt="" />
-              <h1>أضف عرض جديد</h1>
-            </div>
-            <div class="form_modal_offers">
-              <form class="offer-form">
-                <div class="form-grid">
-                  <div class="form-group-3inputs">
-                    <!-- كود العرض -->
-                    <div class="form-group">
-                      <label>كود العرض</label>
-                      <input type="text" placeholder="مثال: SAVE20" />
-                    </div>
+      </div>
 
-                    <!-- نوع العرض -->
-                    <div class="form-group">
-                      <label>نوع العرض</label>
-                      <select class="form-group-select">
-                        <option disabled selected>نوع العرض</option>
-                        <option>نسبة مئوية</option>
-                        <option>خصم ثابت</option>
-                        <option>اشترِ واحد وخذ واحد</option>
-                        <option>خصم موسمي</option>
-                        <option>كود ترويجي</option>
-                        <option>خصم كميات</option>
-                      </select>
-                    </div>
+      <div id="cloud_device_stats" style="display:none">
+        <div class="table_structure_unified">
+          <div style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <h3 style="margin: 0; font-size: 16px;">إحصائيات الأجهزة المتصلة (السحابة)</h3>
+          </div>
+          <div class="table_scroll_unified">
+            <table class="orders_table" id="device_stats_table">
+              <thead>
+                <tr>
+                  <th>معرف الجهاز</th>
+                  <th>إجمالي الأحداث المستلمة</th>
+                  <th>الحالة</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
 
-                    <!-- قيمة الخصم -->
-                    <div class="form-group-price">
-                      <label>قيمة الخصم</label>
-                      <input type="text" />
-                    </div>
+    <!-- ===== صفحة العروض ===== -->
+    <div class="page-content" id="page-offers" style="display: none">
+      <div class="title_btn_offers">
+        <div class="title_offers">
+          <h1>قائمة العروض</h1>
+          <h2>إدارة جميع العروض</h2>
+        </div>
+        <button class="add_btn_offers">+ إضافه عرض</button>
+      </div>
+      <div class="table_structure_offers">
+        <div class="search_offers_wrapper">
+          <input class="search-bar-offers" type="text" placeholder="🔍 بحث عن عرض" />
+        </div>
+        <div class="offers_table_scroll">
+          <table class="orders_table_offers">
+            <thead>
+              <tr class="offers_head_row">
+                <th>كود العرض</th>
+                <th>النوع</th>
+                <th>قيمة الخصم</th>
+                <th>أقل طلب</th>
+                <th>أقصى خصم</th>
+                <th>مرات الاستخدام</th>
+                <th>لكل عميل</th>
+                <th>صالح من</th>
+                <th>صالح إلى</th>
+                <th>الحالة</th>
+                <th>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="offers_modal">
+        <div class="offers_modal_container">
+          <div class="offers_exit">
+            <img src="/assets/Export.png" alt="" />
+          </div>
+          <div class="logo_title_modal_offers">
+            <img src="/assets/توب شيف 1.png" alt="" />
+            <h1>أضف عرض جديد</h1>
+          </div>
+          <div class="form_modal_offers">
+            <form class="offer-form">
+              <div class="form-grid">
+                <div class="form-group-3inputs">
+                  <!-- كود العرض -->
+                  <div class="form-group">
+                    <label>كود العرض</label>
+                    <input type="text" placeholder="مثال: SAVE20" />
                   </div>
-                  <div class="form-group-amount">
-                    <!-- أقل كمية -->
-                    <div class="form-group-amoun">
-                      <label>أقل كمية</label>
-                      <input type="text" />
-                    </div>
 
-                    <!-- أقصى كمية -->
-                    <div class="form-group-amoun">
-                      <label>أقصى كمية</label>
-                      <input type="text" />
-                    </div>
-                  </div>
-                  <div class="form-group-number">
-                    <!-- عدد مرات استخدام العرض -->
-                    <div class="form-group-num">
-                      <label>عدد مرات استخدام العرض</label>
-                      <input type="text" />
-                    </div>
-
-                    <!-- عدد مرات استخدام العميل -->
-                    <div class="form-group-num">
-                      <label>عدد مرات استخدام العميل</label>
-                      <input type="text" />
-                    </div>
+                  <!-- نوع العرض -->
+                  <div class="form-group">
+                    <label>نوع العرض</label>
+                    <select class="form-group-select">
+                      <option disabled selected>نوع العرض</option>
+                      <option>نسبة مئوية</option>
+                      <option>خصم ثابت</option>
+                      <option>اشترِ واحد وخذ واحد</option>
+                      <option>خصم موسمي</option>
+                      <option>كود ترويجي</option>
+                      <option>خصم كميات</option>
+                    </select>
                   </div>
 
-                  <div class="status_offers">
-                    <p>الحالة</p>
-                    <div class="switch"><div class="circle"></div></div>
+                  <!-- قيمة الخصم -->
+                  <div class="form-group-price">
+                    <label>قيمة الخصم</label>
+                    <input type="text" />
+                  </div>
+                </div>
+                <div class="form-group-amount">
+                  <!-- أقل كمية -->
+                  <div class="form-group-amoun">
+                    <label>أقل كمية</label>
+                    <input type="text" />
                   </div>
 
-                  <div class="form-group-date">
-                    <!-- من -->
-                    <div class="form-group-from">
-                      <label>متاح من</label>
-                      <input type="date" />
-                    </div>
+                  <!-- أقصى كمية -->
+                  <div class="form-group-amoun">
+                    <label>أقصى كمية</label>
+                    <input type="text" />
+                  </div>
+                </div>
+                <div class="form-group-number">
+                  <!-- عدد مرات استخدام العرض -->
+                  <div class="form-group-num">
+                    <label>عدد مرات استخدام العرض</label>
+                    <input type="text" />
+                  </div>
 
-                    <!-- إلى -->
-                    <div class="form-group-from">
-                      <label>إلى</label>
-                      <input type="date" />
-                    </div>
+                  <!-- عدد مرات استخدام العميل -->
+                  <div class="form-group-num">
+                    <label>عدد مرات استخدام العميل</label>
+                    <input type="text" />
                   </div>
                 </div>
 
-                <button class="form-group-submit-btn" type="submit">
-                  حفظ العرض
-                </button>
-              </form>
-            </div>
+                <div class="status_offers">
+                  <p>الحالة</p>
+                  <div class="switch">
+                    <div class="circle"></div>
+                  </div>
+                </div>
+
+                <div class="form-group-date">
+                  <!-- من -->
+                  <div class="form-group-from">
+                    <label>متاح من</label>
+                    <input type="date" />
+                  </div>
+
+                  <!-- إلى -->
+                  <div class="form-group-from">
+                    <label>إلى</label>
+                    <input type="date" />
+                  </div>
+                </div>
+              </div>
+
+              <button class="form-group-submit-btn" type="submit">
+                حفظ العرض
+              </button>
+            </form>
           </div>
         </div>
-
-        <!-- warning modal للعروض -->
-        <div class="offers_warning_modal" style="display:none">
-          <div class="modal_container_warning">
-            <div class="warning_exit offers_warning_exit">
-              <img src="/assets/Export.png" alt="" />
-            </div>
-            <div class="warning_container">
-              <h1>تحذير</h1>
-              <p>هل أنت متأكد من حذف هذا العرض؟</p>
-            </div>
-            <div class="bttns">
-              <button class="offers_confirm_delete_btn">موافق</button>
-            </div>
-          </div>
-        </div>
-
       </div>
-      <script>
-        window.REAL_API = window.location.origin;
 
-        window.apiUrl = function (path) {
-          return window.REAL_API + path;
-        };
+      <!-- warning modal للعروض -->
+      <div class="offers_warning_modal" style="display:none">
+        <div class="modal_container_warning">
+          <div class="warning_exit offers_warning_exit">
+            <img src="/assets/Export.png" alt="" />
+          </div>
+          <div class="warning_container">
+            <h1>تحذير</h1>
+            <p>هل أنت متأكد من حذف هذا العرض؟</p>
+          </div>
+          <div class="bttns">
+            <button class="offers_confirm_delete_btn">موافق</button>
+          </div>
+        </div>
+      </div>
 
-        window.getAuthToken = function () {
-          return localStorage.getItem("token");
-        };
+    </div>
+    <script>
+      window.REAL_API = window.location.origin;
 
-        window.activeFetchRequests = 0;
-        
-        window.showDashboardLoader = function(show) {
-          let loader = document.getElementById("global_page_loader");
-          if (!show) {
-            if (loader) loader.style.display = "none";
-            return;
-          }
+      window.apiUrl = function (path) {
+        return window.REAL_API + path;
+      };
 
-          if (!loader) {
-            loader = document.createElement("div");
-            loader.id = "global_page_loader";
-            loader.style.cssText = `
+      window.getAuthToken = function () {
+        return localStorage.getItem("token");
+      };
+
+      window.activeFetchRequests = 0;
+
+      window.showDashboardLoader = function (show) {
+        let loader = document.getElementById("global_page_loader");
+        if (!show) {
+          if (loader) loader.style.display = "none";
+          return;
+        }
+
+        if (!loader) {
+          loader = document.createElement("div");
+          loader.id = "global_page_loader";
+          loader.style.cssText = `
               position: fixed; inset: 0; background: rgba(15,12,6,0.95);
               display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100000;
             `;
-            loader.innerHTML = `
+          loader.innerHTML = `
               <div style="position: relative; display: flex; align-items: center; justify-content: center;">
                 <div style="width: 100px; height: 100px; border: 4px solid var(--color-primary-border, #f1c40f); border-top-color: var(--color-primary, #e67e22); border-radius: 50%; animation: spinLoader 1s linear infinite;"></div>
                 <img src="/assets/توب شيف 1.png" style="position: absolute; width: 60px; max-height: 60px; object-fit: contain;" alt="loader">
               </div>
               <p style="color: var(--color-primary, #f1c40f); font-family: Cairo, sans-serif; font-size: 16px; font-weight: 700; margin-top: 16px;">جاري التحميل...</p>
             `;
-            
-            if (!document.getElementById("loader_spin_style")) {
-              const style = document.createElement("style");
-              style.id = "loader_spin_style";
-              style.innerHTML = "@keyframes spinLoader { to { transform: rotate(360deg); } }";
-              document.head.appendChild(style);
-            }
 
-            document.body.appendChild(loader);
-          } else {
-            loader.style.display = "flex";
-          }
-        };
-
-        window.apiFetch = function (path, options = {}) {
-          const hideLoader = options.hideLoader === true;
-
-          if (!hideLoader) {
-            if (window.activeFetchRequests === 0) {
-              window.showDashboardLoader(true);
-            }
-            window.activeFetchRequests++;
+          if (!document.getElementById("loader_spin_style")) {
+            const style = document.createElement("style");
+            style.id = "loader_spin_style";
+            style.innerHTML = "@keyframes spinLoader { to { transform: rotate(360deg); } }";
+            document.head.appendChild(style);
           }
 
-          return fetch(window.REAL_API + path, {
-            ...options,
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": "Bearer " + window.getAuthToken(),
-              ...(options.headers || {}),
-            },
-          }).then(response => {
-            // التحقق من حالة المصادقة (401)
-            if (response.status === 401) {
-              console.warn("Unauthorized (401). Logging out...");
-              localStorage.clear();
-              window.location.replace("index.html");
-              return new Promise(() => {}); // إيقاف التسلسل
-            }
-            return response;
-          }).finally(() => {
-            if (!hideLoader) {
-              window.activeFetchRequests--;
-              if (window.activeFetchRequests <= 0) {
-                window.activeFetchRequests = 0;
-                window.showDashboardLoader(false);
-              }
-            }
-          });
-        };
+          document.body.appendChild(loader);
+        } else {
+          loader.style.display = "flex";
+        }
+      };
 
-        // ===== Auth Guard: لو مش مسجل دخول يرجع للـ login =====
-        (function () {
-          const token = localStorage.getItem("token");
-          if (!token) {
-            window.location.replace("index.html");
+      window.apiFetch = function (path, options = {}) {
+        const hideLoader = options.hideLoader === true;
+
+        if (!hideLoader) {
+          if (window.activeFetchRequests === 0) {
+            window.showDashboardLoader(true);
           }
-        })();
-      </script>
+          window.activeFetchRequests++;
+        }
 
-      <!-- ===== السكريبتات ===== -->
-      
-      
-      
-      <script src="js/Validation.js"></script>
-      <script src="js/product.js"></script>
-      <script src="js/category.js"></script>
-      <script src="js/delivery.js"></script>
-      <script src="js/offer.js"></script>
-      
-      <script src="js/chart.js"></script>
-      <script src="js/sync_monitoring.js?v=20260506-devices"></script>
-      <script src="js/admin.js"></script>
-      <script>
-        // ===== عرض اسم المستخدم =====
-        (function () {
-          const el = document.getElementById("admin_username");
-          if (el) {
-            const fullName = localStorage.getItem("full_name");
-            if (fullName) {
-              el.textContent = fullName;
-            } else {
-              // Fallback to username
-              el.textContent = localStorage.getItem("username") || "أدمن";
-              
-              // Try to fetch full name if user_id is available
-              const userId = localStorage.getItem("user_id");
-              if (userId && typeof window.apiFetch === "function") {
-                window.apiFetch(`/user/users/${userId}`).then(res => {
-                  if (res.ok) return res.json();
-                }).then(u => {
-                  if (u && u.full_name) {
-                    localStorage.setItem("full_name", u.full_name);
-                    el.textContent = u.full_name;
-                  }
-                }).catch(e => console.warn("Failed to update full_name in admin sidebar", e));
-              }
-            }
-          }
-        })();
-
-        // ===== تسجيل الخروج =====
-        document.getElementById("logout_btn").addEventListener("click", async function () {
-          try {
-            // محاولة إبلاغ السيرفر
-            await window.apiFetch("/auth/logout", { method: "POST" });
-          } catch (err) {
-            console.warn("Logout error:", err);
-          } finally {
+        return fetch(window.REAL_API + path, {
+          ...options,
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + window.getAuthToken(),
+            ...(options.headers || {}),
+          },
+        }).then(response => {
+          // التحقق من حالة المصادقة (401)
+          if (response.status === 401) {
+            console.warn("Unauthorized (401). Logging out...");
             localStorage.clear();
             window.location.replace("index.html");
+            return new Promise(() => { }); // إيقاف التسلسل
+          }
+          return response;
+        }).finally(() => {
+          if (!hideLoader) {
+            window.activeFetchRequests--;
+            if (window.activeFetchRequests <= 0) {
+              window.activeFetchRequests = 0;
+              window.showDashboardLoader(false);
+            }
           }
         });
-      </script>
-    </div>
-  </body>
+      };
+
+      // ===== Auth Guard: لو مش مسجل دخول يرجع للـ login =====
+      (function () {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          window.location.replace("index.html");
+        }
+      })();
+    </script>
+
+    <!-- ===== السكريبتات ===== -->
+    <script src="js/Validation.js"></script>
+    <script src="js/product.js"></script>
+    <script src="js/category.js"></script>
+    <script src="js/delivery.js"></script>
+    <script src="js/offer.js"></script>
+
+    <script src="js/chart.js"></script>
+    <script src="js/sync_monitoring.js?v=20260506-devices"></script>
+    <script src="js/orders_dashboard.js"></script>
+    <script src="js/admin.js"></script>
+    <script>
+      // ===== عرض اسم المستخدم =====
+      (function () {
+        const el = document.getElementById("admin_username");
+        if (el) {
+          const fullName = localStorage.getItem("full_name");
+          if (fullName) {
+            el.textContent = fullName;
+          } else {
+            // Fallback to username
+            el.textContent = localStorage.getItem("username") || "أدمن";
+
+            // Try to fetch full name if user_id is available
+            const userId = localStorage.getItem("user_id");
+            if (userId && typeof window.apiFetch === "function") {
+              window.apiFetch(`/user/users/${userId}`).then(res => {
+                if (res.ok) return res.json();
+              }).then(u => {
+                if (u && u.full_name) {
+                  localStorage.setItem("full_name", u.full_name);
+                  el.textContent = u.full_name;
+                }
+              }).catch(e => console.warn("Failed to update full_name in admin sidebar", e));
+            }
+          }
+        }
+      })();
+
+      // ===== تسجيل الخروج =====
+      document.getElementById("logout_btn").addEventListener("click", async function () {
+        try {
+          // محاولة إبلاغ السيرفر
+          await window.apiFetch("/auth/logout", { method: "POST" });
+        } catch (err) {
+          console.warn("Logout error:", err);
+        } finally {
+          localStorage.clear();
+          window.location.replace("index.html");
+        }
+      });
+    </script>
+  </div>
+</body>
+
 </html>

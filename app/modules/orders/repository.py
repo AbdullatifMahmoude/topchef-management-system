@@ -248,3 +248,32 @@ class OrderRepository:
         
         self.db.add(order)
         return order
+
+    async def get_today_stats(self) -> dict:
+        """Fetch aggregate stats for the current business shift."""
+        business_date = self.get_business_date()
+        
+        query = select(
+            func.count(models.Order.id).label("total_count"),
+            func.sum(models.Order.total_amount).label("total_sales"),
+            func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.COMPLETED).label("completed_count"),
+            func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.CANCELLED).label("cancelled_count"),
+        ).where(models.Order.order_date == business_date)
+        
+        result = await self.db.execute(query)
+        row = result.mappings().first()
+        
+        # Also get active orders (new or confirmed)
+        active_query = select(func.count(models.Order.id)).where(
+            models.Order.order_date == business_date,
+            models.Order.order_status.in_([OrderStatus.NEW, OrderStatus.CONFIRMED])
+        )
+        active_count = await self.db.scalar(active_query) or 0
+        
+        return {
+            "total_count": row["total_count"] or 0,
+            "total_sales": float(row["total_sales"] or 0),
+            "completed_count": row["completed_count"] or 0,
+            "cancelled_count": row["cancelled_count"] or 0,
+            "active_count": active_count
+        }
