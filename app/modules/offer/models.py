@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SA_Enum, Numeric, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.core.database import Base
+from app.core.database import Base, DbEnum
 from app.core.enums import DiscountType
 
 class Offer(Base):
@@ -10,7 +10,10 @@ class Offer(Base):
     offer_id = Column(Integer, primary_key=True, index=True)
     code = Column(String(255), nullable=False, unique=True)
     display_name = Column(String(255), nullable=True)
-    discount_type = Column(SA_Enum(DiscountType), nullable=False)
+    discount_type = Column(
+        DbEnum(DiscountType, name="discount_type"),
+        nullable=False,
+    )
     discount_value = Column(Numeric(10, 2), nullable=False)
     min_order_amount = Column(Numeric(10, 2), nullable=True) # Changed to Numeric for consistency
     min_quantity = Column(Integer, nullable=True)

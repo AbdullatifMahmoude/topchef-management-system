@@ -1,0 +1,148 @@
+[2026-05-06 19:09:47] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 19:09:47] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 19:09:47] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 19:09:47] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 19:09:47] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 19:09:50] INFO     topchef_desktop – Tray icon started
+[2026-05-06 19:09:50] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 19:09:50] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 19:22:58] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 19:22:58] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 19:22:58] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 19:22:58] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 19:22:58] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 19:23:00] INFO     topchef_desktop – Tray icon started
+[2026-05-06 19:23:00] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 19:23:00] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 19:23:16] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:19] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:21] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:23] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:25] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:28] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:30] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:32] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:34] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:37] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:39] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:41] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:43] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:46] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:48] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:50] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:53] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:55] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:57] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:23:59] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:02] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:04] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:06] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:08] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:10] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:13] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:15] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:17] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:19] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:22] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:24] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:26] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:24:28] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: customers.phone_number
+[SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
+[parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)

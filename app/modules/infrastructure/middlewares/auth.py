@@ -9,11 +9,15 @@ from app.core.logging import logger
 # Public paths that don't require authentication
 PUBLIC_PATHS = {
     "/",
+    "/index.html",
+    "/dashboard.html",
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/favicon.ico",
     "/auth/login",
     "/pricing/preview",
+    "/health",
 }
 
 
@@ -26,21 +30,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_PATHS or path.startswith(("/docs", "/redoc", "/openapi.json")):
             return await call_next(request)
 
-        # ─── 2. Static / Media Bypass (Optional but good if you have images) ───
-        if path.startswith("/static") or path.startswith("/media"):
+        # ─── 2. Static / Media / Frontend Assets Bypass ───
+        if path.startswith(("/static", "/media", "/assets", "/css", "/js", "/cashier")):
             return await call_next(request)
 
-        # ─── 3. Web Menu / Public API Bypass ───
-        # Allow viewing categories, products, and offers
+        # Allow viewing categories, products, offers, and comments
         if method == "GET" and (
             path.startswith("/menu/categories") or 
             path.startswith("/menu/products") or
-            path.startswith("/offers")
+            path.startswith("/offers") or
+            path.startswith("/comments")
         ):
             return await call_next(request)
         
-        # Allow creating orders (anonymous/guest orders)
-        if method == "POST" and path in ["/orders", "/orders/"]:
+        # Allow creating orders and comments (anonymous/guest)
+        if method == "POST" and (
+            path in ["/orders", "/orders/"] or
+            path in ["/comments", "/comments/"]
+        ):
              return await call_next(request)
 
         # ─── 4. Standard Auth Check ───

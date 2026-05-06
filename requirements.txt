@@ -9,4 +9,5 @@ passlib
 bcrypt==4.0.1
 python-json-logger
 asyncpg
+aiosqlite
 redis

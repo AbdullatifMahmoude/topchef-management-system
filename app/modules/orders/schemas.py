@@ -1,8 +1,9 @@
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator, AliasChoices
 from decimal import Decimal
 from app.core.enums import OrderType, OrderSource, OrderStatus
+from app.modules.customer.schemas import CustomerAddressResponse
 
 class OrderItemBase(BaseModel):
     product_id: int
@@ -22,7 +23,7 @@ class OrderBase(BaseModel):
     customer_phone: Optional[str] = None
     customer_name: Optional[str] = None
     order_type: OrderType
-    source: OrderSource = OrderSource.ONLINE
+    source: OrderSource = Field(OrderSource.ONLINE, validation_alias=AliasChoices("source", "order_source"))
     customer_notes: Optional[str] = None
     internal_notes: Optional[str] = None
 
@@ -30,9 +31,12 @@ class OrderCreate(OrderBase):
     items: List[OrderItemCreate]
     idempotency_key: Optional[str] = None
     address_id: Optional[int] = None
+    customer_address: Optional[str] = None
     delivery_person_id: Optional[int] = None
     delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
     offer_code: Optional[str] = None
+    order_number: Optional[str] = None
+    order_date: Optional[date] = None
     
     @field_validator('customer_id', 'address_id', 'delivery_person_id', mode='before')
     @classmethod
@@ -53,6 +57,26 @@ class OrderUpdate(BaseModel):
             return None
         return v
 
+class OrderUpdateFull(BaseModel):
+    """Comprehensive order update schema for patch endpoint."""
+    delivery_person_id: Optional[int] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_notes: Optional[str] = None
+    internal_notes: Optional[str] = None
+    address_id: Optional[int] = None
+    customer_address: Optional[str] = None
+    customer_id: Optional[int] = None
+    delivery_fee: Optional[Decimal] = None
+    items: Optional[List[OrderItemCreate]] = None
+
+    @field_validator('delivery_person_id', 'address_id', mode='before')
+    @classmethod
+    def convert_zero_to_none(cls, v):
+        if v == 0:
+            return None
+        return v
+
 class OrderResponse(OrderBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -67,6 +91,7 @@ class OrderResponse(OrderBase):
     items: List[OrderItemResponse]
     creator_name: Optional[str] = None
     delivery_person_name: Optional[str] = None
+    address: Optional[CustomerAddressResponse] = None
 
     @model_validator(mode='after')
     def validate_financial_integrity(self):

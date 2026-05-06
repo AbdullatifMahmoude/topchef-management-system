@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +60,16 @@ async def get_order_detail(
 ):
     return await service.get_order(order_id)
 
+@router.patch("/{order_id}", response_model=schemas.OrderResponse)
+async def update_order(
+    order_id: int,
+    update_data: schemas.OrderUpdateFull,
+    service: OrderService = Depends(get_order_service),
+    current_user: any = Depends(get_current_user)
+):
+    user_id = current_user.id if current_user else None
+    return await service.update_order(order_id, update_data, current_user_id=user_id)
+
 @router.patch("/{order_id}/status", response_model=schemas.OrderResponse)
 async def update_order_status(
     order_id: int,
@@ -69,14 +81,37 @@ async def update_order_status(
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)
 
 @router.websocket("/ws")
-async def websocket_orders(websocket: WebSocket):
-    await order_events_manager.connect(websocket)
+@router.websocket("/ws/{channel}")
+async def websocket_orders(
+    websocket: WebSocket,
+    channel: str = "default",
+    service: OrderService = Depends(get_order_service),
+):
+    await order_events_manager.connect(websocket, channel)
     try:
-        while True:
-            # Keep connection alive
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        order_events_manager.disconnect(websocket)
-    except Exception:
-        order_events_manager.disconnect(websocket)
+        if channel in {"cashier", "admin", "default"}:
+            total, orders = await service.list_orders_paginated(page=1, page_size=500)
+            await websocket.send_json({
+                "type": "ORDER_SNAPSHOT",
+                "data": {
+                    "total": total,
+                    "orders": [
+                        schemas.OrderResponse.model_validate(order).model_dump(mode="json")
+                        for order in orders
+                    ],
+                },
+            })
 
+        while True:
+            message = await websocket.receive_text()
+            try:
+                payload = json.loads(message)
+            except json.JSONDecodeError:
+                continue
+
+            if payload.get("type") in {"heartbeat", "HEARTBEAT"}:
+                await websocket.send_json({"type": "HEARTBEAT_ACK"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await order_events_manager.disconnect(websocket, channel)

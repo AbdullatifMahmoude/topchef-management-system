@@ -1,0 +1,20 @@
+{
+    "server_url": "https://topchef-system.fastapicloud.dev",
+    "local_port": 8199,
+    "auto_start_with_windows": false,
+    "minimize_to_tray": true,
+    "check_updates_on_start": true,
+    "update_check_interval_minutes": 60,
+    "sync_interval_seconds": 30,
+    "printer_name": "XPrinter",
+    "printer_width_mm": 80,
+    "printer_use_escpos": true,
+    "printer_auto_cut": true,
+    "language": "ar",
+    "theme": "dark",
+    "log_level": "INFO",
+    "log_max_bytes": 5242880,
+    "log_backup_count": 5,
+    "desktop_api_token": "",
+    "device_id": "a19dd88377a1"
+}

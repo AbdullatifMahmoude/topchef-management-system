@@ -1,0 +1,1093 @@
+/* ============================================
+         CSS Variables - نفس ثيم الأدمن
+      ============================================ */
+:root {
+  --color-primary: #c9a84c;
+  --color-primary-light: #c9a84c20;
+  --color-primary-border: #c9a84c;
+  --color-accent: #3d9e6b;
+  --color-bg: #0f0f0f;
+  --color-surface: rgba(30, 27, 20, 0.9);
+  --color-text: #f0e6cc;
+  --color-subtext: #8a7a5a;
+  --color-danger: #e40411;
+}
+
+/* ============================================
+         Global
+      ============================================ */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: "Cairo", sans-serif;
+  background-image: url("/assets/Gemini_Generated_Image_hsee73hsee73hsee.png");
+  background-size: cover;
+  background-attachment: fixed;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  height: 100vh;
+  overflow: hidden;
+  direction: rtl;
+}
+
+button {
+  outline: none;
+  cursor: pointer;
+  font-family: "Cairo", sans-serif;
+}
+button:focus {
+  outline: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 6px;
+}
+
+/* ============================================
+         Navbar
+      ============================================ */
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 40px;
+  background: linear-gradient(180deg, #c79a4a 0%, #7a4f1a 100%);
+  direction: rtl;
+}
+
+.nav_logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav_logo img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.nav_logo h1 {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--color-bg);
+  margin: 0;
+}
+
+.nav_tabs {
+  display: flex;
+  gap: 12px;
+}
+
+.nav_tab {
+  background: transparent;
+  border: 1.5px solid var(--color-bg);
+  border-radius: 30px;
+  padding: 8px 22px;
+  color: var(--color-bg);
+  font-size: 15px;
+  font-weight: 700;
+  transition:
+    background 0.2s,
+    color 0.2s;
+  position: relative;
+}
+
+.nav_tab:hover,
+.nav_tab.active {
+  background: var(--color-bg);
+  color: var(--color-primary);
+}
+
+.nav_badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #7a4f1a; /* Matching nav gradient edge */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  animation: badgePulse 2s infinite;
+}
+
+@keyframes badgePulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+         Main Layout
+      ============================================ */
+.main_layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  padding: 20px 40px;
+  height: calc(100vh - 77px);
+}
+
+/* ============================================
+         Cart (Total Container) - العمود الأيسر
+      ============================================ */
+.total_container {
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 12, 6, 0.85);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 16px;
+  overflow: hidden;
+  height: 100%;
+  position: relative;
+}
+
+.total_header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-primary-border);
+  text-align: center;
+}
+
+.total_header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+/* قائمة الكارت */
+.total_cards {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  scrollbar-gutter: stable; /* Keeps scrollbar inside content area */
+}
+
+/* رسالة الكارت فاضي */
+.cart_empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 10px;
+  color: var(--color-subtext);
+}
+
+.cart_empty svg {
+  opacity: 0.3;
+}
+.cart_empty p {
+  font-size: 14px;
+}
+
+/* كارد الطلب */
+.total_card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card_info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: right;
+}
+.card_info h1 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.card_info h2 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.card_controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn_delete {
+  background: rgba(228, 4, 17, 0.15);
+  border: 1px solid rgba(228, 4, 17, 0.4);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.btn_delete:hover {
+  background: rgba(228, 4, 17, 0.35);
+}
+.btn_delete svg {
+  width: 13px;
+  height: 13px;
+  stroke: #e40411;
+}
+
+.qty_controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn_qty {
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+  font-size: 16px;
+  font-weight: 700;
+  transition: background 0.2s;
+}
+.btn_qty:hover {
+  background: rgba(201, 168, 76, 0.35);
+}
+
+.qty_num {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Footer الكارت */
+.total_footer {
+  border-top: 1px solid var(--color-primary-border);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ============================================
+         Badge نوع الطلب
+      ============================================ */
+.order_type_badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(201, 168, 76, 0.1);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  animation: fadeIn 0.2s ease;
+}
+
+.badge_icon {
+  font-size: 16px;
+}
+
+.badge_name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary);
+  flex: 1;
+}
+
+.badge_fee {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-subtext);
+}
+
+.badge_clear {
+  background: transparent;
+  border: none;
+  color: var(--color-subtext);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.2s;
+  line-height: 1;
+}
+.badge_clear:hover {
+  color: var(--color-danger);
+}
+
+/* ============================================
+         زراير نوع الطلب
+      ============================================ */
+.order_type_btns {
+  display: flex;
+  gap: 8px;
+}
+
+.order_type_btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 52px;
+  background: rgba(201, 168, 76, 0.06);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  border-radius: 10px;
+  color: var(--color-subtext);
+  font-size: 12px;
+  font-weight: 700;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s,
+    transform 0.15s;
+}
+
+.order_type_btn:hover {
+  background: rgba(201, 168, 76, 0.15);
+  border-color: var(--color-primary);
+  color: var(--color-text);
+  transform: translateY(-1px);
+}
+
+.order_type_btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-bg);
+}
+
+/* ============================================
+         Total Sum & Buttons
+      ============================================ */
+.total_sum {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total_sum h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.total_sum h2 {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--color-primary);
+}
+
+.footer_btns {
+  display: flex;
+  gap: 10px;
+}
+
+.btn_confirm {
+  flex: 1;
+  height: 42px;
+  background: var(--color-primary);
+  border: none;
+  border-radius: 10px;
+  color: var(--color-bg);
+  font-size: 15px;
+  font-weight: 700;
+  transition: opacity 0.2s;
+}
+.btn_confirm:hover {
+  opacity: 0.85;
+}
+
+.btn_cancel {
+  flex: 1;
+  height: 42px;
+  background: transparent;
+  border: 1px solid rgba(228, 4, 17, 0.5);
+  border-radius: 10px;
+  color: #e40411;
+  font-size: 15px;
+  font-weight: 700;
+  transition: background 0.2s;
+}
+.btn_cancel:hover {
+  background: rgba(228, 4, 17, 0.1);
+}
+
+/* ============================================
+         Delivery Modal - داخل الكارت
+      ============================================ */
+.delivery_modal_container {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 8, 4, 0.88);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+  border-radius: 16px;
+  animation: fadeIn 0.2s ease;
+}
+
+.delivery_modal {
+  width: 100%;
+  background: rgba(20, 16, 8, 0.98);
+  border-top: 1px solid var(--color-primary-border);
+  border-radius: 0 0 16px 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 75%;
+  overflow: hidden;
+}
+
+.delivery_modal_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.delivery_modal_header h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+.delivery_modal_close {
+  background: transparent;
+  border: none;
+  color: var(--color-subtext);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: color 0.2s;
+}
+.delivery_modal_close:hover {
+  color: var(--color-danger);
+}
+
+.delivery_modal_body {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* اسماء الديليفري */
+.delivery_name_btn {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(201, 168, 76, 0.08);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  border-radius: 10px;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: right;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+.delivery_name_btn:hover {
+  background: rgba(201, 168, 76, 0.2);
+  border-color: var(--color-primary);
+}
+
+/* زراير الرسوم */
+.delivery_fee_btn {
+  padding: 10px 6px;
+  background: rgba(201, 168, 76, 0.08);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s;
+}
+.delivery_fee_btn:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-bg);
+}
+
+/* ============================================
+         Right Section - العمود الأيمن
+      ============================================ */
+.right_section {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  overflow: hidden;
+}
+
+/* تابز الكاتيجوري */
+.category_tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tab_btn {
+  background: transparent;
+  border: 1px solid var(--color-primary-border);
+  border-radius: 20px;
+  padding: 8px 20px;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.tab_btn:hover {
+  background: var(--color-primary-light);
+}
+
+.tab_btn.active {
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-color: var(--color-primary);
+}
+
+/* شبكة الأصناف */
+.items_grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 8px;
+  scrollbar-gutter: stable;
+}
+
+/* كارد الصنف */
+.item_card {
+  background: rgba(15, 12, 6, 0.8);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 12px;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    transform 0.15s,
+    box-shadow 0.2s;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  user-select: none;
+}
+
+.item_card:hover {
+  background: var(--color-primary-light);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.15);
+}
+
+/* .item_card:active { transform: scale(0.97); } */
+
+.item_card h1 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.item_card h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+/* ============================================
+   Online Orders Layout
+============================================ */
+.online_orders_container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Stats Section */
+.online_stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.stat_box {
+  background: rgba(15, 12, 6, 0.85);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  backdrop-filter: blur(10px);
+}
+
+.stat_box h2 {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+.stat_box p {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-subtext);
+}
+
+/* Actions Row */
+.online_actions_row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+}
+
+/* Search Section */
+.online_search_wrapper {
+  position: relative;
+  flex: 1;
+  max-width: 450px; /* Smaller, in the middle */
+  margin: 0 auto;
+}
+
+.online_search_input {
+  width: 100%;
+  padding: 12px 16px 12px 46px;
+  background: rgba(15, 12, 6, 0.6);
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  border-radius: 40px; /* Larger radius for a modern feel */
+  color: var(--color-text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.online_search_input:focus {
+  border-color: var(--color-primary);
+  background: rgba(15, 12, 6, 0.85);
+  box-shadow: 0 4px 16px rgba(201, 168, 76, 0.2);
+}
+
+.online_search_wrapper .search_icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-primary);
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+/* Toggle Order Button */
+.toggle_orders_wrapper {
+  display: flex;
+}
+
+.toggle_orders_btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: 30px;
+  padding: 8px 16px 8px 46px;
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.toggle_orders_btn .toggle_circle {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.toggle_orders_btn.active {
+  background: rgba(201, 168, 76, 0.1);
+}
+
+.toggle_orders_btn.active .toggle_circle {
+  background: #f1c40f;
+}
+
+/* Filters Group */
+.filters_group {
+  display: flex;
+  gap: 12px;
+}
+
+.filter_btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  padding: 8px 20px;
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.filter_btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.filter_btn:hover {
+  background: rgba(201, 168, 76, 0.1);
+}
+
+.filter_btn.active {
+  background: rgba(201, 168, 76, 0.2);
+}
+
+/* Orders Grids */
+.online_orders_grid,
+#all_orders_grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  padding: 10px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Order Card */
+.online_order_card {
+  background: rgba(20, 18, 14, 0.85);
+  border: 1px solid var(--color-primary-border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  backdrop-filter: blur(10px);
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+
+.online_order_card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.1);
+  cursor: pointer; /* Add pointer cursor */
+}
+
+.card_header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.order_id {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--color-text);
+}
+
+.order_status {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-block;
+  min-width: 60px;
+  text-align: center;
+}
+
+.badge_new {
+  background-color: #f1c40f;
+  color: #000;
+}
+.badge_canceled {
+  background-color: #e40411;
+  color: #fff;
+}
+.badge_ready {
+  background-color: #2ecc71;
+  color: #fff;
+}
+
+.card_details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail_row {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.detail_row span {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.detail_row svg {
+  color: var(--color-text);
+  width: 18px;
+  height: 18px;
+}
+
+/* ============================================
+   Delivery Customer Form
+============================================ */
+#delivery_customer_form {
+  border-top: 1px solid rgba(201, 168, 76, 0.3);
+  padding: 12px 14px;
+  flex-shrink: 0;
+  animation: fadeIn 0.25s ease;
+}
+
+.delivery_customer_card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.dcf_title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  letter-spacing: 0.3px;
+}
+
+.dcf_field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dcf_label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-subtext);
+}
+
+.dcf_input,
+.dcf_select {
+  width: 100%;
+  background: rgba(201, 168, 76, 0.06);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--color-text);
+  font-family: Cairo, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+  direction: rtl;
+}
+
+.dcf_input:focus,
+.dcf_select:focus {
+  border-color: var(--color-primary);
+  background: rgba(201, 168, 76, 0.12);
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.1);
+}
+
+.dcf_input::placeholder {
+  color: var(--color-subtext);
+  font-weight: 400;
+}
+
+.dcf_input.filled {
+  border-color: rgba(61, 158, 107, 0.6);
+  background: rgba(61, 158, 107, 0.08);
+  color: #a0e4c0;
+}
+
+.dcf_select option {
+  background: #1a1500;
+  color: var(--color-text);
+}
+
+.dcf_phone_row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dcf_phone_row .dcf_input {
+  flex: 1;
+}
+
+.dcf_status {
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 68px;
+  text-align: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dcf_link_btn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-family: "Cairo", sans-serif;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+
+.dcf_link_btn:hover {
+  opacity: 0.8;
+}
+
+/* ============================================
+   Order Detail Modal
+============================================ */
+.order_detail_table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+  direction: rtl;
+}
+.order_detail_table th {
+  text-align: right;
+  padding: 8px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border-bottom: 2px solid var(--color-primary);
+}
+.order_detail_table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--color-text);
+}
+.order_detail_summary {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-primary-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  direction: rtl;
+}
+.summary_row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+.summary_row.total {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--color-primary);
+  margin-top: 8px;
+}
+.order_detail_info_grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+  text-align: right;
+}
+.info_group h4 {
+  font-size: 12px;
+  color: var(--color-primary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.info_group p {
+  font-size: 14px;
+  color: var(--color-text);
+}

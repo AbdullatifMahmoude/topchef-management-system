@@ -11,16 +11,20 @@ class OrderRepository:
         self.db = db
 
     def get_business_date(self) -> date:
-        # Force UTC+2 (Local Time for Egypt/Palestine)
-        tz = timezone(timedelta(hours=2))
-        return datetime.now(tz).date()
+        # Business shift starts at 5am (UTC+3)
+        tz = timezone(timedelta(hours=3))
+        now = datetime.now(tz)
+        if now.hour < 5:
+            return (now - timedelta(days=1)).date()
+        return now.date()
 
 
     async def get_by_id(self, order_id: int) -> Optional[models.Order]:
         query = select(models.Order).options(
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
-            selectinload(models.Order.delivery_person)
+            selectinload(models.Order.delivery_person),
+            selectinload(models.Order.address)
         ).where(models.Order.id == order_id)
         result = await self.db.execute(query)
         return result.scalars().first()
@@ -29,7 +33,8 @@ class OrderRepository:
         query = select(models.Order).options(
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
-            selectinload(models.Order.delivery_person)
+            selectinload(models.Order.delivery_person),
+            selectinload(models.Order.address)
         ).where(
             models.Order.idempotency_key == key
         )
@@ -38,11 +43,12 @@ class OrderRepository:
 
     async def get_by_number(self, order_number: str, order_date: Optional[date] = None) -> Optional[models.Order]:
         if order_date is None:
-            order_date = date.today()
+            order_date = self.get_business_date()
         query = select(models.Order).options(
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
-            selectinload(models.Order.delivery_person)
+            selectinload(models.Order.delivery_person),
+            selectinload(models.Order.address)
         ).where(
             models.Order.order_number == order_number,
             models.Order.order_date == order_date
@@ -63,7 +69,8 @@ class OrderRepository:
         query = select(models.Order).options(
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
-            selectinload(models.Order.delivery_person)
+            selectinload(models.Order.delivery_person),
+            selectinload(models.Order.address)
         )
         
         if source:
@@ -105,7 +112,8 @@ class OrderRepository:
         query = select(models.Order).options(
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
-            selectinload(models.Order.delivery_person)
+            selectinload(models.Order.delivery_person),
+            selectinload(models.Order.address)
         )
         if source:
             query = query.where(models.Order.order_source == source)
@@ -123,34 +131,55 @@ class OrderRepository:
         return result.scalars().all()
 
     async def get_next_order_number(self) -> str:
-        """Get next order number using PostgreSQL sequence (atomic)."""
+        """Get next order number using a daily PostgreSQL sequence (atomic)."""
         from sqlalchemy import text
         from app.core.database import engine
         from app.core.logging import logger
         from app.core.exceptions import ValidationError
+        from app.core.config import settings
+        
+        business_date = self.get_business_date()
+        prefix = settings.TERMINAL_ID
+        
+        # In desktop mode, if the prefix is the default 'T1', use the unique device_id
+        # to prevent collisions between multiple desktop installations.
+        if settings.RUNTIME_MODE == "desktop" and prefix == "T1":
+            try:
+                from desktop.config import config as desktop_config
+                prefix = desktop_config.device_id[:4].upper()
+            except ImportError:
+                pass
+
+        bind = self.db.bind
+        if bind is not None and bind.dialect.name == "sqlite":
+            count_query = select(func.count()).select_from(models.Order).where(
+                models.Order.order_date == business_date
+            )
+            current_count = await self.db.scalar(count_query) or 0
+            return f"{prefix}-{current_count + 1:04d}"
+
+        seq_name = f"order_seq_{business_date.strftime('%Y_%m_%d')}"
         
         try:
-            # Try to get next value
-            result = await self.db.execute(text("SELECT nextval('order_number_seq')"))
+            # Try to get next value from the daily sequence
+            result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
             seq_value = result.scalar()
-            return f"{seq_value:04d}"
+            return f"{prefix}-{seq_value:04d}"
         except Exception as e:
-            # If sequence doesn't exist, try to create it using a separate connection
-            # because the current transaction is now 'aborted'.
-            if "order_number_seq" in str(e).lower():
+            # If sequence doesn't exist for the day, try to create it
+            if seq_name in str(e).lower() or "does not exist" in str(e).lower() or "relation" in str(e).lower():
                 try:
-                    logger.info("Sequence 'order_number_seq' missing. Creating via independent connection...")
+                    logger.info(f"Sequence '{seq_name}' missing. Creating via independent connection...")
                     async with engine.begin() as conn:
-                        await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS order_number_seq START WITH 1"))
+                        await conn.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {seq_name} START WITH 1"))
                     
                     # Manual rollback of the failed transaction in the current session
-                    # so we can reuse the session for the retry
                     await self.db.rollback()
                     
                     # Retry after creation
-                    result = await self.db.execute(text("SELECT nextval('order_number_seq')"))
+                    result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
                     seq_value = result.scalar()
-                    return f"{seq_value:04d}"
+                    return f"{prefix}-{seq_value:04d}"
                 except Exception as create_err:
                     logger.error(f"Critical: Failed to self-heal sequence: {create_err}")
             
@@ -174,18 +203,19 @@ class OrderRepository:
             raise
 
     async def update(self, order: models.Order, update_data: schemas.OrderUpdate, changed_by_user_id: Optional[int] = None) -> models.Order:
+        """
+        Update order status and related fields - database operations only.
+        Assumes all validation has been done in the service layer.
+        Does NOT commit - transaction management is handled by service layer.
+        """
         old_status = order.order_status
         update_dict = update_data.model_dump(exclude_unset=True)
         new_status = update_dict.get('order_status')
-        if new_status and old_status != new_status:
-            from app.core.exceptions import ValidationError
-            if not order.can_transition_to(new_status):
-                raise ValidationError(f"Invalid status transition from {old_status} to {new_status}")
         
         for field, value in update_dict.items():
             setattr(order, field, value)
         
-        tz = timezone(timedelta(hours=2))
+        tz = timezone(timedelta(hours=3))
         order.updated_at = datetime.now(tz).replace(tzinfo=None)
         
         # Record history if status changed
@@ -196,11 +226,25 @@ class OrderRepository:
                 changed_by_user_id=changed_by_user_id
             )
             self.db.add(history)
+        
+        self.db.add(order)
+        return order
 
-        try:
-            await self.db.commit()
-            await self.db.refresh(order)
-            return order
-        except Exception:
-            await self.db.rollback()
-            raise
+    async def update_order_full(self, order: models.Order, update_data: schemas.OrderUpdateFull, changed_by_user_id: Optional[int] = None) -> models.Order:
+        """
+        Comprehensive order update - database operations only.
+        Assumes all validation has been done in the service layer.
+        Does NOT commit - transaction management is handled by service layer.
+        """
+        update_dict = update_data.model_dump(exclude_unset=True, exclude={"items", "customer_address"})
+        
+        # Update all provided fields
+        for field, value in update_dict.items():
+            setattr(order, field, value)
+        
+        # Update timestamp
+        tz = timezone(timedelta(hours=3))
+        order.updated_at = datetime.now(tz).replace(tzinfo=None)
+        
+        self.db.add(order)
+        return order

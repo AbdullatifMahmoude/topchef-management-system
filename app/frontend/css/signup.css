@@ -1,0 +1,262 @@
+:root {
+  /* === الألوان الرئيسية === */
+  --color-primary: #c9a84c;
+  --color-primary-light: #c9a84c20;
+  --color-primary-border: #c9a84c;
+
+  /* === لون الـ Accent (الحالة النشطة / اللون الأخضر) === */
+  --color-accent: #3d9e6b;
+
+  /* === الخلفيات === */
+  --color-bg: #0f0f0f;
+  --color-surface: rgba(30, 27, 20, 0.9);
+
+  /* === النصوص === */
+  --color-text: #f0e6cc;
+  --color-subtext: #8a7a5a;
+
+  /* === ألوان الحالات === */
+  --color-danger: #e40411;
+  --color-warning: #c9a84c;
+}
+* {
+  
+  
+  -webkit-tap-highlight-color: transparent;
+}
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0f0f0f inset !important;
+  box-shadow: 0 0 0 1000px #222020 inset !important;
+  -webkit-text-fill-color: #f0e6cc !important;
+  caret-color: #f0e6cc;
+  transition: background-color 9999s ease-in-out 0s;
+}
+/* password wrapper يحتوي الـ input والعين */
+.password_container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.input_wrapper {
+  position: relative;
+  width: 100%;
+}
+.input_wrapper input {
+  width: 100%;
+  padding-left: 44px !important; /* مكان العين */
+  box-sizing: border-box;
+}
+.eye_toggle {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 4px;
+  color: #8a7a5a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+.eye_toggle:hover {
+  color: #c9a84c;
+}
+.eye_toggle svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+/* validation */
+input.input_error {
+  border: 1.5px solid #e74c3c !important;
+  background: rgba(231, 76, 60, 0.05);
+}
+input.input_success {
+  border: 1.5px solid #2ecc71 !important;
+  background: rgba(46, 204, 113, 0.05);
+}
+
+/* hints تحت الـ input مباشرة مش تحت الزرار */
+.field_hint {
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 4px;
+  text-align: right;
+}
+.hint_error {
+  color: #e74c3c;
+}
+.hint_success {
+  color: #2ecc71;
+}
+
+/* رسالة API error فوق الزرار */
+.form_error {
+  color: #e74c3c;
+  font-size: 0.85rem;
+  text-align: center;
+  background: rgba(231, 76, 60, 0.08);
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(231, 76, 60, 0.25);
+  margin: 0;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+body {
+  background-image: url("/assets/Gemini_Generated_Image_hsee73hsee73hsee.png");
+  font-family: "Cairo", sans-serif;
+}
+header h1 {
+  font-size: 36px;
+  color: var(--color-primary);
+  text-align: center;
+  margin-top: 50px;
+  margin-bottom: 0px;
+}
+.container {
+  max-width: 588px;
+
+  display: flex;
+
+  flex-direction: column;
+  gap: 35px;
+  align-items: center;
+  padding: 25px 20px;
+  backdrop-filter: blur(10px);
+  border-radius: 15px;
+  border: 1px solid var(--color-primary-border);
+  margin: 70px auto 0 auto;
+}
+.logo_title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+.logo_title h1 {
+  font-size: 27px;
+  color: var(--color-primary);
+  margin-top: 0px;
+}
+.signup_form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.signup_form input {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-primary-border);
+  font-size: 20px;
+  font-style: normal;
+  color: var(--color-text);
+  background-color: transparent;
+  justify-content: end;
+  width: 474px;
+  text-align: end;
+}
+.password_container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.forget_password {
+  font-size: 16px;
+  color: var(--color-text);
+  text-decoration: none;
+  cursor: pointer;
+  text-align: end;
+}
+.login_btn {
+  padding: 10px;
+  border-radius: 40px;
+  border: none;
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--color-text);
+  background-color: var(--color-primary);
+
+  cursor: pointer;
+}
+.login_btn:hover {
+  background-color: var(--color-bg--);
+  border: 1px solid var(--color-primary-border);
+}
+/* ===== Validation States ===== */
+
+/* input wrapper للعين */
+.input_wrapper {
+  position: relative;
+  width: 494px;
+}
+.input_wrapper input {
+  width: 100%;
+  padding-left: 44px !important;
+  box-sizing: border-box;
+}
+
+/* حقل خطأ */
+input.input_error {
+  border: 1.5px solid #e74c3c !important;
+  background-color: rgba(231, 76, 60, 0.05);
+  outline: none;
+}
+
+/* حقل صح */
+input.input_success {
+  border: 1.5px solid #2ecc71 !important;
+  background-color: rgba(46, 204, 113, 0.05);
+  outline: none;
+}
+
+/* حاوية الـ input + hint معاً */
+.field_group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+/* رسالة تحت الـ input مباشرة */
+.field_hint {
+  display: block;
+  font-size: 0.78rem;
+  padding-right: 4px;
+  text-align: right;
+}
+.hint_error {
+  
+  color: #e74c3c;
+}
+.hint_success {
+  color: #2ecc71;
+}
+
+/* رسالة خطأ الـ API — فوق زرار الدخول */
+.form_error {
+  color: #e74c3c;
+  font-size: 0.82rem;
+  text-align: center;
+  background: rgba(231, 76, 60, 0.08);
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(231, 76, 60, 0.25);
+  margin: 0;
+}
+
+/* زرار disabled */
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

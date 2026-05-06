@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ar">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>كاشير - توب شيف</title>
+    <link rel="icon" href="/assets/توب شيف 1.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/cashier.css" />
+  </head>
+  <body>
+    <!-- ===== Navbar ===== -->
+    <nav>
+      <div class="nav_logo">
+        <img src="/assets/توب شيف 1@2x.png" alt="logo" />
+        <h1>مطعم توب شيف</h1>
+      </div>
+      <div class="nav_tabs">
+        <button id="tab_local" class="nav_tab active" onclick="switchMainTab('local')">طلبات المحل</button>
+        <button id="tab_online" class="nav_tab" onclick="switchMainTab('online')">
+          طلبات الاون لاين
+          <span id="online_orders_badge" class="nav_badge" style="display: none;">0</span>
+        </button>
+        <button id="tab_all_orders" class="nav_tab" onclick="switchMainTab('all_orders')">كل الطلبات</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span
+          style="color: var(--color-text); font-size: 14px; font-weight: 600"
+        >
+          مرحباً:
+          <span id="cashier_username" style="color: var(--color-primary)"
+            >...</span
+          >
+        </span>
+        <button
+          id="sound_toggle_btn"
+          onclick="toggleSound()"
+          style="
+            background: rgba(61, 158, 107, 0.2);
+            border: 1px solid var(--color-accent, #3d9e6b);
+            border-radius: 8px;
+            padding: 7px 11px;
+            color: var(--color-accent, #3d9e6b);
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          "
+          title="تفعيل/تعطيل صوت التنبيهات"
+        >
+          <svg id="sound_icon_on" style="display:block" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          <svg id="sound_icon_off" style="display:none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+        </button>
+        <button
+          onclick="logout()"
+          style="
+            background: rgba(228, 4, 17, 0.12);
+            border: 1px solid rgba(228, 4, 17, 0.4);
+            border-radius: 8px;
+            padding: 7px 14px;
+            color: #fff;
+            font-size: 13px;
+            font-family: Cairo, sans-serif;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+          "
+          onmouseover="this.style.background = 'rgba(228,4,17,0.25)'"
+          onmouseout="this.style.background = 'rgba(228,4,17,0.12)'"
+        >
+          ⏻ خروج
+        </button>
+      </div>
+    </nav>
+
+    <!-- ===== Local Orders Layout ===== -->
+    <div class="main_layout" id="local_orders_layout">
+      <!-- === Right Section === -->
+      <div class="right_section">
+        <!-- تابز الكاتيجوري -->
+        <div class="category_tabs" id="category_tabs"></div>
+
+        <!-- شبكة الأصناف -->
+        <div class="items_grid" id="items_grid"></div>
+      </div>
+
+      <!-- === Cart === -->
+      <div class="total_container">
+        <!-- مودال الدليفري - داخل الكارت -->
+        <div
+          id="delivery_modal_container"
+          class="delivery_modal_container"
+          style="display: none"
+        ></div>
+
+        <div class="total_header">
+          <h1>الطلب الحالي</h1>
+        </div>
+
+        <div class="total_cards" id="cart_list">
+          <div class="cart_empty" id="cart_empty">
+            <svg
+              width="48"
+              height="48"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"
+              />
+            </svg>
+            <p>لا يوجد أصناف في الطلب</p>
+          </div>
+        </div>
+
+        <!-- فورم بيانات عميل الديليفري -->
+        <div id="delivery_customer_form" style="display:none"></div>
+
+        <div class="total_footer">
+          <!-- Badge نوع الطلب -->
+          <div
+            id="order_type_badge"
+            class="order_type_badge"
+            style="display: none"
+          ></div>
+
+          <!-- زراير نوع الطلب -->
+          <div id="order_type_btns" class="order_type_btns"></div>
+
+          <div class="total_sum">
+            <h1>الإجمالي</h1>
+            <h2 id="total_price">0 ج.م</h2>
+          </div>
+          <div class="footer_btns">
+            <button class="btn_confirm" onclick="confirmOrder()">
+              تأكيد الطلب
+            </button>
+            <button class="btn_cancel" onclick="cancelOrder()">
+              إلغاء الطلب
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Online Orders Layout ===== -->
+    <div id="online_orders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
+      <div class="online_orders_container">
+        
+        <!-- Stats Section -->
+        <div class="online_stats">
+          <div class="stat_box">
+            <h2>0</h2>
+            <p>طلبات جديدة</p>
+          </div>
+          <div class="stat_box">
+            <h2>0</h2>
+            <p>ملغي</p>
+          </div>
+          <div class="stat_box">
+            <h2>0</h2>
+            <p>جاهزة</p>
+          </div>
+        </div>
+
+        <!-- Actions Row: Filters, Search, Toggle -->
+        <div class="online_actions_row">
+          
+          <div class="filters_group">
+            <button class="filter_btn active" onclick="setOnlineOrdersFilter('all', this)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+              الكل
+            </button>
+            <button class="filter_btn" onclick="setOnlineOrdersFilter('new', this)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              جديد
+            </button>
+            <button class="filter_btn" onclick="setOnlineOrdersFilter('ready', this)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              جاهز
+            </button>
+            <button class="filter_btn" onclick="setOnlineOrdersFilter('cancelled', this)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+              ملغي
+            </button>
+          </div>
+
+          <div class="online_search_wrapper">
+            <svg class="search_icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" class="online_search_input" placeholder="بحث بالإسم او الهاتف او رقم الطلب....." oninput="handleOnlineSearch(this.value)" />
+          </div>
+
+          <div class="toggle_orders_wrapper">
+            <div class="toggle_orders_btn active" id="toggle_online_btn" onclick="toggleWebOrders()">
+              <span>تشغيل الطلبات</span>
+              <div class="toggle_circle"></div>
+            </div>
+            <button class="filter_btn active" onclick="fetchOnlineOrders()" style="margin-right: 12px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              تحديث
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Orders Grid -->
+        <div class="online_orders_grid" id="online_orders_grid">
+          <!-- سيتم تحميل الطلبات هنا عبر JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== All Orders Layout ===== -->
+    <div id="all_orders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
+      <div class="online_orders_container">
+        
+        <div class="online_actions_row" style="justify-content: space-between;">
+          <div class="filters_group" id="all_orders_filters">
+            <button class="filter_btn active" onclick="setAllOrdersFilter('all', this)">الكل</button>
+            <button class="filter_btn" onclick="setAllOrdersFilter('delivery', this)">دليفري</button>
+            <button class="filter_btn" onclick="setAllOrdersFilter('hall', this)">صاله</button>
+            <button class="filter_btn" onclick="setAllOrdersFilter('takeaway', this)">تيك اواي</button>
+          </div>
+
+          <div class="online_search_wrapper">
+            <svg class="search_icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="all_orders_search" class="online_search_input" placeholder="بحث برقم الطلب او النوع..." oninput="handleAllOrdersSearch(this.value)" />
+          </div>
+
+          <button class="filter_btn active" onclick="fetchAllOrders()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><path d="M9 21H3v-6"></path><polyline points="21 3 14 10"></polyline><polyline points="3 21 10 14"></polyline></svg>
+            تحديث
+          </button>
+        </div>
+
+        <!-- Orders Grid -->
+        <div class="online_orders_grid" id="all_orders_grid">
+          <!-- سيتم إضافة الطلبات هنا عبر الجافاسكريبت -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+        (function () {
+          const token = localStorage.getItem("token");
+          const role  = localStorage.getItem("role");
+          if (!token) { window.location.replace("../index.html"); return; }
+          if (role === "admin" || role === "delivery") {
+            window.location.replace("../dashboard.html"); return;
+          }
+          const el = document.getElementById("cashier_username");
+          if (el) {
+              const localName = localStorage.getItem("full_name") || localStorage.getItem("username") || "كاشير";
+              el.textContent = localName;
+          }
+        })();
+      </script>
+    <script src="js/print.js"></script>
+    <script src="js/cashier.js"></script>
+  </body>
+</html>

@@ -9,10 +9,11 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Numeric,
-    Enum as SQLEnum
+    Enum as SQLEnum,
+    UniqueConstraint
 )
 from sqlalchemy.orm import relationship
-from app.core.database import Base
+from app.core.database import Base, DbEnum
 from enum import Enum
 from app.core.enums import ProductType 
 
@@ -39,9 +40,11 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True)
     cat_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
-    product_name = Column(String(100), unique=True, nullable=False)
+    product_name = Column(String(100), nullable=False)
     product_type = Column(
-        SQLEnum(ProductType, name="product_type_enum"), nullable=False)
+        DbEnum(ProductType, name="product_type_enum"),
+        nullable=False,
+    )
     description = Column(String(500), nullable=True)
     is_available = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -50,6 +53,10 @@ class Product(Base):
 
     category = relationship("Category", back_populates="products")
     variants = relationship("Variant", back_populates="product",cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        UniqueConstraint('product_name', 'cat_id', name='uq_product_name_cat_id'),
+    )
 
     def toggle_availability(self):
         self.is_available = not self.is_available
@@ -68,9 +75,3 @@ class Variant(Base):
     product = relationship("Product", back_populates="variants")
 
 
-class Addon(Base):
-    __tablename__ = "addons"
-
-    id = Column(Integer, primary_key=True)
-    addon_name = Column(String(50), unique=True, nullable=False)
-    addon_price = Column(Numeric(10,2), nullable=False, default=0)

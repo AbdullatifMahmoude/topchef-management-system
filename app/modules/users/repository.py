@@ -45,4 +45,5 @@ class UserRepository:
     
     async def toggle_user(self, user: models.User):
         user.toggle_active()
+        self.db.add(user)
         return user

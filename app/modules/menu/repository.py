@@ -61,11 +61,14 @@ class ProductRepository:
         product = await self.db.execute(stmt)
         return product.scalar_one_or_none()
 
-    async def get_by_name(self, productname: str) -> models.Product:
+    async def get_by_name(self, productname: str, cat_id: int) -> models.Product:
         stmt = select(models.Product).options(
             selectinload(models.Product.category),
             selectinload(models.Product.variants)
-        ).where(models.Product.product_name == productname)
+        ).where(
+            models.Product.product_name == productname,
+            models.Product.cat_id == cat_id
+        )
         product = await self.db.execute(stmt)
         return product.scalars().first()
 
