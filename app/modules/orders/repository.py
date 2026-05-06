@@ -140,6 +140,16 @@ class OrderRepository:
         
         business_date = self.get_business_date()
         prefix = settings.TERMINAL_ID
+        
+        # In desktop mode, if the prefix is the default 'T1', use the unique device_id
+        # to prevent collisions between multiple desktop installations.
+        if settings.RUNTIME_MODE == "desktop" and prefix == "T1":
+            try:
+                from desktop.config import config as desktop_config
+                prefix = desktop_config.device_id[:4].upper()
+            except ImportError:
+                pass
+
         bind = self.db.bind
         if bind is not None and bind.dialect.name == "sqlite":
             count_query = select(func.count()).select_from(models.Order).where(

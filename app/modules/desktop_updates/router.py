@@ -234,15 +234,41 @@ async def desktop_sync_events(
                     rejected += 1
                     errors.append(f"ORDER_CREATED error: {str(e)}")
             elif event.event_type == "ORDER_UPDATED":
-                # Handle updates via idempotency or versioning
-                # For now, we assume standard updates
-                accepted += 1
-                db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                try:
+                    # 1. Try to find the order by number (the most reliable way across systems)
+                    cloud_order = None
+                    order_number = event_data.get("order_number")
+                    order_date_str = event_data.get("order_date")
+                    
+                    if order_number and order_date_str:
+                        from datetime import date
+                        try:
+                            order_date = date.fromisoformat(order_date_str[:10])
+                            cloud_order = await order_service.repository.get_by_number(order_number, order_date)
+                        except Exception:
+                            pass
+                    
+                    # 2. Update if found
+                    if cloud_order:
+                        from app.modules.orders.schemas import OrderUpdateFull
+                        await order_service.update_order(
+                            cloud_order.id, 
+                            OrderUpdateFull(**event_data), 
+                            current_user_id=current_user.id if current_user else None
+                        )
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                        accepted += 1
+                    else:
+                        rejected += 1
+                        errors.append(f"ORDER_UPDATED error: Order {order_number} for {order_date_str} not found in cloud")
+                except Exception as e:
+                    rejected += 1
+                    errors.append(f"ORDER_UPDATED error: {str(e)}")
             else:
                 rejected += 1
                 errors.append(f"Unknown event type: {event.event_type}")
             
-            await db.flush() # Ensure we record progress within the transaction
+            await db.flush() # Ensure this event is visible to subsequent events in the same batch
         except Exception as e:
             rejected += 1
             errors.append(str(e))

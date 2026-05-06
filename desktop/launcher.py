@@ -93,6 +93,7 @@ def main():
         last_master_data_sync_at = None
         force_master_pull = True
         last_heartbeat_at = 0.0
+        last_pull_at_mon = 0.0
         
         while True:
             from app.core.events import outbox_sync_trigger
@@ -166,7 +167,10 @@ def main():
                                 )
 
                         # 2. Pull cloud authoritative data into the local database.
-                        if force_master_pull or loop_counter >= 1:
+                        now_mon = time.monotonic()
+                        should_pull = force_master_pull or (last_master_data_sync_at and (now_mon - last_pull_at_mon > 300))
+                        
+                        if should_pull:
                             params = {}
                             if last_master_data_sync_at:
                                 params["since"] = last_master_data_sync_at
@@ -176,23 +180,15 @@ def main():
                                 stats = await apply_master_data_snapshot(db, snapshot)
                                 last_master_data_sync_at = snapshot.get("timestamp") or last_master_data_sync_at
                                 force_master_pull = False
+                                last_pull_at_mon = now_mon
                                 changed = sum(stats.values())
                                 if changed:
                                     log.info("Cloud reconciliation applied %s rows: %s", changed, stats)
+                                    # Trigger local UI refresh if anything changed
+                                    from app.core.events import order_events_manager
+                                    await order_events_manager.broadcast_all({"type": "SYNC_COMPLETE", "stats": stats})
                             elif force_master_pull:
                                 log.warning("Initial cloud reconciliation could not run; will retry on next sync tick.")
-
-                        # 3. Periodic Polling (Fallback only)
-                        if sync_manager.should_poll():
-                            log.info("📡 WebSocket inactive. Performing fallback HTTP poll for online orders...")
-                            snapshot = await cloud_client.get("/desktop-updates/master-data")
-                            if snapshot:
-                                stats = await apply_master_data_snapshot(db, snapshot)
-                                last_master_data_sync_at = snapshot.get("timestamp") or last_master_data_sync_at
-                                force_master_pull = False
-                                changed = sum(stats.values())
-                                if changed:
-                                    log.info("Fallback reconciliation applied %s rows: %s", changed, stats)
 
                         # 3. Periodic Heartbeat
                         if time.monotonic() - last_heartbeat_at >= 60:
@@ -234,7 +230,7 @@ def main():
 
     class DesktopSyncMiddleware(BaseHTTPMiddleware):
         """
-        Intercepts and suppresses redundant polling when WebSocket is active.
+        Intercepts and suppresses redundant order GETs when WebSocket is active.
         Ensures Cloud is the source of truth for orders.
         """
         async def dispatch(self, request, call_next):

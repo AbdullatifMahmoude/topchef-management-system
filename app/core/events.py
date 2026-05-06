@@ -7,7 +7,7 @@ import time
 from enum import Enum
 from typing import Any, Callable
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 from app.core.config import settings
 from app.core.logging import logger
@@ -64,11 +64,14 @@ outbox_sync_trigger = asyncio.Event()
 
 class OrderEventsManager:
     CHANNEL_PREFIX = "topchef:orders:events"
+    CLIENT_HEARTBEAT_INTERVAL_SECONDS = 25.0
     DESKTOP_HEARTBEAT_INTERVAL_SECONDS = 25.0
     DESKTOP_STABLE_AFTER_SECONDS = 30.0
 
     def __init__(self) -> None:
         self.active_connections: dict[str, list[WebSocket]] = {}
+        self._connection_channels: dict[WebSocket, str] = {}
+        self._heartbeat_tasks: dict[WebSocket, asyncio.Task] = {}
         self._listener_task: asyncio.Task | None = None
         self._remote_bridge_task: asyncio.Task | None = None
         self._remote_bridge_ws: Any | None = None
@@ -90,6 +93,12 @@ class OrderEventsManager:
             logger.info("Order events manager started with Redis pub/sub backend")
 
     async def stop(self) -> None:
+        async with self._lock:
+            connections = list(self._connection_channels.keys())
+
+        for websocket in connections:
+            await self.disconnect(websocket)
+
         if self._listener_task:
             self._listener_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -110,15 +119,55 @@ class OrderEventsManager:
             if channel not in self.active_connections:
                 self.active_connections[channel] = []
             self.active_connections[channel].append(websocket)
+            self._connection_channels[websocket] = channel
+            self._heartbeat_tasks[websocket] = asyncio.create_task(
+                self._send_client_heartbeat(websocket),
+                name=f"orders-ws-heartbeat-{channel}",
+            )
             connection_count = sum(len(conns) for conns in self.active_connections.values())
         logger.info("New WebSocket connection in channel '%s'. Total: %s", channel, connection_count)
 
     async def disconnect(self, websocket: WebSocket, channel: str = "default"):
+        heartbeat_task: asyncio.Task | None = None
         async with self._lock:
-            if channel in self.active_connections and websocket in self.active_connections[channel]:
-                self.active_connections[channel].remove(websocket)
+            channel = self._connection_channels.pop(websocket, channel)
+            heartbeat_task = self._heartbeat_tasks.pop(websocket, None)
+            connections = self.active_connections.get(channel)
+            if connections and websocket in connections:
+                connections.remove(websocket)
+                if not connections:
+                    self.active_connections.pop(channel, None)
             connection_count = sum(len(conns) for conns in self.active_connections.values())
+
+        if heartbeat_task:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+
         logger.info("WebSocket disconnected from channel '%s'. Total: %s", channel, connection_count)
+
+    async def _send_client_heartbeat(self, websocket: WebSocket) -> None:
+        while True:
+            try:
+                await asyncio.sleep(self.CLIENT_HEARTBEAT_INTERVAL_SECONDS)
+                await websocket.send_json({"type": "HEARTBEAT"})
+            except asyncio.CancelledError:
+                raise
+            except (WebSocketDisconnect, RuntimeError) as exc:
+                logger.debug("Client heartbeat stopped because WebSocket closed: %s", exc)
+                break
+            except Exception as exc:
+                try:
+                    import websockets
+
+                    if isinstance(exc, websockets.exceptions.ConnectionClosed):
+                        break
+                except Exception:
+                    pass
+                logger.debug("Client heartbeat stopped after send failure: %s", exc)
+                break
 
     async def broadcast(self, message: dict[str, Any], channel: str = "default"):
         async with self._lock:
@@ -322,7 +371,7 @@ class OrderEventsManager:
 
         done, pending = await asyncio.wait(
             {heartbeat_task, listen_task},
-            return_when=asyncio.FIRST_EXCEPTION,
+            return_when=asyncio.FIRST_COMPLETED,
         )
 
         first_exception: Exception | None = None
@@ -372,10 +421,8 @@ class OrderEventsManager:
 
             event_data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
             event_id = (
-                payload.get("id")
-                or payload.get("order_id")
-                or event_data.get("id")
-                or event_data.get("order_number")
+                payload.get("id")  # Unique Event ID (UUID)
+                or f"{event_name}_{event_data.get('id') or event_data.get('order_number')}" # Composite key
             )
             if event_id and sync_manager.is_duplicate(str(event_id)):
                 logger.debug("Desktop bridge ignored duplicate event id=%s", event_id)
@@ -384,10 +431,17 @@ class OrderEventsManager:
             await self.broadcast_all(payload)
 
     async def _desktop_send_heartbeat(self, ws: Any, connection_started_at: float) -> None:
+        import websockets
+
         heartbeat_payload = json.dumps({"type": "heartbeat"})
         while True:
-            await asyncio.sleep(self.DESKTOP_HEARTBEAT_INTERVAL_SECONDS)
-            await ws.send(heartbeat_payload)
+            try:
+                await asyncio.sleep(self.DESKTOP_HEARTBEAT_INTERVAL_SECONDS)
+                await ws.send(heartbeat_payload)
+            except asyncio.CancelledError:
+                raise
+            except websockets.exceptions.ConnectionClosed:
+                break
             alive_for = time.monotonic() - connection_started_at
             logger.info("💓 WebSocket heartbeat sent")
             logger.info("🟢 Connection alive for %.0fs", alive_for)

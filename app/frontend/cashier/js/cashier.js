@@ -46,9 +46,10 @@ let onlineOrdersList = [];
 let onlineOrdersFilter = 'all'; // 'all', 'new', 'ready', 'cancelled'
 let onlineOrdersSearchTerm = '';
 let lastNewOrdersCount = 0;
-let pollingIntervalId = null;
 let isNotificationSoundEnabled = true;
 let socket = null;
+let reconnectTimerId = null;
+let ordersSnapshotLoaded = false;
 let lastSocketOrderUpdate = Date.now();
 
 // نوع الطلب: null | 'dine_in' | 'takeaway' | 'delivery'
@@ -98,9 +99,6 @@ async function init() {
     
     // Connect for real-time updates
     setupWebSocket();
-    
-    // Polling as a robust fallback
-    startOnlineOrdersPolling();
   } catch (err) {
     console.error("API error:", err);
     document.getElementById("items_grid").innerHTML =
@@ -602,7 +600,7 @@ function showConfirmModal(orderData) {
       
       // Update all orders tab if active
       if (document.getElementById("tab_all_orders") && document.getElementById("tab_all_orders").classList.contains("active")) {
-          fetchAllOrders();
+          renderAllOrders();
       }
 
     } catch (err) {
@@ -1394,37 +1392,21 @@ function switchMainTab(tab) {
   } else if (tab === "online") {
     tabOnline.classList.add("active");
     if (layoutOnline) layoutOnline.style.display = "block";
-    fetchOnlineOrders();
+    updateOnlineStats();
+    renderOnlineOrders();
   } else if (tab === "all_orders") {
     if (tabAllOrders) tabAllOrders.classList.add("active");
     if (layoutAllOrders) layoutAllOrders.style.display = "block";
-    fetchAllOrders();
+    renderAllOrders();
   }
 }
 
 // ===================================================
 //  Online Orders (Website Orders)
 // ===================================================
-async function fetchOnlineOrders() {
-  const grid = document.getElementById("online_orders_grid");
-  if (!grid) return;
-
-  grid.innerHTML = `<p style="color:var(--color-primary);text-align:center;grid-column:1/-1;padding:40px;">جاري تحميل طلبات الموقع...</p>`;
-
-  try {
-    const res = await apiFetch("/orders/?source=online&page_size=100");
-    if (!res.ok) throw new Error("فشل تحميل طلبات الموقع");
-
-    const data = await res.json();
-    onlineOrdersList = data.orders || [];
-
-    updateOnlineStats();
-    renderOnlineOrders();
-
-  } catch (err) {
-    console.error("fetchOnlineOrders error", err);
-    grid.innerHTML = `<p style="color:#e40411;text-align:center;grid-column:1/-1;padding:40px;">حدث خطأ أثناء جلب طلبات الموقع</p>`;
-  }
+function renderOnlineOrdersState() {
+  updateOnlineStats();
+  renderOnlineOrders();
 }
 
 function updateOnlineStats() {
@@ -1458,6 +1440,11 @@ function handleOnlineSearch(term) {
 function renderOnlineOrders() {
   const grid = document.getElementById("online_orders_grid");
   if (!grid) return;
+
+  if (!ordersSnapshotLoaded) {
+    grid.innerHTML = `<p style="color:var(--color-primary);text-align:center;grid-column:1/-1;padding:40px;">جاري الاتصال بالتحديثات المباشرة...</p>`;
+    return;
+  }
 
   if (onlineOrdersList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات أون لاين</p>`;
@@ -1601,7 +1588,6 @@ async function updateOnlineStatus(orderId, newStatus) {
 
     if (res.ok) {
       showToast("تم تحديث الحالة بنجاح", "success");
-      fetchOnlineOrders();
     } else {
       showToast("فشل تحديث الحالة", "error");
     }
@@ -1683,32 +1669,33 @@ function updateWebOrdersToggleUI() {
 }
 
 // ===================================================
-//  Online Orders Polling & Notifications
+//  Online Orders Notifications
 // ===================================================
 // ===================================================
 //  WebSocket - Real-time updates
 // ===================================================
 function setupWebSocket() {
-  if (socket) {
-    socket.close();
+  if (reconnectTimerId) {
+    clearTimeout(reconnectTimerId);
+    reconnectTimerId = null;
+  }
+
+  if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) {
+    return;
   }
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${protocol}//${window.location.host}/orders/ws/cashier`;
   
   console.log("Connecting to WebSocket:", wsUrl);
-  socket = new WebSocket(wsUrl);
+  const ws = new WebSocket(wsUrl);
+  socket = ws;
 
-  socket.onopen = () => {
+  ws.onopen = () => {
     console.log("WebSocket connected successfully");
-    // Reduce polling frequency when socket is active to save resources
-    if (pollingIntervalId) {
-      clearInterval(pollingIntervalId);
-      pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 60000); // 1 minute safety check
-    }
   };
 
-  socket.onmessage = (event) => {
+  ws.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data);
       handleSocketEvent(payload);
@@ -1717,36 +1704,49 @@ function setupWebSocket() {
     }
   };
 
-  socket.onclose = (e) => {
+  ws.onclose = (e) => {
+    if (socket !== ws) return;
     console.warn("WebSocket disconnected. Code:", e.code, "Reason:", e.reason);
-    // Restore fast polling while socket is down
-    if (pollingIntervalId) {
-      clearInterval(pollingIntervalId);
-      pollingIntervalId = setInterval(backgroundFetchOnlineOrders, 30000); // Increased to 30s
-    }
-    // Exponential backoff for reconnection
-    setTimeout(setupWebSocket, 5000);
+    socket = null;
+    reconnectTimerId = setTimeout(setupWebSocket, 2000);
   };
 
-  socket.onerror = (err) => {
+  ws.onerror = (err) => {
     console.error("WebSocket error:", err);
   };
 }
 
 function handleSocketEvent(payload) {
+  if (!payload || payload.type === "HEARTBEAT" || payload.type === "HEARTBEAT_ACK" || payload.type === "heartbeat_ack") {
+    return;
+  }
+
+  if (payload.type === "ORDER_SNAPSHOT") {
+    const orders = Array.isArray(payload.data?.orders) ? payload.data.orders : [];
+    ordersSnapshotLoaded = true;
+    allOrdersList = orders;
+    onlineOrdersList = orders.filter(isOnlineOrder);
+    lastSocketOrderUpdate = Date.now();
+    updateOnlineStats();
+    renderOnlineOrders();
+    renderAllOrders();
+    updateOnlineTabBadge(onlineOrdersList.filter(o => o.order_status === 'new').length);
+    return;
+  }
+
   const { event, data } = payload;
   if (!data || !data.id) return;
 
-  const eventName = typeof event === 'string' ? event : (payload.type || '');
+  ordersSnapshotLoaded = true;
+  const eventName = normalizeOrderEventName(payload.type || event);
   console.log("Real-time event:", eventName, data.id);
 
   // 1. Update internal state
   let hasChanged = false;
 
   // Handle Order Created
-  if (eventName === "order.created") {
-    const isOnline = data.source === "online" || data.source === "OrderSource.ONLINE";
-    if (isOnline) {
+  if (eventName === "NEW_ORDER") {
+    if (isOnlineOrder(data)) {
       if (!onlineOrdersList.find(o => o.id === data.id)) {
         onlineOrdersList.unshift(data);
         hasChanged = true;
@@ -1761,7 +1761,7 @@ function handleSocketEvent(payload) {
     }
   } 
   // Handle Order Updated / Status Changed
-  else if (eventName === "order.updated" || eventName === "order.status_changed") {
+  else if (eventName === "ORDER_UPDATED") {
     const oIdx = onlineOrdersList.findIndex(o => o.id === data.id);
     if (oIdx !== -1) {
       onlineOrdersList[oIdx] = { ...onlineOrdersList[oIdx], ...data };
@@ -1801,47 +1801,15 @@ function handleSocketEvent(payload) {
   }
 }
 
-function startOnlineOrdersPolling() {
-  if (pollingIntervalId) clearInterval(pollingIntervalId);
-  
-  backgroundFetchOnlineOrders();
-  
-  // تكرار كل 30 ثانية كاحتياطي، أو 60 ثانية لو السوكيت شغال
-  const interval = (socket && socket.readyState === WebSocket.OPEN) ? 60000 : 30000;
-  pollingIntervalId = setInterval(backgroundFetchOnlineOrders, interval);
+function normalizeOrderEventName(eventName) {
+  if (eventName === "order.created" || eventName === "ORDER_CREATED") return "NEW_ORDER";
+  if (eventName === "order.updated" || eventName === "order.status_changed") return "ORDER_UPDATED";
+  return eventName || "";
 }
 
-async function backgroundFetchOnlineOrders() {
-  try {
-    const res = await apiFetch("/orders/?source=online&page_size=100", { suppress401: true });
-    if (!res.ok) return;
-
-    const data = await res.json();
-    const orders = data.orders || [];
-    
-    // تحديث القائمة العالمية إذا كنا في تاب الأون لاين لمنع الجمود
-    // ولكن لا نعيد رندر الجدول بالكامل إلا لو كنا فاتحين التاب فعلاً
-    onlineOrdersList = orders;
-    
-    const newCount = orders.filter(o => o.order_status === 'new').length;
-    
-    // إشعار صوتي إذا زاد عدد الطلبات الجديدة
-    if (newCount > lastNewOrdersCount) {
-      playNotificationSound();
-    }
-    
-    lastNewOrdersCount = newCount;
-    updateOnlineTabBadge(newCount);
-    
-    // إذا كنت فاتح صفحة الأون لاين حالياً، حدث الإحصائيات (بدون إعادة رندر الشبكة بالكامل لتجنب تعطيل الكاشير)
-    const onlineLayout = document.getElementById("online_orders_layout");
-    if (onlineLayout && onlineLayout.style.display !== "none") {
-       updateOnlineStats();
-    }
-
-  } catch (err) {
-    console.warn("Background polling error:", err);
-  }
+function isOnlineOrder(order) {
+  const source = String(order?.source || order?.order_source || "").toLowerCase();
+  return source === "online" || source === "ordersource.online";
 }
 
 function updateOnlineTabBadge(count) {
@@ -1956,30 +1924,14 @@ function handleAllOrdersSearch(term) {
   renderAllOrders();
 }
 
-async function fetchAllOrders() {
-  const grid = document.getElementById("all_orders_grid");
-  if (!grid) return;
-
-  grid.innerHTML = `<p style="color:var(--color-primary);text-align:center;grid-column:1/-1;padding:40px;">جاري تحميل الطلبات...</p>`;
-  
-  try {
-    const res = await apiFetch("/orders/?source=cashier&page_size=100");
-    if (!res.ok) throw new Error("فشل تحميل الطلبات");
-    
-    const data = await res.json();
-    allOrdersList = data.orders || [];
-    
-    renderAllOrders();
-    
-  } catch(err) {
-    console.error("fetchAllOrders error", err);
-    grid.innerHTML = `<p style="color:#e40411;text-align:center;grid-column:1/-1;padding:40px;">حدث خطأ أثناء جلب الطلبات</p>`;
-  }
-}
-
 function renderAllOrders() {
   const grid = document.getElementById("all_orders_grid");
   if (!grid) return;
+
+  if (!ordersSnapshotLoaded) {
+    grid.innerHTML = `<p style="color:var(--color-primary);text-align:center;grid-column:1/-1;padding:40px;">جاري الاتصال بالتحديثات المباشرة...</p>`;
+    return;
+  }
 
   if (allOrdersList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات</p>`;
@@ -2183,7 +2135,7 @@ async function changeOrderStatus(orderId, status) {
     
     if (res.ok) {
       showToast("تم تحديث حالة الطلب", "success");
-      fetchAllOrders(); // إعادة التحميل لتحديث الواجهة
+      renderAllOrders();
     } else {
       const err = await res.json().catch(()=>({}));
       console.error("Change status error details:", err);
@@ -2516,8 +2468,12 @@ async function acceptOrderFromModal(orderId, source) {
     `;
 
     // تحديث القائمة في الخلفية
-    if (source === 'online') fetchOnlineOrders();
-    else fetchAllOrders();
+    if (source === 'online') {
+      updateOnlineStats();
+      renderOnlineOrders();
+    } else {
+      renderAllOrders();
+    }
 
     showToast("تم قبول الطلب بنجاح ✓", "success");
 
@@ -2654,7 +2610,8 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
       </div>
     `;
 
-    fetchOnlineOrders();
+    updateOnlineStats();
+    renderOnlineOrders();
     showToast(`تم تخصيص ${riderName} برسوم ${fee} ج.م`, "success");
 
   } catch (err) {

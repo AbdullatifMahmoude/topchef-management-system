@@ -8,7 +8,6 @@ from app.core.logging import logger
 
 class SyncMode(Enum):
     WEBSOCKET = "websocket"
-    POLLING = "polling"
     OFFLINE = "offline"
 
 
@@ -22,17 +21,16 @@ class WebSocketConnectionState(Enum):
 
 class SyncManager:
     """
-    Synchronization manager for real-time and fallback sync modes.
+    Synchronization manager for real-time sync state.
 
     WebSocket health is based on explicit transport state. An idle connection is
-    healthy; lack of application messages must not trigger fallback polling.
+    healthy; lack of application messages must not trigger HTTP refreshes.
     """
 
     def __init__(self):
-        self._mode = SyncMode.POLLING
+        self._mode = SyncMode.OFFLINE
         self._last_ws_message_at = 0.0
         self._last_ws_state_change_at = 0.0
-        self._last_poll_time = 0.0
         self._ws_state = WebSocketConnectionState.DISCONNECTED
         self._lock = asyncio.Lock()
 
@@ -72,8 +70,8 @@ class SyncManager:
                     logger.info("SYNC MODE: switched to REAL-TIME (WebSocket)")
             elif state in {WebSocketConnectionState.DISCONNECTED, WebSocketConnectionState.RECONNECTING}:
                 if self._mode == SyncMode.WEBSOCKET:
-                    self._mode = SyncMode.POLLING
-                    logger.warning("SYNC MODE: switched to FALLBACK (Polling)")
+                    self._mode = SyncMode.OFFLINE
+                    logger.warning("SYNC MODE: WebSocket disconnected; waiting for reconnect")
 
             if previous != state:
                 detail = f" reason={reason}" if reason else ""
@@ -82,22 +80,6 @@ class SyncManager:
     async def report_ws_activity(self):
         """Record application-message activity for logs/diagnostics only."""
         self._last_ws_message_at = time.time()
-
-    def should_poll(self) -> bool:
-        """
-        Determines if an HTTP poll is allowed.
-        Strictly disables polling when WebSocket is connected.
-        """
-        if self.is_ws_active:
-            return False
-
-        now = time.time()
-        # Fallback polling interval: 60 seconds
-        if now - self._last_poll_time >= 60:
-            self._last_poll_time = now
-            return True
-
-        return False
 
     def is_duplicate(self, event_id: str) -> bool:
         """Checks if an event ID has already been processed to avoid duplicate UI updates."""

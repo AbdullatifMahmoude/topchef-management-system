@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Date, DateTime, Numeric, inspect, select
+from sqlalchemy import Date, DateTime, Numeric, Integer, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import logger
@@ -143,7 +143,9 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
 
 async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, Any]]) -> int:
     changed = 0
-    primary_key_names = {column.name for column in inspect(model).primary_key}
+    mapper = inspect(model)
+    primary_key_names = {column.name for column in mapper.primary_key}
+    
     for row in rows:
         values = _column_payload(model, row)
         if not values:
@@ -151,15 +153,30 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
 
         existing = await _find_existing(session, model, row)
         if existing is None:
-            session.add(model(**values))
+            # We strip INTEGER primary keys to let local SQLite generate its own.
+            # But we KEEP String primary keys (like in AppSetting).
+            insert_values = {}
+            for k, v in values.items():
+                is_pk = k in primary_key_names
+                col = mapper.columns.get(k)
+                # Only strip if it's a single integer PK (typical auto-increment ID)
+                is_int_pk = is_pk and col is not None and isinstance(col.type, Integer)
+                
+                if is_int_pk:
+                    continue
+                insert_values[k] = v
+            
+            session.add(model(**insert_values))
             changed += 1
             continue
 
+        # If it exists, update non-PK fields
         for key, value in values.items():
             if key in primary_key_names:
                 continue
-            setattr(existing, key, value)
-        changed += 1
+            if getattr(existing, key) != value:
+                setattr(existing, key, value)
+                changed += 1
 
     return changed
 

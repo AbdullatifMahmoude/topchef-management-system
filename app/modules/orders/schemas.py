@@ -35,6 +35,8 @@ class OrderCreate(OrderBase):
     delivery_person_id: Optional[int] = None
     delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
     offer_code: Optional[str] = None
+    order_number: Optional[str] = None
+    order_date: Optional[date] = None
     
     @field_validator('customer_id', 'address_id', 'delivery_person_id', mode='before')
     @classmethod

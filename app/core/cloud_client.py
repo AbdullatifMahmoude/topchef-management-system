@@ -67,6 +67,20 @@ class CloudSyncClient:
             logger.error("Cloud POST error (%s): %s", endpoint, e)
             return None
 
+    async def patch(self, endpoint: str, json_data: Dict) -> Optional[Dict[str, Any]]:
+        """Perform a PATCH request to the cloud."""
+        try:
+            response = await self._client.patch(endpoint, json=json_data)
+            if response.status_code in (200, 201):
+                if not response.content:
+                    return {}
+                return response.json()
+            logger.warning("Cloud PATCH %s failed (%s): %s", endpoint, response.status_code, response.text)
+            return None
+        except Exception as e:
+            logger.error("Cloud PATCH error (%s): %s", endpoint, e)
+            return None
+
     async def close(self):
         await self._client.aclose()
 
