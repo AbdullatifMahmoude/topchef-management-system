@@ -146,3 +146,464 @@
 [SQL: UPDATE customers SET phone_number=?, created_at=? WHERE customers.id = ?]
 [parameters: [('01287859415', '2026-04-21 17:11:58.205882', 45), ('01204709416', '2026-04-21 17:14:09.687906', 46), ('01221305225', '2026-04-21 17:15:32.407380', 47), ('01289536870', '2026-04-21 17:18:15.919527', 48)]]
 (Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:55:39] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 19:55:39] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 19:55:39] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 19:55:39] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 19:55:39] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 19:55:41] INFO     topchef_desktop – Tray icon started
+[2026-05-06 19:55:41] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 19:55:41] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 19:56:04] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:07] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:10] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:12] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:15] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:18] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:21] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:23] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:26] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:29] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:32] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:35] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:36] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 1 validation error for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:56:38] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:39] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 1 validation error for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:56:41] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:42] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 1 validation error for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:56:44] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:45] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 1 validation error for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:56:47] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:48] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 1 validation error for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:56:50] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:53] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:56] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:56:59] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:00] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:02] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:03] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:05] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:06] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:08] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:09] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:11] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:12] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:14] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:17] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:20] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:20] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:22] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:23] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:25] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:26] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:28] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:29] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:31] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:32] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 19:57:34] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:37] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:40] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:42] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:45] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:48] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:51] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:54] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:56] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:57:59] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:02] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:04] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:07] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:10] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:13] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:15] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:18] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:21] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:24] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:26] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:29] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:32] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:35] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:38] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:41] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:44] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:46] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:49] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:52] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:55] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:58:58] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:01] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:04] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:07] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:10] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:13] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:16] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:19] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:22] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:24] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:28] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:30] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:33] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:37] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:40] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:43] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:46] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:48] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:51] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:54] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 19:59:57] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 20:00:00] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 20:00:03] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 20:00:06] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 20:00:09] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 20:00:12] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 20:00:15] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.IntegrityError) UNIQUE constraint failed: products.product_name, products.cat_id
+[SQL: UPDATE products SET cat_id=?, product_name=?, created_at=?, update_at=? WHERE products.id = ?]
+[parameters: (5, 'كبدة', '2026-04-18 21:06:56.540380', '2026-04-27 00:08:08.280972', 1)]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-05-06 20:04:45] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 20:04:45] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 20:04:45] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 20:04:45] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 20:04:45] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 20:04:47] INFO     topchef_desktop – Tray icon started
+[2026-05-06 20:04:47] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 20:04:47] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 20:05:01] INFO     topchef_desktop – Cloud reconciliation applied 230 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 1, 'order_items': 2, 'order_status_history': 0}
+[2026-05-06 20:05:27] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 20:05:27] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 20:06:28] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 20:07:28] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 20:37:05] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 20:37:05] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 20:37:05] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 20:37:05] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 20:37:05] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 20:37:07] INFO     topchef_desktop – Tray icon started
+[2026-05-06 20:37:07] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 20:37:54] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 20:37:54] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 20:37:54] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 20:37:54] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 20:37:54] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 20:37:56] INFO     topchef_desktop – Tray icon started
+[2026-05-06 20:37:56] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 20:37:56] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 20:38:12] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=2 rejected=4 pending=6 errors=['ORDER_UPDATED error: 1 validation error for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type', 'ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type', 'ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 20:38:15] INFO     topchef_desktop – Cloud reconciliation applied 233 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 4, 'order_status_history': 0}
+[2026-05-06 22:01:06] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 22:01:06] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 22:01:06] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 22:01:07] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 22:01:07] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 22:01:08] INFO     topchef_desktop – Tray icon started
+[2026-05-06 22:01:08] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 22:01:08] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 22:01:27] INFO     topchef_desktop – Cloud reconciliation applied 233 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 4, 'order_status_history': 0}
+[2026-05-06 22:02:42] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 22:03:45] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 22:03:45] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 22:03:45] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 22:03:45] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 22:03:45] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 22:03:47] INFO     topchef_desktop – Tray icon started
+[2026-05-06 22:03:47] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 22:03:47] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 22:04:06] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 2 validation errors for OrderResponse\nitems.0.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type\nitems.1.id\n  Input should be a valid integer [type=int_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_type']
+[2026-05-06 22:04:08] INFO     topchef_desktop – Cloud reconciliation applied 233 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 4, 'order_status_history': 0}
+[2026-05-06 22:15:12] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 22:15:12] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 22:15:12] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 22:15:12] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 22:15:12] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 22:15:14] INFO     topchef_desktop – Tray icon started
+[2026-05-06 22:15:14] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 22:15:14] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 22:15:31] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-06 22:15:33] INFO     topchef_desktop – Cloud reconciliation applied 233 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 4, 'order_status_history': 0}
+[2026-05-06 22:16:09] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-06 22:17:10] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:18:10] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:27:49] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 22:27:49] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 22:27:50] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 22:27:50] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 22:27:50] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 22:27:51] INFO     topchef_desktop – Tray icon started
+[2026-05-06 22:27:51] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 22:27:51] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 22:28:06] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:28:08] INFO     topchef_desktop – Cloud reconciliation applied 234 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 5, 'order_status_history': 0}
+[2026-05-06 22:29:09] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:30:10] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:36:49] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 22:36:49] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 22:36:49] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 22:36:49] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 22:36:49] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 22:36:51] INFO     topchef_desktop – Tray icon started
+[2026-05-06 22:36:51] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 22:36:51] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 22:37:04] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=7 errors=[]
+[2026-05-06 22:37:06] INFO     topchef_desktop – Cloud reconciliation applied 234 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 5, 'order_status_history': 0}
+[2026-05-06 22:37:30] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=8 errors=[]
