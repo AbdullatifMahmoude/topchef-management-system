@@ -667,3 +667,23 @@
 [2026-05-06 23:16:21] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
 [2026-05-06 23:16:23] INFO     topchef_desktop – Cloud reconciliation applied 234 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 5, 'order_status_history': 0}
 [2026-05-06 23:17:23] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 23:21:51] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 23:21:51] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 23:21:51] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 23:21:52] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 23:21:52] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 23:21:53] INFO     topchef_desktop – Tray icon started
+[2026-05-06 23:21:53] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 23:22:10] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 23:22:10] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 23:22:10] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 23:22:10] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 23:22:10] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 23:22:12] INFO     topchef_desktop – Tray icon started
+[2026-05-06 23:22:12] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 23:22:12] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 23:22:27] INFO     topchef_desktop – Cloud reconciliation applied 234 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 5, 'order_status_history': 0}
+[2026-05-06 23:22:43] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-06 23:25:25] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-06 23:27:26] INFO     topchef_desktop – Cloud reconciliation applied 160 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 2, 'order_items': 5, 'order_status_history': 2}
+[2026-05-06 23:32:29] INFO     topchef_desktop – Cloud reconciliation applied 162 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 3, 'order_items': 6, 'order_status_history': 2}

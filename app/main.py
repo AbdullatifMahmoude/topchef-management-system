@@ -89,30 +89,6 @@ async def lifespan(app: FastAPI):
                     logger.info("🛡️ Cloud DB hardening successful: Product constraints updated.")
                 except Exception as inner_e:
                     logger.error(f"❌ Failed to apply product constraint fix: {inner_e}")
-
-                # D. Fix Order Status Enum types (Self-Healing)
-                try:
-                    # Fix order_status_history table if it uses the old 'order_status' type
-                    # We cast to text first, upper-case it, and then cast to the 'orderstatus' enum
-                    await conn.execute(text("""
-                        DO $$ 
-                        BEGIN 
-                            IF EXISTS (
-                                SELECT 1 FROM information_schema.columns 
-                                WHERE table_name = 'order_status_history' 
-                                AND column_name = 'status' 
-                                AND udt_name = 'order_status'
-                            ) THEN
-                                ALTER TABLE order_status_history 
-                                ALTER COLUMN status TYPE orderstatus 
-                                USING upper(status::text)::orderstatus;
-                            END IF;
-                        END $$;
-                    """))
-                    logger.info("✅ Database Self-Healing: order_status_history enum type corrected.")
-                except Exception as e_history:
-                    logger.warning(f"⚠️ Could not fix order_status_history enum: {e_history}")
-                    
                     
         except Exception as e:
             logger.warning(f"Self-healing database update skipped or failed: {e}")
