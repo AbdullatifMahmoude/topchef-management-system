@@ -127,7 +127,7 @@ class OrderStatusHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
     # This table uses the same enum as orders
-    status = Column(DbEnum(OrderStatus, name="order_status"), nullable=False)
+    status = Column(DbEnum(OrderStatus, name="orderstatus"), nullable=False)
     changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
