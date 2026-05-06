@@ -607,3 +607,31 @@
 [2026-05-06 22:37:04] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=7 errors=[]
 [2026-05-06 22:37:06] INFO     topchef_desktop – Cloud reconciliation applied 234 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 5, 'order_status_history': 0}
 [2026-05-06 22:37:30] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=8 errors=[]
+[2026-05-06 22:46:43] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 22:46:43] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 22:46:43] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 22:46:43] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 22:46:43] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 22:46:45] INFO     topchef_desktop – Tray icon started
+[2026-05-06 22:46:45] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 22:46:45] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 22:47:01] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=8 errors=[]
+[2026-05-06 22:47:03] INFO     topchef_desktop – Cloud reconciliation applied 234 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 5, 'order_status_history': 0}
+[2026-05-06 22:48:04] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=8 errors=[]
+[2026-05-06 22:49:06] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=8 errors=[]
+[2026-05-06 22:50:06] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:52:47] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-06 22:52:47] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-06 22:52:47] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-06 22:52:47] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-06 22:52:47] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-06 22:52:49] INFO     topchef_desktop – Tray icon started
+[2026-05-06 22:52:49] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-06 22:52:49] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-06 22:53:11] INFO     topchef_desktop – Cloud reconciliation applied 234 rows: {'users': 2, 'categories': 3, 'products': 18, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 2, 'comments': 6, 'orders': 2, 'order_items': 5, 'order_status_history': 0}
+[2026-05-06 22:53:56] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:54:56] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:55:57] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:56:58] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:57:59] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=0 pending=1 errors=[]
+[2026-05-06 22:58:59] INFO     topchef_desktop – Cloud reconciliation applied 158 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 2, 'order_items': 5, 'order_status_history': 0}
