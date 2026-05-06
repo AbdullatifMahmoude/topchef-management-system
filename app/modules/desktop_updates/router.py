@@ -250,12 +250,31 @@ async def desktop_sync_events(
                     
                     # 2. Update if found
                     if cloud_order:
-                        from app.modules.orders.schemas import OrderUpdateFull
+                        from app.modules.orders.schemas import OrderUpdateFull, OrderUpdate
+                        
+                        # Apply non-status updates if present
                         await order_service.update_order(
                             cloud_order.id, 
                             OrderUpdateFull(**event_data), 
                             current_user_id=current_user.id if current_user else None
                         )
+                        
+                        # Apply status updates if present
+                        cloud_status_str = getattr(cloud_order.order_status, "value", str(cloud_order.order_status))
+                        if "order_status" in event_data and event_data["order_status"] != cloud_status_str:
+                            try:
+                                await order_service.update_order_status(
+                                    cloud_order.id,
+                                    OrderUpdate(
+                                        order_status=event_data["order_status"],
+                                        delivery_person_id=event_data.get("delivery_person_id"),
+                                        internal_notes=event_data.get("internal_notes")
+                                    ),
+                                    current_user_id=current_user.id if current_user else None
+                                )
+                            except Exception as status_e:
+                                errors.append(f"ORDER_UPDATED status error: {str(status_e)}")
+                                
                         db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                         accepted += 1
                     else:

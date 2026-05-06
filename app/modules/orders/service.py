@@ -298,6 +298,7 @@ class OrderService:
                 order.total_amount = pricing_res.total_amount
 
             updated_order = await self.repository.update_order_full(order, update_data, changed_by_user_id=current_user_id)
+            await self.db.flush()
         
         completed_order = await self.get_order(updated_order.id)
         completed_schema = schemas.OrderResponse.model_validate(completed_order)

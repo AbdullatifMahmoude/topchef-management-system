@@ -142,6 +142,7 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
 
 
 async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, Any]]) -> int:
+    import sqlalchemy.exc
     changed = 0
     mapper = inspect(model)
     primary_key_names = {column.name for column in mapper.primary_key}
@@ -152,31 +153,38 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
             continue
 
         existing = await _find_existing(session, model, row)
-        if existing is None:
-            # We strip INTEGER primary keys to let local SQLite generate its own.
-            # But we KEEP String primary keys (like in AppSetting).
-            insert_values = {}
-            for k, v in values.items():
-                is_pk = k in primary_key_names
-                col = mapper.columns.get(k)
-                # Only strip if it's a single integer PK (typical auto-increment ID)
-                is_int_pk = is_pk and col is not None and isinstance(col.type, Integer)
+        
+        try:
+            async with session.begin_nested():
+                if existing is None:
+                    # We strip INTEGER primary keys to let local SQLite generate its own.
+                    # But we KEEP String primary keys (like in AppSetting).
+                    insert_values = {}
+                    for k, v in values.items():
+                        is_pk = k in primary_key_names
+                        col = mapper.columns.get(k)
+                        # Only strip if it's a single integer PK (typical auto-increment ID)
+                        is_int_pk = is_pk and col is not None and isinstance(col.type, Integer)
+                        
+                        if is_int_pk:
+                            continue
+                        insert_values[k] = v
+                    
+                    session.add(model(**insert_values))
+                else:
+                    # If it exists, update non-PK fields
+                    for key, value in values.items():
+                        if key in primary_key_names:
+                            continue
+                        if getattr(existing, key) != value:
+                            setattr(existing, key, value)
                 
-                if is_int_pk:
-                    continue
-                insert_values[k] = v
-            
-            session.add(model(**insert_values))
-            changed += 1
-            continue
-
-        # If it exists, update non-PK fields
-        for key, value in values.items():
-            if key in primary_key_names:
-                continue
-            if getattr(existing, key) != value:
-                setattr(existing, key, value)
+                await session.flush()
                 changed += 1
+        except sqlalchemy.exc.IntegrityError:
+            # If inserting or updating this row violates a unique constraint, ignore it.
+            # The transaction savepoint will automatically rollback this row's changes.
+            pass
 
     return changed
 
