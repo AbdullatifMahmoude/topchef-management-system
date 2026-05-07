@@ -50,6 +50,10 @@ class OrderService:
                 status=OutboxEventStatus.PENDING
             )
             self.db.add(outbox_record)
+            
+            # Wake up the background sync loop immediately if in desktop mode
+            from app.core.events import get_outbox_sync_trigger
+            get_outbox_sync_trigger().set()
 
     async def _validate_order_items(self, items: List[schemas.OrderItemCreate]):
         """Validate products exist and are available."""
@@ -179,8 +183,8 @@ class OrderService:
             self._record_outbox_event("ORDER_CREATED", payload_data)
             
             # 8. Trigger Sync and Notify
-            from app.core.events import outbox_sync_trigger
-            outbox_sync_trigger.set()
+            from app.core.events import get_outbox_sync_trigger
+            get_outbox_sync_trigger().set()
             await order_events_manager.emit({
                 "type": "NEW_ORDER",
                 "event": "order.created",
@@ -227,8 +231,8 @@ class OrderService:
             payload_data = completed_schema.model_dump(mode='json')
             self._record_outbox_event("ORDER_UPDATED", payload_data)
         
-        from app.core.events import outbox_sync_trigger
-        outbox_sync_trigger.set()
+        from app.core.events import get_outbox_sync_trigger
+        get_outbox_sync_trigger().set()
         await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
@@ -304,8 +308,8 @@ class OrderService:
         completed_schema = schemas.OrderResponse.model_validate(completed_order)
         payload_data = completed_schema.model_dump(mode='json')
         self._record_outbox_event("ORDER_UPDATED", payload_data)
-        from app.core.events import outbox_sync_trigger
-        outbox_sync_trigger.set()
+        from app.core.events import get_outbox_sync_trigger
+        get_outbox_sync_trigger().set()
         await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",

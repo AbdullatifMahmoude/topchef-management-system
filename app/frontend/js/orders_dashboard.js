@@ -153,7 +153,7 @@
     if (type === "ORDER_SNAPSHOT") {
         ordersList = data.orders || [];
         renderOrdersTable();
-        loadDashboardData(); 
+        setTimeout(loadDashboardData, 500); 
         return;
     }
 
@@ -172,12 +172,12 @@
           renderOrdersTable();
           highlightRow(data.id);
         } else {
-          loadDashboardData();
+          setTimeout(loadDashboardData, 500);
         }
       }
       // Always refresh stats if something changed
       if (document.getElementById("page-home")) {
-        loadDashboardData();
+        setTimeout(loadDashboardData, 500);
       }
     }
 

@@ -5,7 +5,7 @@ import json
 import random
 import time
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -59,7 +59,24 @@ class EventBus:
 
 
 event_bus = EventBus()
-outbox_sync_trigger = asyncio.Event()
+_pending_sync_trigger: bool = False
+
+def get_outbox_sync_trigger():
+    """Returns an object with .set() for backward compatibility."""
+    class _DummyTrigger:
+        def set(self):
+            global _pending_sync_trigger
+            _pending_sync_trigger = True
+            
+        def clear(self):
+            global _pending_sync_trigger
+            _pending_sync_trigger = False
+            
+        def is_set(self):
+            global _pending_sync_trigger
+            return _pending_sync_trigger
+            
+    return _DummyTrigger()
 
 
 class OrderEventsManager:
@@ -427,7 +444,7 @@ class OrderEventsManager:
                 logger.debug("Desktop bridge received heartbeat ack")
                 continue
 
-            event_name = payload.get("event")
+            event_name = payload.get("event") or payload.get("type")
             if event_name not in {
                 OrderEvents.CREATED.value,
                 OrderEvents.UPDATED.value,
@@ -462,8 +479,13 @@ class OrderEventsManager:
                     from app.modules.orders.models import Order
                     
                     try:
+                        from datetime import date
+                        parsed_date = order_date
+                        if isinstance(order_date, str):
+                            parsed_date = date.fromisoformat(order_date[:10])
+                            
                         async with AsyncSessionLocal() as session:
-                            stmt = select(Order.id).where(Order.order_number == order_num, Order.order_date == order_date)
+                            stmt = select(Order.id).where(Order.order_number == order_num, Order.order_date == parsed_date)
                             local_id = await session.scalar(stmt)
                             if local_id:
                                 payload["data"]["id"] = local_id
@@ -479,7 +501,7 @@ class OrderEventsManager:
                 OrderEvents.UPDATED.value, "ORDER_UPDATED",
                 OrderEvents.STATUS_CHANGED.value
             }:
-                outbox_sync_trigger.set()
+                get_outbox_sync_trigger().set()
 
             await self.broadcast_all(payload)
 

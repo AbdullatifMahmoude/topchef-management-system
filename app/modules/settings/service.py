@@ -73,8 +73,8 @@ class SettingsService:
             })
 
             # 4. Emit WebSocket Event for real-time UI
-            from app.core.events import order_events_manager, outbox_sync_trigger
-            outbox_sync_trigger.set()
+            from app.core.events import order_events_manager, get_outbox_sync_trigger
+            get_outbox_sync_trigger().set()
             
             await order_events_manager.emit({
                 "type": "SETTING_UPDATED",

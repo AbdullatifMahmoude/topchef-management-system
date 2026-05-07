@@ -33,6 +33,7 @@
           <span id="online_orders_badge" class="nav_badge" style="display: none;">0</span>
         </button>
         <button id="tab_all_orders" class="nav_tab" onclick="switchMainTab('all_orders')">كل الطلبات</button>
+        <button id="tab_riders" class="nav_tab" onclick="switchMainTab('riders')">الدليفريه</button>
       </div>
       <div style="display: flex; align-items: center; gap: 12px">
         <span
@@ -259,6 +260,34 @@
         <!-- Orders Grid -->
         <div class="online_orders_grid" id="all_orders_grid">
           <!-- سيتم إضافة الطلبات هنا عبر الجافاسكريبت -->
+        </div>
+      </div>
+    </div>
+    
+    <!-- ===== Delivery Riders Layout ===== -->
+    <div id="riders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
+      <div class="online_orders_container">
+        <div class="online_actions_row" style="justify-content: space-between; margin-bottom: 24px;">
+          <h2 style="color: var(--color-primary); margin: 0; font-size: 20px;">أداء المناديب</h2>
+          <button class="filter_btn active" onclick="fetchAllOrders()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            تحديث البيانات
+          </button>
+        </div>
+
+        <div class="riders_table_wrapper" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse; direction: rtl; text-align: right;">
+            <thead>
+              <tr style="background: rgba(201, 168, 76, 0.15); color: var(--color-primary);">
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">اسم المندوب</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">عدد الطلبات</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">إجمالي المبالغ</th>
+              </tr>
+            </thead>
+            <tbody id="riders_table_body">
+              <!-- سيتم تعبئة البيانات هنا -->
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

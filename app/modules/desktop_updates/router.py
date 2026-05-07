@@ -38,6 +38,19 @@ router = APIRouter()
 _DESKTOP_API_TOKEN: Optional[str] = None # Set via env
 
 
+# ──────────────────────── Sync Trigger ────────────────────────
+
+@router.post("/trigger-pull")
+async def trigger_desktop_pull():
+    """Forces the background sync worker to perform a master-data pull from cloud."""
+    if settings.RUNTIME_MODE != "desktop":
+        raise HTTPException(status_code=405, detail="Not supported in cloud mode")
+    
+    from app.core.events import get_outbox_sync_trigger
+    get_outbox_sync_trigger().set()
+    return {"status": "ok", "message": "Sync pull triggered"}
+
+
 # ──────────────────────── Incremental Pull (Master Data) ────────────────────────
 
 @router.get("/master-data", response_model=MasterDataResponse)

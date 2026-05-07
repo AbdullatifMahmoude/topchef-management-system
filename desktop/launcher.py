@@ -83,33 +83,61 @@ def main():
 
     async def _desktop_sync_loop():
         """Background synchronization engine running constantly with outbox draining."""
-        from app.core.database import AsyncSessionLocal
-        from app.core.desktop_reconcile import apply_master_data_snapshot
-        from sqlalchemy import select
-        import platform
-        
-        device_id = config.device_id
-        loop_counter = 0
-        last_master_data_sync_at = None
-        force_master_pull = True
-        last_heartbeat_at = 0.0
-        last_pull_at_mon = 0.0
-        
+        global _auth_header_cache
+        try:
+            log.info("⚙️ Sync: Background worker task started.")
+            from app.core.database import AsyncSessionLocal
+            from app.core.desktop_reconcile import apply_master_data_snapshot
+            from sqlalchemy import select
+            import platform
+            
+            device_id = config.device_id
+            loop_counter = 0
+            last_master_data_sync_at = None
+            force_master_pull = True
+            last_heartbeat_at = 0.0
+            last_pull_at_mon = 0.0
+            
+            log.info("⚙️ Sync: Entering main loop...")
+        except Exception as e:
+            log.error(f"FATAL ERROR in _desktop_sync_loop initialization: {e}", exc_info=True)
+            return
         while True:
-            from app.core.events import outbox_sync_trigger
             try:
-                wait_timeout = 1.0 if force_master_pull else 60.0
-                await asyncio.wait_for(outbox_sync_trigger.wait(), timeout=wait_timeout)
-                outbox_sync_trigger.clear()
-                # Wait briefly to let the DB transaction commit before querying Outbox
-                await asyncio.sleep(0.2)
-            except asyncio.TimeoutError:
+                # Sleep briefly to avoid maxing out CPU but remain highly responsive
+                await asyncio.sleep(1.0)
+                
+                from app.core.events import get_outbox_sync_trigger
+                trigger = get_outbox_sync_trigger()
+                
+                if trigger.is_set():
+                    log.info("🔄 Sync: Worker woke up (trigger set).")
+                    trigger.clear()
+                    force_master_pull = True
+                    # Wait briefly to let any DB transactions commit before querying Outbox
+                    await asyncio.sleep(0.2)
+                elif force_master_pull:
+                    # if force_master_pull is true, we don't need to wait for trigger
+                    pass
+            except Exception as e:
+                log.error(f"Error checking sync trigger: {e}")
                 pass
             
             loop_counter += 1
             if not _auth_header_cache:
+                if loop_counter % 10 == 0:
+                    log.info("Outbox: Waiting for user activity to capture Auth header...")
                 continue
             
+            # If we just got the token and haven't synced yet, force a pull
+            if last_master_data_sync_at is None:
+                force_master_pull = True
+            
+            # Lazy initialize the sync lock in the correct loop
+            global _sync_lock
+            if _sync_lock is None:
+                _sync_lock = asyncio.Lock()
+                
             async with _sync_lock:
                 try:
                     from app.modules.orders.models import OutboxEvent, OutboxEventStatus
@@ -125,6 +153,7 @@ def main():
                         pending_events = result.scalars().all()
                         
                         if pending_events:
+                            log.info(f"📤 Outbox: Found {len(pending_events)} pending events. Syncing...")
                             payload = {
                                 "device_id": device_id,
                                 "events": [
@@ -147,32 +176,43 @@ def main():
                             from datetime import datetime, timezone, timedelta
                             now_ts = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
 
-                            if sync_result and rejected == 0 and accepted >= len(pending_events):
-                                # 1. Full Success
-                                for e in pending_events:
+                            if sync_result:
+                                # Mark the number of events the cloud actually accepted as COMPLETED
+                                for i in range(min(accepted, len(pending_events))):
+                                    e = pending_events[i]
                                     e.status = OutboxEventStatus.COMPLETED
                                     e.processed_at = now_ts
-                                await db.commit()
-                                log.info(f"📤 Outbox: Successfully synced {len(pending_events)} events to cloud.")
-                            else:
-                                # 2. Partial Success or Failure
-                                # We check errors to see if they are permanent (400) or transient
-                                is_permanent_error = any("400" in err or "Cannot update" in err for err in errors)
                                 
-                                for e in pending_events:
-                                    if is_permanent_error:
-                                        # If we have permanent errors in the batch, we mark all as failed 
-                                        # (or we could try to be more surgical if we had per-event IDs)
+                                # Mark the specific ones rejected as FAILED if there's a permanent error
+                                # Otherwise they stay PENDING to be retried (or handled by retry_count logic)
+                                for i in range(accepted, min(accepted + rejected, len(pending_events))):
+                                    e = pending_events[i]
+                                    e.status = OutboxEventStatus.FAILED
+                                    e.error_message = errors[i - accepted] if (i - accepted) < len(errors) else "Rejected by cloud"
+                                    e.processed_at = now_ts
+
+                                # Logic for remaining pending events (transient issues)
+                                for i in range(accepted + rejected, len(pending_events)):
+                                    e = pending_events[i]
+                                    e.retry_count = (e.retry_count or 0) + 1
+                                    if e.retry_count >= 5:
                                         e.status = OutboxEventStatus.FAILED
-                                        e.error_message = "; ".join(errors[:3]) if errors else "Cloud rejected batch with permanent error"
+                                        e.error_message = "Cloud did not accept after 5 retries"
                                         e.processed_at = now_ts
-                                    else:
-                                        e.retry_count = (e.retry_count or 0) + 1
-                                        if e.retry_count >= 5:
-                                            e.status = OutboxEventStatus.FAILED
-                                            e.error_message = "; ".join(errors[:3]) if errors else "Cloud did not accept the outbox batch after 5 retries"
-                                            e.processed_at = now_ts
-                                
+
+                                await db.commit()
+                                if accepted > 0:
+                                    log.info(f"📤 Outbox: Successfully synced {accepted} events to cloud.")
+                                if rejected > 0:
+                                    log.warning(f"⚠️ Outbox: {rejected} events were rejected by cloud.")
+                            else:
+                                # Total failure (network error, etc.) - increment retry on all
+                                for e in pending_events:
+                                    e.retry_count = (e.retry_count or 0) + 1
+                                    if e.retry_count >= 10: # More lenient for network errors
+                                        e.status = OutboxEventStatus.FAILED
+                                        e.error_message = "Persistent network failure"
+                                        e.processed_at = now_ts
                                 await db.commit()
                                 log.warning(
                                     "Outbox: cloud did not fully accept batch accepted=%s rejected=%s errors=%s",
@@ -182,9 +222,14 @@ def main():
 
                         # 2. Pull cloud authoritative data into the local database.
                         now_mon = time.monotonic()
+                        # If we have no last sync time, always pull.
+                        if not last_master_data_sync_at:
+                            force_master_pull = True
+                            
                         should_pull = force_master_pull or (last_master_data_sync_at and (now_mon - last_pull_at_mon > 300))
                         
                         if should_pull:
+                            log.info("📥 Sync: Pulling master data from cloud (forced=%s)...", force_master_pull)
                             params = {}
                             if last_master_data_sync_at:
                                 params["since"] = last_master_data_sync_at
@@ -226,14 +271,17 @@ def main():
 
     @asynccontextmanager
     async def desktop_lifespan(app: FastAPI):
+        log.info("🚀 Sync: Lifespan initiated...")
         # 1. Start the desktop sync loop in the background
         sync_task = asyncio.create_task(_desktop_sync_loop())
         
         # 2. Run the original app lifespan
+        log.info("🚀 Sync: Running original app lifespan...")
         async with original_lifespan(app):
             yield
             
         # 3. Cleanup
+        log.info("🚀 Sync: Cleaning up...")
         sync_task.cancel()
         try:
             await sync_task
@@ -262,8 +310,15 @@ def main():
             auth_header = headers.get(b"authorization", b"").decode("utf-8")
             if auth_header:
                 global _auth_header_cache
+                was_empty = (_auth_header_cache is None)
                 _auth_header_cache = auth_header
                 cloud_client.update_token(auth_header)
+                log.info("🔑 Auth: Captured credentials from request.")
+                
+                # If we just got a token, wake up the sync loop immediately
+                if was_empty:
+                    from app.core.events import get_outbox_sync_trigger
+                    get_outbox_sync_trigger().set()
 
             # 2. Poll Suppression & Redundancy Check
             from fastapi.responses import JSONResponse
@@ -304,6 +359,53 @@ def main():
                         response = JSONResponse(content=json_data)
                         await response(scope, receive, send)
                         return
+
+            # 4. Cloud Proxy for Order Updates (PATCH) and Details (GET)
+            # If the order is not found locally, it must be a cloud order we are currently viewing
+            # via the proxy above. We must proxy the request back to the cloud.
+            if method in ("PATCH", "GET") and path.startswith("/orders/"):
+                parts = path.strip("/").split("/")
+                # Match /orders/{id} or /orders/{id}/status
+                if len(parts) >= 2 and parts[0] == "orders" and parts[1].isdigit():
+                    try:
+                        order_id = int(parts[1])
+                        from app.core.database import AsyncSessionLocal
+                        from sqlalchemy import select
+                        from app.modules.orders.models import Order
+                        
+                        async with AsyncSessionLocal() as db_session:
+                            exists = await db_session.scalar(select(Order.id).where(Order.id == order_id))
+                        
+                        if not exists:
+                            log.info(f"🚀 Proxy: Order {order_id} not found locally. Proxying {method} to cloud...")
+                            
+                            if method == "PATCH":
+                                from starlette.requests import Request
+                                req = Request(scope, receive)
+                                try:
+                                    json_data = await req.json()
+                                except:
+                                    json_data = {}
+                                res_data = await cloud_client.patch(path, json_data)
+                            else:
+                                # GET - parse query params if any
+                                from urllib.parse import parse_qs
+                                query_string = scope.get("query_string", b"").decode("utf-8")
+                                params = parse_qs(query_string)
+                                flat_params = {k: v[0] for k, v in params.items()}
+                                res_data = await cloud_client.get(path, params=flat_params)
+
+                            if res_data:
+                                response = JSONResponse(content=res_data)
+                                await response(scope, receive, send)
+                                return
+                            else:
+                                # If cloud also fails or returns None, return 404 as fallback
+                                response = JSONResponse(status_code=404, content={"detail": f"Order {order_id} not found on local or cloud"})
+                                await response(scope, receive, send)
+                                return
+                    except (ValueError, IndexError):
+                        pass
 
             return await self.app(scope, receive, send)
 

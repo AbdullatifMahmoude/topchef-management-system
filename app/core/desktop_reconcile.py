@@ -95,7 +95,7 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
             result = await session.execute(
                 select(Order).where(Order.order_number == order_number, Order.order_date == order_date)
             )
-            return result.scalar_one_or_none()
+            return result.scalars().first()
 
     if model is OrderItem and row.get("order_id") is not None and row.get("product_id") is not None:
         result = await session.execute(
@@ -105,7 +105,7 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
                 OrderItem.unit_price == _coerce_value(OrderItem.__table__.columns.unit_price, row.get("unit_price")),
             )
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     if model is OrderStatusHistory and row.get("order_id") is not None and row.get("changed_at"):
         result = await session.execute(
@@ -114,13 +114,23 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
                 OrderStatusHistory.changed_at == _parse_datetime(row["changed_at"]),
             )
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
+
+    if model is CustomerAddress and row.get("customer_id") and row.get("address"):
+        result = await session.execute(
+            select(CustomerAddress).where(
+                CustomerAddress.customer_id == row["customer_id"],
+                CustomerAddress.address == row["address"]
+            )
+        )
+        return result.scalars().first()
 
     if model is Customer and row.get("phone_number"):
         result = await session.execute(select(Customer).where(Customer.phone_number == row["phone_number"]))
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     if model is User and row.get("username"):
+# ... rest of find_existing ...
         result = await session.execute(select(User).where(User.username == row["username"]))
         return result.scalar_one_or_none()
 
@@ -132,17 +142,17 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
         result = await session.execute(
             select(Product).where(Product.product_name == row["product_name"], Product.cat_id == row["cat_id"])
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     if model is Variant and row.get("name") and row.get("product_id") is not None:
         result = await session.execute(
             select(Variant).where(Variant.name == row["name"], Variant.product_id == row["product_id"])
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     if model is Offer and row.get("code"):
         result = await session.execute(select(Offer).where(Offer.code == row["code"]))
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     return None
 
@@ -154,8 +164,6 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
     primary_key_names = {column.name for column in mapper.primary_key}
     
     # Models that MUST have their IDs preserved to maintain relationships
-    # Orders and related items will still have their IDs managed locally to avoid collisions
-    # when creating orders on multiple devices simultaneously.
     PRESERVE_ID_MODELS = {User, Category, Product, Variant, Offer, AppSetting}
     
     for row in rows:
@@ -168,82 +176,97 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
         try:
             async with session.begin_nested():
                 if existing is None:
-                    # Decide whether to keep the server ID or let SQLite generate a new one
                     insert_values = {}
                     for k, v in values.items():
                         is_pk = k in primary_key_names
                         col = mapper.columns.get(k)
                         is_int_pk = is_pk and col is not None and isinstance(col.type, Integer)
                         
-                        # Strip integer IDs ONLY for non-master models (like Orders, Customers)
-                        # so that multiple devices can create them locally without collision.
                         if is_int_pk and model not in PRESERVE_ID_MODELS:
                             continue
                         insert_values[k] = v
                     
                     session.add(model(**insert_values))
                 else:
-                    # If it exists, update non-PK fields
+                    has_mod = False
                     for key, value in values.items():
                         if key in primary_key_names:
                             continue
-                        if getattr(existing, key) != value:
-                            setattr(existing, key, value)
-                
-                await session.flush()
-                changed += 1
+                        
+                        col = mapper.columns.get(key)
+                        coerced_value = _coerce_value(col, value)
+                        
+                        current_val = getattr(existing, key)
+                        if current_val != coerced_value:
+                            setattr(existing, key, coerced_value)
+                            has_mod = True
+                    
+                    if has_mod:
+                        await session.flush()
+                        changed += 1
         except sqlalchemy.exc.IntegrityError:
-            # If inserting or updating this row violates a unique constraint, ignore it.
-            # The transaction savepoint will automatically rollback this row's changes.
             pass
 
     return changed
 
 
-async def _build_order_id_map(session: AsyncSession, rows: list[dict[str, Any]]) -> dict[int, int]:
-    order_id_map: dict[int, int] = {}
+async def _build_id_map(session: AsyncSession, model: type, rows: list[dict[str, Any]]) -> dict[int, int]:
+    id_map: dict[int, int] = {}
     for row in rows:
         server_id = row.get("id")
         if server_id is None:
             continue
-        existing = await _find_existing(session, Order, row)
+        existing = await _find_existing(session, model, row)
         if existing is not None:
-            order_id_map[int(server_id)] = existing.id
-    return order_id_map
+            id_map[int(server_id)] = existing.id
+    return id_map
 
 
-def _remap_child_order_ids(rows: list[dict[str, Any]], order_id_map: dict[int, int]) -> list[dict[str, Any]]:
+def _remap_foreign_ids(rows: list[dict[str, Any]], field_name: str, id_map: dict[int, int]) -> list[dict[str, Any]]:
+    if not id_map:
+        return rows
     remapped = []
     for row in rows:
         item = dict(row)
-        server_order_id = item.get("order_id")
-        if server_order_id is not None and int(server_order_id) in order_id_map:
-            item["order_id"] = order_id_map[int(server_order_id)]
+        server_id = item.get(field_name)
+        if server_id is not None and int(server_id) in id_map:
+            item[field_name] = id_map[int(server_id)]
         remapped.append(item)
     return remapped
 
 
 async def apply_master_data_snapshot(session: AsyncSession, snapshot: dict[str, Any]) -> dict[str, int]:
-    """Apply a cloud snapshot to the local desktop database.
-
-    The cloud is authoritative for pulled rows. This reconciler never uses
-    message silence as health, and it is idempotent so the desktop may run it
-    at startup and on every periodic sync tick.
-    """
+    """Apply a cloud snapshot to the local desktop database."""
     stats: dict[str, int] = {}
 
     try:
+        customer_id_map: dict[int, int] = {}
+        address_id_map: dict[int, int] = {}
         order_id_map: dict[int, int] = {}
+
         for model, key in MODEL_ORDER:
             rows = snapshot.get(key) or []
-            if model is Order:
-                stats[key] = await _upsert_rows(session, model, rows)
-                await session.flush()
-                order_id_map = await _build_order_id_map(session, rows)
-                continue
-            if model in {OrderItem, OrderStatusHistory} and order_id_map:
-                rows = _remap_child_order_ids(rows, order_id_map)
+            
+            # Remap Foreign Keys before upserting
+            if model is CustomerAddress:
+                rows = _remap_foreign_ids(rows, "customer_id", customer_id_map)
+            elif model is Order:
+                rows = _remap_foreign_ids(rows, "customer_id", customer_id_map)
+                rows = _remap_foreign_ids(rows, "address_id", address_id_map)
+            elif model in {OrderItem, OrderStatusHistory} and order_id_map:
+                rows = _remap_foreign_ids(rows, "order_id", order_id_map)
+
             stats[key] = await _upsert_rows(session, model, rows)
+            await session.flush()
+
+            # Build ID maps for future children in this loop
+            if model is Customer:
+                customer_id_map = await _build_id_map(session, model, rows)
+            elif model is CustomerAddress:
+                address_id_map = await _build_id_map(session, model, rows)
+            elif model is Order:
+                order_id_map = await _build_id_map(session, model, rows)
+
         await session.commit()
     except Exception:
         await session.rollback()

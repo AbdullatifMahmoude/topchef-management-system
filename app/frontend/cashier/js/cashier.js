@@ -45,6 +45,10 @@ let cart = [];
 let onlineOrdersList = [];
 let onlineOrdersFilter = 'all'; // 'all', 'new', 'ready', 'cancelled'
 let onlineOrdersSearchTerm = '';
+let onlineOrdersCurrentPage = 1;
+let onlineOrdersTotal = 0;
+let totalNewOrdersGlobalCount = 0; // New orders only
+const ordersPageSize = 12;
 let lastNewOrdersCount = 0;
 let isNotificationSoundEnabled = true;
 let socket = null;
@@ -99,6 +103,9 @@ async function init() {
     renderTabs();
     renderItems();
     initWebOrdersToggle();
+    
+    // Initial badge refresh
+    refreshNewOrdersBadge();
   } catch (err) {
     console.error("API error:", err);
     document.getElementById("items_grid").innerHTML =
@@ -512,6 +519,7 @@ function showConfirmModal(orderData) {
         items: items,
         idempotency_key: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         address_id: deliveryCustomerInfo.selectedAddressId || null,
+        customer_address: deliveryCustomerInfo.newAddress || null, // ✅ Fix: Send address string so backend can create a record
         delivery_person_id: selectedDelivery ? selectedDelivery.id : null,
         delivery_fee: (orderType === "delivery" ? selectedDeliveryFee : selectedDineInFee) || 0,
         offer_code: null
@@ -588,9 +596,25 @@ function showConfirmModal(orderData) {
 
       showToast("تم تأكيد الطلب بنجاح", "success");
       
+      // ✅ NEW: Update local memory lists immediately so the order appears without refresh
+      if (isOnlineOrder(createdOrder)) {
+          if (typeof onlineOrdersList !== 'undefined') {
+              const exists = onlineOrdersList.find(o => String(o.id) === String(createdOrder.id));
+              if (!exists) onlineOrdersList.unshift(createdOrder);
+          }
+      } else {
+          if (typeof allOrdersList !== 'undefined') {
+              const exists = allOrdersList.find(o => String(o.id) === String(createdOrder.id));
+              if (!exists) allOrdersList.unshift(createdOrder);
+          }
+      }
+
       // Update all orders tab if active
       if (document.getElementById("tab_all_orders") && document.getElementById("tab_all_orders").classList.contains("active")) {
           renderAllOrders();
+      }
+      if (document.getElementById("tab_online") && document.getElementById("tab_online").classList.contains("active")) {
+          renderOnlineOrders();
       }
 
     } catch (err) {
@@ -771,27 +795,27 @@ function renderOrderTypeBadge() {
   if (orderType === "delivery" && selectedDelivery && selectedDeliveryFee !== null) {
     badge.innerHTML = `
       <span class="badge_icon"></span>
-      <span class="badge_name">${selectedDelivery.name}</span>
+      <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">${selectedDelivery.name}</span>
       <span class="badge_fee">رسوم توصيل: ${selectedDeliveryFee} ج.م</span>
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   } else if (orderType === "takeaway") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
-      <span class="badge_name">تيك اواي</span>
+      <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">تيك اواي</span>
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   } else if (orderType === "dine_in") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
-      <span class="badge_name">صالة</span>
+      <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">صالة</span>
       ${selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${selectedDineInFee} ج.م</span>` : ''}
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   } else if (orderType === "delivery") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
-      <span class="badge_name" style="color:var(--color-subtext);font-size:12px">لم يتم اختيار الدليفري بعد</span>
+      <span class="badge_name" style="color:var(--color-subtext);font-size:12px;cursor:pointer" onclick="renderDeliveryCustomerForm()">لم يتم اختيار الدليفري بعد (اضغط للإكمال)</span>
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   }
@@ -1160,10 +1184,13 @@ function renderDeliveryCustomerForm() {
   container.innerHTML = `
     <div class="delivery_customer_card">
       <div class="dcf_title">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-        </svg>
-        ${orderType === 'delivery' ? 'بيانات عميل الديليفري' : 'بيانات العميل (اختياري)'}
+        <div style="display:flex; align-items:center; gap:6px;">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          ${orderType === 'delivery' ? 'بيانات عميل الديليفري' : 'بيانات العميل (اختياري)'}
+        </div>
+        <button class="dcf_close_btn" onclick="hideDeliveryCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
       </div>
 
       <div class="dcf_field">
@@ -1200,6 +1227,11 @@ function renderDeliveryCustomerForm() {
       nameInput.classList.add('filled');
     }
   }
+}
+
+function hideDeliveryCustomerForm() {
+  const container = document.getElementById('delivery_customer_form');
+  if (container) container.style.display = 'none';
 }
 
 function handlePhoneInput(phone) {
@@ -1354,15 +1386,117 @@ renderOrderTypeButtons();
 renderOrderTypeBadge();
 
 // ===================================================
+//  Delivery Riders Tab Logic
+// ===================================================
+function renderRidersTab() {
+  const body = document.getElementById("riders_table_body");
+  if (!body) return;
+
+  if (allOrdersList.length === 0 && onlineOrdersList.length === 0 && !ordersSnapshotLoaded) {
+    body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل البيانات...</td></tr>`;
+    return;
+  }
+
+  // تجميع كل الطلبات
+  const combinedOrders = [...allOrdersList, ...onlineOrdersList];
+  
+  // فلترة الطلبات التي بها دليفري (تجاهل الطلبات الملغية لو أردت أرقام "مؤكدة" فقط)
+  // هنا سنحسب كل الطلبات التي تم تخصيص مندوب لها ولم تلغَ
+  const deliveryOrders = combinedOrders.filter(o => o.delivery_person_id && o.order_status !== 'cancelled');
+
+  // تجميع البيانات لكل مندوب
+  const riderStats = {};
+
+  deliveryOrders.forEach(order => {
+    const rid = order.delivery_person_id;
+    const rname = order.delivery_person_name || "مندوب غير معروف";
+    
+    if (!riderStats[rid]) {
+      riderStats[rid] = {
+        id: rid,
+        name: rname,
+        count: 0,
+        total: 0,
+        orderNumbers: []
+      };
+    }
+    
+    riderStats[rid].count++;
+    riderStats[rid].total += parseFloat(order.total_amount || 0);
+    riderStats[rid].orderNumbers.push(order.order_number || order.id);
+  });
+
+  const ridersArr = Object.values(riderStats);
+
+  if (ridersArr.length === 0) {
+    body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
+    return;
+  }
+
+  // ترتيب حسب عدد الطلبات تنازلياً
+  ridersArr.sort((a, b) => b.count - a.count);
+
+  body.innerHTML = ridersArr.map(r => `
+    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+      <td style="padding: 15px; font-weight: 700; color: #fff;">${r.name}</td>
+      <td style="padding: 15px;">
+        <button onclick='showRiderOrdersPopup("${r.name.replace(/'/g, "\\'")}", ${JSON.stringify(r.orderNumbers)})' 
+          style="background: rgba(61, 158, 107, 0.15); color: #3d9e6b; border: 1px solid rgba(61, 158, 107, 0.3); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-family: Cairo, sans-serif; font-weight: 700;">
+          ${r.count} طلبات
+        </button>
+      </td>
+      <td style="padding: 15px; font-weight: 900; color: var(--color-primary);">${r.total.toFixed(2)} ج.م</td>
+    </tr>
+  `).join('');
+}
+
+function showRiderOrdersPopup(riderName, orderNumbers) {
+  const old = document.getElementById("rider_orders_popup");
+  if (old) old.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "rider_orders_popup";
+  overlay.style.cssText = `
+    position:fixed; inset:0; background:rgba(0,0,0,0.8);
+    display:flex; align-items:center; justify-content:center; z-index:20000; direction:rtl;
+  `;
+
+  overlay.innerHTML = `
+    <div style="background: var(--color-bg); border: 1px solid var(--color-primary); border-radius: 16px; padding: 24px; width: 400px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(201, 168, 76, 0.2); padding-bottom: 12px;">
+        <h3 style="margin: 0; color: var(--color-primary); font-size: 18px;">طلبات المندوب: ${riderName}</h3>
+        <button onclick="document.getElementById('rider_orders_popup').remove()" style="background: none; border: none; color: var(--color-subtext); font-size: 24px; cursor: pointer;">&times;</button>
+      </div>
+      
+      <div style="flex: 1; overflow-y: auto; padding-left: 8px;">
+        <p style="color: var(--color-subtext); font-size: 13px; margin-bottom: 12px;">قائمة بأرقام الطلبات التي قام بتوصيلها:</p>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+          ${orderNumbers.map(num => `
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; text-align: center; color: #fff; font-weight: 700;">#${num}</div>
+          `).join('')}
+        </div>
+      </div>
+      
+      <button onclick="document.getElementById('rider_orders_popup').remove()" style="background: var(--color-primary); color: #000; border: none; border-radius: 8px; padding: 10px; font-family: Cairo, sans-serif; font-weight: 900; cursor: pointer;">إغلاق</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+}
+
+// ===================================================
 //  Tabs Navigation (Local vs Online)
 // ===================================================
 function switchMainTab(tab) {
   const tabLocal = document.getElementById("tab_local");
   const tabOnline = document.getElementById("tab_online");
   const tabAllOrders = document.getElementById("tab_all_orders");
+  const tabRiders = document.getElementById("tab_riders");
   const layoutLocal = document.getElementById("local_orders_layout");
   const layoutOnline = document.getElementById("online_orders_layout");
   const layoutAllOrders = document.getElementById("all_orders_layout");
+  const layoutRiders = document.getElementById("riders_layout");
 
   if (!tabLocal || !tabOnline) return;
 
@@ -1370,11 +1504,13 @@ function switchMainTab(tab) {
   tabLocal.classList.remove("active");
   tabOnline.classList.remove("active");
   if (tabAllOrders) tabAllOrders.classList.remove("active");
+  if (tabRiders) tabRiders.classList.remove("active");
 
   // Reset layouts
   if (layoutLocal) layoutLocal.style.display = "none";
   if (layoutOnline) layoutOnline.style.display = "none";
   if (layoutAllOrders) layoutAllOrders.style.display = "none";
+  if (layoutRiders) layoutRiders.style.display = "none";
 
   if (tab === "local") {
     tabLocal.classList.add("active");
@@ -1388,6 +1524,12 @@ function switchMainTab(tab) {
     if (tabAllOrders) tabAllOrders.classList.add("active");
     if (layoutAllOrders) layoutAllOrders.style.display = "block";
     renderAllOrders();
+  } else if (tab === "riders") {
+    const tabRiders = document.getElementById("tab_riders");
+    const layoutRiders = document.getElementById("riders_layout");
+    if (tabRiders) tabRiders.classList.add("active");
+    if (layoutRiders) layoutRiders.style.display = "block";
+    renderRidersTab();
   }
 }
 
@@ -1402,22 +1544,81 @@ function renderOnlineOrdersState() {
 /**
  * Manually fetch all orders from the API (used by Refresh buttons)
  */
-async function fetchAllOrders() {
+async function fetchOnlineOrdersServer(page = 1) {
+    onlineOrdersCurrentPage = page;
     showGlobalLoader(true);
     try {
-        const response = await apiFetch("/orders/?page=1&page_size=500");
-        if (!response.ok) throw new Error("Failed to fetch orders");
+        let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=online`;
+        if (onlineOrdersFilter !== 'all') {
+            url += `&status=${onlineOrdersFilter}`;
+        }
+        const res = await apiFetch(url);
+        if (!res.ok) throw new Error("Failed to fetch online orders");
+        const data = await res.json();
+        onlineOrdersList = data.orders || [];
+        onlineOrdersTotal = data.total || 0;
         
-        const data = await response.json();
-        const orders = Array.isArray(data.orders) ? data.orders : [];
+        const container = document.getElementById("online_orders_grid")?.parentElement;
+        if (container) container.scrollTop = 0;
         
-        allOrdersList = orders.filter(o => !isOnlineOrder(o));
-        onlineOrdersList = orders.filter(isOnlineOrder);
-        
-        updateOnlineStats();
         renderOnlineOrders();
+        // Removed: updateOnlineTabBadge(onlineOrdersTotal); // Approximate badge - this was causing the "all orders" bug
+    } catch (err) {
+        console.error(err);
+        showToast("فشل تحميل طلبات الأونلاين", "error");
+    } finally {
+        showGlobalLoader(false);
+    }
+}
+
+async function fetchAllOrdersServer(page = 1) {
+    allOrdersCurrentPage = page;
+    showGlobalLoader(true);
+    try {
+        let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
+        if (allOrdersFilter !== 'all') {
+            url += `&order_type=${allOrdersFilter}`;
+        }
+        const res = await apiFetch(url);
+        if (!res.ok) throw new Error("Failed to fetch all orders");
+        const data = await res.json();
+        allOrdersList = data.orders || [];
+        allOrdersTotal = data.total || 0;
+        
+        const container = document.getElementById("all_orders_grid")?.parentElement;
+        if (container) container.scrollTop = 0;
+        
         renderAllOrders();
-        updateOnlineTabBadge(onlineOrdersList.filter(o => o.order_status === 'new').length);
+    } catch (err) {
+        console.error(err);
+        showToast("فشل تحميل طلبات الكاشير", "error");
+    } finally {
+        showGlobalLoader(false);
+    }
+}
+
+async function fetchAllOrders(skipSync = false) {
+    showGlobalLoader(true);
+    try {
+        if (IS_DESKTOP_RUNTIME && !skipSync) {
+            try {
+                await apiFetch("/desktop-updates/trigger-pull", { method: "POST", suppress401: true });
+                await new Promise(resolve => setTimeout(resolve, 800));
+            } catch (e) {
+                console.warn("Could not trigger background sync:", e);
+            }
+        }
+
+        // Fetch first page of both and the badge count
+        await Promise.all([
+            fetchOnlineOrdersServer(1),
+            fetchAllOrdersServer(1),
+            refreshNewOrdersBadge()
+        ]);
+        
+        ordersSnapshotLoaded = true;
+        updateOnlineStats();
+        renderRidersTab();
         
         showToast("تم تحديث البيانات بنجاح", "success");
     } catch (err) {
@@ -1450,16 +1651,40 @@ function updateOnlineStats() {
   }
 }
 
+async function refreshNewOrdersBadge() {
+    try {
+        // Fetch count of new online orders specifically
+        const res = await apiFetch("/orders/?status=new&page=1&page_size=1&source=online");
+        if (res.ok) {
+            const data = await res.json();
+            totalNewOrdersGlobalCount = data.total || 0;
+            updateOnlineTabBadge(totalNewOrdersGlobalCount);
+        }
+    } catch (e) {
+        console.error("Error refreshing badge count:", e);
+    }
+}
+
+// Sound reminder loop: if there are new orders, play sound every 2 minutes
+setInterval(() => {
+    if (totalNewOrdersGlobalCount > 0 && isNotificationSoundEnabled) {
+        console.log("Sound reminder: Still have", totalNewOrdersGlobalCount, "new orders.");
+        playNotificationSound();
+    }
+}, 2 * 60 * 1000);
+
 function setOnlineOrdersFilter(filter, btn) {
   onlineOrdersFilter = filter;
   const btns = document.querySelectorAll('#online_orders_layout .filter_btn');
   btns.forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  renderOnlineOrders();
+  onlineOrdersCurrentPage = 1;
+  fetchOnlineOrdersServer(1);
 }
 
 function handleOnlineSearch(term) {
   onlineOrdersSearchTerm = term.trim().toLowerCase();
+  onlineOrdersCurrentPage = 1;
   renderOnlineOrders();
 }
 
@@ -1477,57 +1702,24 @@ function renderOnlineOrders() {
     return;
   }
 
-  const filtered = onlineOrdersList.filter(order => {
-    // Status Filter
-    let matchFilter = true;
-    if (onlineOrdersFilter === 'new') matchFilter = (order.order_status === 'new');
-    else if (onlineOrdersFilter === 'ready') matchFilter = (order.order_status === 'confirmed' || order.order_status === 'completed');
-    else if (onlineOrdersFilter === 'cancelled') matchFilter = (order.order_status === 'cancelled');
-
-    // Search Filter
-    let matchSearch = true;
-    if (onlineOrdersSearchTerm) {
-      const name = (order.customer_name || "").toLowerCase();
-      const phone = (order.customer_phone || "").toLowerCase();
-      const id = String(order.order_number || order.id);
-      matchSearch = name.includes(onlineOrdersSearchTerm) || phone.includes(onlineOrdersSearchTerm) || id.includes(onlineOrdersSearchTerm);
-    }
-
-    return matchFilter && matchSearch;
-  });
-
-  if (filtered.length === 0) {
-    grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد نتائج مطابقة للبحث</p>`;
-    return;
-  }
-
   grid.innerHTML = "";
 
   const statusMap = {
     "new": { label: "جديد", cls: "badge_new" },
     "confirmed": { label: "مؤكد", cls: "badge_ready" },
-    "completed": { label: "جاهز", cls: "badge_ready" },
-    "cancelled": { label: "ملغي", cls: "badge_canceled" }
+    "completed": { label: "مكتمل", cls: "badge_ready" },
+    "cancelled": { label: "ملغي", cls: "badge_canceled" },
+    "delivered": { label: "تم التوصيل", cls: "badge_ready" }
   };
 
-  filtered.forEach(order => {
+  onlineOrdersList.forEach(order => {
     let statusObj = statusMap[order.order_status] || { label: order.order_status, cls: "" };
     
-    // تخصيص تسمية الحالة "مكتمل" بناءً على نوع الطلب
-    if (order.order_status === 'completed') {
-      statusObj = {
-        label: order.order_type === 'delivery' ? 'تم التوصيل' : 'تم التجهيز',
-        cls: 'badge_ready'
-      };
-    }
-    
-    // Time formatting from backend
     let timeStr = "";
     const orderTime = order.created_at || order.order_date;
     if (orderTime) {
       const d = new Date(orderTime);
       if (!isNaN(d)) {
-        // إذا كان التاريخ يحتوي على وقت (أكثر من 10 حروف)، نظهر الوقت
         if (String(orderTime).length > 10) {
           timeStr = d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
         } else {
@@ -1559,7 +1751,11 @@ function renderOnlineOrders() {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
         </div>
         <div class="detail_row">
-          <span style="font-size:12px">${(typeof order.address === 'object' && order.address !== null) ? order.address.address : (order.customer_address || order.address || "لا يوجد عنوان")}</span>
+          <span style="font-size:12px">
+            ${(typeof order.address === 'object' && order.address !== null) 
+               ? order.address.address 
+               : (order.customer_address || order.address || order.customer_notes || "لا يوجد عنوان")}
+          </span>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
         </div>
         ${order.customer_notes ? `
@@ -1567,9 +1763,9 @@ function renderOnlineOrders() {
           <span style="font-size:12px">ملاحظات: ${order.customer_notes}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
         </div>` : ''}
-        ${order.delivery_person_name ? `
+        ${(order.order_type === 'delivery' && (order.delivery_person_id || order.delivery_person_name)) ? `
         <div class="detail_row" style="color:var(--color-primary); font-weight:bold;">
-          <span>المندوب: ${order.delivery_person_name}</span>
+          <span>المندوب: ${order.delivery_person_name || '...'}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
         </div>` : ''}
         </div>
@@ -1580,17 +1776,22 @@ function renderOnlineOrders() {
           <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'confirmed')" style="background:var(--color-primary); color:#000; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">مؤكد</button>
         ` : ''}
         ${order.order_status === 'confirmed' ? `
-          <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'completed')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">${order.order_type === 'delivery' ? 'تم التوصيل' : 'تم التجهيز'}</button>
+          <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'completed')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التجهيز</button>
         ` : ''}
         ${(order.order_status === 'new' || order.order_status === 'confirmed') ? `
           <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'cancelled')" style="background:#e40411; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">إلغاء</button>
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'online')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تعديل</button>
         ` : ''}
-        <button onclick="event.stopPropagation(); printOrderFromOnline(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">طباعة</button>
+        ${order.order_status !== 'cancelled' ? `
+          <button onclick="event.stopPropagation(); printOrderFromOnline(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">طباعة</button>
+        ` : ''}
       </div>
     `;
     grid.appendChild(card);
   });
+
+  const pagination = renderPagination(onlineOrdersTotal, onlineOrdersCurrentPage, ordersPageSize, 'changeOnlinePage');
+  if (pagination) grid.appendChild(pagination);
 }
 
 async function updateOnlineStatus(orderId, newStatus) {
@@ -1598,8 +1799,7 @@ async function updateOnlineStatus(orderId, newStatus) {
   let msg = "هل أنت متأكد؟";
   if (newStatus === 'confirmed') msg = "تأكيد واستلام الطلب؟";
   else if (newStatus === 'completed') {
-    const isDelivery = order && order.order_type === 'delivery';
-    msg = isDelivery ? "هل تم توصيل الطلب؟" : "هل تم تجهيز الطلب؟";
+    msg = "هل تم تجهيز الطلب؟";
   }
   else if (newStatus === 'cancelled') msg = "إلغاء هذا الطلب؟";
 
@@ -1613,6 +1813,21 @@ async function updateOnlineStatus(orderId, newStatus) {
     });
 
     if (res.ok) {
+      // ✅ Update local memory state
+      const updateInList = (list) => {
+        const idx = list.findIndex(o => String(o.id) === String(orderId));
+        if (idx !== -1) {
+          list[idx] = { ...list[idx], order_status: newStatus };
+        }
+      };
+      updateInList(onlineOrdersList);
+      if (typeof allOrdersList !== 'undefined') updateInList(allOrdersList);
+
+      updateOnlineStats();
+      refreshNewOrdersBadge();
+      renderOnlineOrders();
+      renderAllOrders();
+
       showToast("تم تحديث الحالة بنجاح", "success");
     } else {
       showToast("فشل تحديث الحالة", "error");
@@ -1812,7 +2027,7 @@ function handleSocketEvent(payload) {
     updateOnlineStats();
     renderOnlineOrders();
     renderAllOrders();
-    updateOnlineTabBadge(onlineOrdersList.filter(o => o.order_status === 'new').length);
+    refreshNewOrdersBadge();
     updateConnectionStatus("connected");
     return;
   }
@@ -1820,7 +2035,7 @@ function handleSocketEvent(payload) {
   if (payload.type === "SYNC_COMPLETE") {
     console.log("Desktop master data sync complete, refreshing menu and orders...");
     init(); // This re-fetches products and categories
-    fetchAllOrders();
+    fetchAllOrders(true);
     return;
   }
 
@@ -1855,30 +2070,46 @@ function handleSocketEvent(payload) {
     // Also track in all orders if loaded
     if (typeof allOrdersList !== 'undefined') {
         if (!isDuplicateNumber(allOrdersList, data)) {
-            if (!isOnlineOrder(data)) {
-                allOrdersList.unshift(data);
-                hasChanged = true;
+        if (!isOnlineOrder(data)) {
+            allOrdersList.unshift(data);
+            hasChanged = true;
             }
         }
     }
   } 
   // Handle Order Updated / Status Changed
   else if (eventName === "ORDER_UPDATED") {
-    const oIdx = onlineOrdersList.findIndex(o => o.id === data.id);
+    console.log("Processing update for order:", data.order_number, "Status:", data.order_status);
+    
+    const findIdx = (list) => list.findIndex(o => 
+        (String(o.id) === String(data.id)) || 
+        (o.order_number === data.order_number && o.order_date === data.order_date)
+    );
+
+    const oIdx = findIdx(onlineOrdersList);
     if (oIdx !== -1) {
-      onlineOrdersList[oIdx] = { ...onlineOrdersList[oIdx], ...data };
+      const localId = onlineOrdersList[oIdx].id;
+      // Merge but preserve local ID to avoid 404s on local actions
+      onlineOrdersList[oIdx] = { ...onlineOrdersList[oIdx], ...data, id: localId };
       hasChanged = true;
+      console.log("Updated onlineOrdersList at index", oIdx);
     }
     
     if (typeof allOrdersList !== 'undefined') {
-      const aIdx = allOrdersList.findIndex(o => o.id === data.id);
+      const aIdx = findIdx(allOrdersList);
       if (aIdx !== -1) {
-        allOrdersList[aIdx] = { ...allOrdersList[aIdx], ...data };
+        const localId = allOrdersList[aIdx].id;
+        allOrdersList[aIdx] = { ...allOrdersList[aIdx], ...data, id: localId };
         hasChanged = true;
+        console.log("Updated allOrdersList at index", aIdx);
       }
     }
+
     if (hasChanged) {
         showToast(`تحديث طلب #${data.order_number || data.id}: ${data.order_status}`, "success");
+    } else {
+        console.warn("Order update received but could not find order in local lists. Triggering full refresh...");
+        setTimeout(fetchAllOrders, 500); // Fallback for safety, delayed to allow DB commit
     }
   }
 
@@ -1900,6 +2131,7 @@ function handleSocketEvent(payload) {
   if (hasChanged) {
     const onlineLayout = document.getElementById("online_orders_layout");
     const allLayout = document.getElementById("all_orders_layout");
+    const ridersLayout = document.getElementById("riders_layout");
     
     if (onlineLayout && onlineLayout.style.display !== "none") {
       updateOnlineStats();
@@ -1908,11 +2140,13 @@ function handleSocketEvent(payload) {
     if (allLayout && allLayout.style.display !== "none") {
       renderAllOrders();
     }
+    if (ridersLayout && ridersLayout.style.display !== "none") {
+      renderRidersTab();
+    }
     
-    // Update count badge
-    const newOnlineCount = onlineOrdersList.filter(o => o.order_status === 'new').length;
-    updateOnlineTabBadge(newOnlineCount);
-    lastNewOrdersCount = newOnlineCount;
+    // Update count badge from server
+    refreshNewOrdersBadge();
+    lastNewOrdersCount = totalNewOrdersGlobalCount; // for legacy sync if any
   }
 }
 
@@ -1965,12 +2199,10 @@ function toggleSound() {
     if (iconOn) iconOn.style.display = "block";
     if (iconOff) iconOff.style.display = "none";
     if (btn) {
-      btn.style.background = "rgba(61, 158, 107, 0.2)"; // Greenish background
+      btn.style.background = "rgba(61, 158, 107, 0.2)"; 
       btn.style.borderColor = "var(--color-accent, #3d9e6b)";
       btn.style.color = "var(--color-accent, #3d9e6b)";
     }
-    
-    // تشغيل صوت تجريبي لفك حظر المتصفح (Audio Unlock)
     playNotificationSound();
     showToast("تم تفعيل صوت التنبيهات", "success");
   } else {
@@ -1989,12 +2221,10 @@ function printOrderFromOnline(orderId) {
   const order = onlineOrdersList.find(o => o.id === orderId);
   if (!order) return;
   
-  // نقوم بتجهيز قائمة الأصناف بالأسماء بناءً على الـ IDS
   const cartMapped = (order.items || []).map(item => {
     let prod = products.find(p => p.id === item.product_id);
     let variantName = "";
     if (prod && prod.variants) {
-       // محاولة إيجاد المقاس بناءً على السعر (طريقة احتياطية لو الـ API لا يعيد اسم المقاس)
        let v = prod.variants.find(v => parseFloat(v.price) === parseFloat(item.unit_price));
        if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
     }
@@ -2008,12 +2238,7 @@ function printOrderFromOnline(orderId) {
     };
   });
 
-  // ندمج البيانات الأصلية من السيرفر مع قائمة الأصناف المجهزة بالأسماء للطباعة
-  const printData = {
-    ...order,
-    cart: cartMapped
-  };
-
+  const printData = { ...order, cart: cartMapped };
   if (typeof printReceipt === "function") {
     printReceipt(printData);
   }
@@ -2025,17 +2250,21 @@ function printOrderFromOnline(orderId) {
 let allOrdersList = [];
 let allOrdersFilter = 'all';
 let allOrdersSearchTerm = '';
+let allOrdersCurrentPage = 1;
+let allOrdersTotal = 0;
 
 function setAllOrdersFilter(filter, btn) {
   allOrdersFilter = filter;
   const btns = document.querySelectorAll('#all_orders_filters .filter_btn');
   btns.forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  renderAllOrders();
+  allOrdersCurrentPage = 1;
+  fetchAllOrdersServer(1);
 }
 
 function handleAllOrdersSearch(term) {
   allOrdersSearchTerm = term.trim().toLowerCase();
+  allOrdersCurrentPage = 1;
   renderAllOrders();
 }
 
@@ -2057,33 +2286,13 @@ function renderAllOrders() {
   
   const statusMap = {
     "new": { label: "جديد", cls: "badge_new" },
-    "completed": { label: "تم التوصيل", cls: "badge_ready" },
+    "completed": { label: "مكتمل", cls: "badge_ready" },
     "cancelled": { label: "ملغي", cls: "badge_canceled" },
-    "confirmed": { label: "مؤكد", cls: "badge_ready" }
+    "confirmed": { label: "مؤكد", cls: "badge_ready" },
+    "delivered": { label: "تم التوصيل", cls: "badge_ready" }
   };
   
-  const filteredOrders = allOrdersList.filter(order => {
-    let matchFilter = true;
-    if (allOrdersFilter !== 'all') {
-       matchFilter = order.order_type === allOrdersFilter;
-    }
-    
-    let matchSearch = true;
-    if (allOrdersSearchTerm !== '') {
-       const typeLabel = order.order_type === "delivery" ? "دليفري" : 
-                         order.order_type === "takeaway" ? "تيك أواي" : "صالة";
-        matchSearch = String(order.order_number || order.id).includes(allOrdersSearchTerm) || typeLabel.includes(allOrdersSearchTerm);
-    }
-    
-    return matchFilter && matchSearch;
-  });
-
-  if (filteredOrders.length === 0) {
-    grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد نتائج مطابقة</p>`;
-    return;
-  }
-
-  filteredOrders.forEach(order => {
+  allOrdersList.forEach(order => {
       const typeLabel = order.order_type === "delivery" ? "دليفري" : 
                         order.order_type === "takeaway" ? "تيك أواي" : "صالة";
                         
@@ -2095,7 +2304,6 @@ function renderAllOrders() {
       if (backendTime) {
         let d = new Date(backendTime);
         if (!isNaN(d)) {
-           // تنسيق: الوقت - التاريخ
            const timePart = d.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'});
            const datePart = d.toLocaleDateString('ar-EG');
            timeStr = (String(backendTime).length > 10) ? `${timePart} - ${datePart}` : datePart;
@@ -2107,8 +2315,6 @@ function renderAllOrders() {
       let actionsHtml = "";
 
       if (order.order_status === "confirmed") {
-        // دليفري مؤكد → تم التوصيل
-        // صالة أو تيك أواي مؤكد → مكتمل
         const isDelivery = order.order_type === "delivery";
         const completeLabel = isDelivery ? "تم التوصيل" : "مكتمل";
 
@@ -2119,14 +2325,12 @@ function renderAllOrders() {
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'all')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer;"> تعديل</button>
         `;
       } else if (order.order_status === "new") {
-        // فقط في حالات قديمة قبل التحديث
         actionsHtml = `
           <button onclick="event.stopPropagation(); printOrderFromList(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">طباعة</button>
           <button onclick="event.stopPropagation(); changeOrderStatus(${order.id}, 'confirmed')" style="background:var(--color-primary); color:#000; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">مؤكد</button>
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'all')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer;"> تعديل</button>
         `;
-      } else {
-        // completed / cancelled → طباعة فقط
+      } else if (order.order_status !== 'cancelled') {
         actionsHtml = `
           <button onclick="event.stopPropagation(); printOrderFromList(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer;">طباعة</button>
         `;
@@ -2159,41 +2363,95 @@ function renderAllOrders() {
         `;
       }
 
-      grid.innerHTML += `
-        <div class="online_order_card" onclick="openOrderDetails(${order.id}, 'all')" style="padding:12px; gap:8px; min-height:0; display:flex; flex-direction:column;">
-          <!-- رأس الكارت -->
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="display:flex; align-items:center; gap:8px;">
-              ${badgeHtml}
-              <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${order.order_number || order.id}</span>
-              <span style="font-size:11px; padding:2px 6px; background:rgba(255,255,255,0.05); border-radius:4px; color:var(--color-subtext);">${typeLabel}</span>
-            </div>
-            <span style="font-size:11px; color:var(--color-subtext);">${timeStr}</span>
+      const card = document.createElement("div");
+      card.className = "online_order_card";
+      card.onclick = () => openOrderDetails(order.id, 'all');
+      card.style.cssText = "padding:12px; gap:8px; min-height:0; display:flex; flex-direction:column;";
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${badgeHtml}
+            <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${order.order_number || order.id}</span>
+            <span style="font-size:11px; padding:2px 6px; background:rgba(255,255,255,0.05); border-radius:4px; color:var(--color-subtext);">${typeLabel}</span>
           </div>
-          
-          <!-- تفاصيل العميل والمبلغ -->
-          <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(201,168,76,0.3); padding-top:8px; margin-top:2px;">
-            <span style="font-size:15px; font-weight:800; color:var(--color-primary);">${totalAmount} ج.م</span>
-            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
-              ${order.customer_phone ? `<span style="font-size:12px; color:var(--color-text);">${order.customer_phone}</span>` : ''}
-              ${order.delivery_person_name ? `<span style="font-size:11px; color:var(--color-primary); font-weight:bold;">المندوب: ${order.delivery_person_name}</span>` : ''}
-              <span style="font-size:11px; color:var(--color-subtext); text-align:right; max-width:200px;">${(typeof order.address === 'object' && order.address !== null) ? order.address.address : (order.customer_address || order.address || "---")}</span>
-            </div>
-          </div>
-          
-          <!-- ألاصناف -->
-          ${itemsHtml}
-          
-          <!-- الزراير -->
-          ${actionsHtml ? `
-            <div style="margin-top:auto; padding-top:8px; display:flex; justify-content:flex-end; border-top:1px solid rgba(255,255,255,0.05)">
-              ${actionsHtml}
-            </div>
-          ` : ''}
+          <span style="font-size:11px; color:var(--color-subtext);">${timeStr}</span>
         </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(201,168,76,0.3); padding-top:8px; margin-top:2px;">
+          <span style="font-size:15px; font-weight:800; color:var(--color-primary);">${totalAmount} ج.م</span>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+            ${order.customer_phone ? `<span style="font-size:12px; color:var(--color-text);">${order.customer_phone}</span>` : ''}
+            ${(order.order_type === 'delivery' && order.delivery_person_name) ? `<span style="font-size:11px; color:var(--color-primary); font-weight:bold;">المندوب: ${order.delivery_person_name}</span>` : ''}
+            <span style="font-size:11px; color:var(--color-subtext); text-align:right; max-width:200px;">
+              ${(typeof order.address === 'object' && order.address !== null) 
+                 ? order.address.address 
+                 : (order.customer_address || order.address || order.customer_notes || "---")}
+            </span>
+          </div>
+        </div>
+        ${itemsHtml}
+        ${actionsHtml ? `
+          <div style="margin-top:auto; padding-top:8px; display:flex; justify-content:flex-end; border-top:1px solid rgba(255,255,255,0.05)">
+            ${actionsHtml}
+          </div>
+        ` : ''}
       `;
-    });
+      grid.appendChild(card);
+  });
+
+  const pagination = renderPagination(allOrdersTotal, allOrdersCurrentPage, ordersPageSize, 'changeAllOrdersPage');
+  if (pagination) grid.appendChild(pagination);
 }
+
+function renderPagination(totalItems, currentPage, pageSize, onPageChangeName) {
+  const totalPages = Math.ceil(totalItems / pageSize);
+  if (totalPages <= 1) return null;
+
+  const container = document.createElement("div");
+  container.className = "pagination-container";
+  container.style.cssText = "grid-column:1/-1; display:flex; justify-content:center; align-items:center; margin-top:20px; padding:10px; gap:8px;";
+
+  const btnPrev = document.createElement("button");
+  btnPrev.textContent = "السابق";
+  btnPrev.disabled = (currentPage === 1);
+  btnPrev.style.cssText = `padding:6px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:white; cursor:${currentPage === 1 ? 'default' : 'pointer'}; opacity:${currentPage === 1 ? '0.3' : '1'}; font-family:Cairo,sans-serif; font-size:12px;`;
+  btnPrev.onclick = (e) => { e.stopPropagation(); window[onPageChangeName](currentPage - 1); };
+  container.appendChild(btnPrev);
+
+  // Show page numbers
+  let startPage = Math.max(1, currentPage - 2);
+  let endPage = Math.min(totalPages, startPage + 4);
+  if (endPage - startPage < 4) startPage = Math.max(1, endPage - 4);
+
+  for (let i = startPage; i <= endPage; i++) {
+    const pBtn = document.createElement("button");
+    pBtn.textContent = i;
+    const isActive = (i === currentPage);
+    pBtn.style.cssText = `min-width:32px; height:32px; border-radius:6px; border:none; background:${isActive ? 'var(--color-primary)' : 'rgba(255,255,255,0.08)'}; color:${isActive ? '#000' : '#fff'}; cursor:pointer; font-weight:bold; font-family:Cairo,sans-serif; font-size:12px;`;
+    pBtn.onclick = (e) => { e.stopPropagation(); window[onPageChangeName](i); };
+    container.appendChild(pBtn);
+  }
+
+  const btnNext = document.createElement("button");
+  btnNext.textContent = "التالي";
+  btnNext.disabled = (currentPage === totalPages);
+  btnNext.style.cssText = `padding:6px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:white; cursor:${currentPage === totalPages ? 'default' : 'pointer'}; opacity:${currentPage === totalPages ? '0.3' : '1'}; font-family:Cairo,sans-serif; font-size:12px;`;
+  btnNext.onclick = (e) => { e.stopPropagation(); window[onPageChangeName](currentPage + 1); };
+  container.appendChild(btnNext);
+
+  return container;
+}
+
+function changeOnlinePage(newPage) {
+  fetchOnlineOrdersServer(newPage);
+}
+
+function changeAllOrdersPage(newPage) {
+  fetchAllOrdersServer(newPage);
+}
+
+// Expose to window for the onclick strings if any
+window.changeOnlinePage = changeOnlinePage;
+window.changeAllOrdersPage = changeAllOrdersPage;
     
 function printOrderFromList(orderId) {
   const order = allOrdersList.find(o => o.id === orderId);
@@ -2235,7 +2493,7 @@ function printOrderFromList(orderId) {
 }
 
 async function changeOrderStatus(orderId, status) {
-  const confirmed = await showCustomActionConfirm(`هل أنت متأكد من تغيير حالة الطلب إلى ${status === 'completed' ? 'تم التوصيل' : 'ملغي'}؟`);
+  const confirmed = await showCustomActionConfirm(`هل أنت متأكد من تغيير حالة الطلب إلى ${status === 'completed' ? 'مكتمل' : 'ملغي'}؟`);
   if (!confirmed) return;
   
   try {
@@ -2381,9 +2639,10 @@ function openOrderDetails(orderId, source) {
 
   const statusMap = {
     "new": { label: "جديد", cls: "badge_new" },
-    "completed": { label: "تم التوصيل", cls: "badge_ready" },
+    "completed": { label: "مكتمل", cls: "badge_ready" },
     "cancelled": { label: "ملغي", cls: "badge_canceled" },
-    "confirmed": { label: "مؤكد", cls: "badge_ready" }
+    "confirmed": { label: "مؤكد", cls: "badge_ready" },
+    "delivered": { label: "تم التوصيل", cls: "badge_ready" }
   };
   const statusObj = statusMap[order.order_status] || { label: order.order_status, cls: "" };
 
@@ -2421,7 +2680,7 @@ function openOrderDetails(orderId, source) {
   const itemsTotal = parseFloat(order.total_amount || 0) - deliveryFee;
 
   // قسم تخصيص الدليفري — يظهر فقط لطلبات الأونلاين نوع delivery
-  const isOnlineDelivery = (source === 'online') && (order.order_type === 'delivery');
+  const isOnlineDelivery = (source === 'online') && (order.order_type === 'delivery') && (order.order_status !== 'cancelled');
   const deliveryAssignSection = isOnlineDelivery ? `
     <div id="od_delivery_section" style="
       margin:20px 0 4px; background:rgba(201,168,76,0.06);
@@ -2464,7 +2723,9 @@ function openOrderDetails(orderId, source) {
           </div>
           <div class="info_group">
             <h4>العنوان</h4>
-            <p>${(typeof order.address === 'object' && order.address !== null) ? order.address.address : (order.customer_address || order.address || '---')}</p>
+            <p>${(typeof order.address === 'object' && order.address !== null) 
+                 ? order.address.address 
+                 : (order.customer_address || order.address || order.customer_notes || '---')}</p>
           </div>
           ${order.delivery_person_name ? `
           <div class="info_group">
@@ -2516,7 +2777,11 @@ function openOrderDetails(orderId, source) {
             ${order.order_status === 'new' ? `
               <button id="od_accept_btn" onclick="acceptOrderFromModal(${order.id}, '${source}')" style="background:var(--color-primary); color:#000; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; cursor:pointer; font-family:Cairo,sans-serif; font-size:12px;"> قبول الطلب</button>
             ` : ''}
-            <button onclick="document.getElementById('order_detail_overlay').remove(); if('${source}'==='online') printOrderFromOnline(${order.id}); else printOrderFromList(${order.id});" style="background:#5c5c5c; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-weight:bold; cursor:pointer; font-family:Cairo,sans-serif; font-size:13px;">🖨 طباعة</button>
+            
+            ${order.order_status !== 'cancelled' ? `
+              <button onclick="document.getElementById('order_detail_overlay').remove(); if('${source}'==='online') printOrderFromOnline(${order.id}); else printOrderFromList(${order.id});" style="background:#5c5c5c; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-weight:bold; cursor:pointer; font-family:Cairo,sans-serif; font-size:13px;">🖨 طباعة</button>
+            ` : ''}
+            
             <button onclick="document.getElementById('order_detail_overlay').remove()" style="background:rgba(255,255,255,0.08); color:var(--color-subtext); border:1px solid rgba(255,255,255,0.1); padding:10px 24px; border-radius:8px; font-weight:bold; cursor:pointer; font-family:Cairo,sans-serif; font-size:13px;">إغلاق</button>
           </div>
         </div>
@@ -2582,6 +2847,16 @@ async function acceptOrderFromModal(orderId, source) {
       </div>
     `;
 
+    // ✅ Update local memory state so re-renders use fresh data
+    const updateInList = (list) => {
+      const idx = list.findIndex(o => String(o.id) === String(orderId));
+      if (idx !== -1) {
+        list[idx] = { ...list[idx], order_status: "confirmed" };
+      }
+    };
+    updateInList(onlineOrdersList);
+    if (typeof allOrdersList !== 'undefined') updateInList(allOrdersList);
+
     // تحديث القائمة في الخلفية
     if (source === 'online') {
       updateOnlineStats();
@@ -2630,14 +2905,40 @@ async function loadDeliveryRidersForModal(order) {
 }
 
 function renderRidersInModal(body, order, riders) {
+  // ✅ NEW: If delivery person is already assigned, show the success state immediately
+  if (order.delivery_person_id) {
+    const riderName = order.delivery_person_name || "تم التخصيص";
+    const fee = parseFloat(order.delivery_fee || 0);
+    
+    body.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px; padding:12px;
+        background:rgba(29,92,43,0.15); border:1px solid rgba(35,128,56,0.3); border-radius:10px;">
+        <svg width="20" height="20" fill="none" stroke="#3d9e6b" stroke-width="2.5" viewBox="0 0 24 24">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <div>
+          <p style="color:#3d9e6b; font-size:14px; font-weight:700; margin:0;">تم التخصيص مسبقاً ✓</p>
+          <p style="color:var(--color-subtext); font-size:13px; margin:4px 0 0 0;">
+            المندوب: <strong style="color:var(--color-text);">${riderName}</strong> —
+            الرسوم: <strong style="color:var(--color-primary);">${fee.toFixed(2)} ج.م</strong>
+          </p>
+        </div>
+        <button 
+          onclick="this.parentElement.parentElement.innerHTML = \`<p style='color:var(--color-subtext);font-size:13px;text-align:center;'>جاري تحميل القائمة...</p>\`; loadDeliveryRidersForModal({...onlineOrdersList.find(o=>o.id===${order.id}), delivery_person_id: null});"
+          style="margin-right:auto; background:none; border:none; color:var(--color-primary); font-size:11px; cursor:pointer; text-decoration:underline;">
+          تغيير
+        </button>
+      </div>
+    `;
+    return;
+  }
+
   if (!riders || riders.length === 0) {
     body.innerHTML = `<p style="color:var(--color-subtext);font-size:13px;text-align:center;">لا يوجد مناديب متاحين</p>`;
     return;
   }
 
   const orderId = order.id;
-  const orderStr = JSON.stringify(order).replace(/`/g, '\\`').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-
   body.innerHTML = `
     <p style="color:var(--color-subtext);font-size:12px;margin-bottom:10px;">اختر المندوب:</p>
     <div style="display:flex; flex-wrap:wrap; gap:8px;">
@@ -2708,6 +3009,29 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
     const itemsAmt = parseFloat(itemsTotEl ? itemsTotEl.textContent : 0) || 0;
     if (feeEl)   feeEl.textContent   = fee.toFixed(2) + " ج.م";
     if (grandEl) grandEl.textContent = (itemsAmt + fee).toFixed(2) + " ج.م";
+
+    // ✅ Update local memory state so re-renders/re-opens use fresh data
+    const updateInList = (list) => {
+      const idx = list.findIndex(o => String(o.id) === String(orderId));
+      if (idx !== -1) {
+        list[idx] = { 
+          ...list[idx], 
+          order_status: "confirmed", 
+          delivery_person_id: riderId,
+          delivery_person_name: riderName,
+          delivery_fee: fee
+        };
+      }
+    };
+    updateInList(onlineOrdersList);
+    if (typeof allOrdersList !== 'undefined') updateInList(allOrdersList);
+
+    // ✅ Update modal header badge to confirmed
+    const statusBadge = document.querySelector("#order_detail_overlay .order_status");
+    if (statusBadge) {
+      statusBadge.textContent = "مؤكد";
+      statusBadge.className = "order_status badge_ready";
+    }
 
     if (body) body.innerHTML = `
       <div style="display:flex; align-items:center; gap:10px; padding:10px;
@@ -2860,10 +3184,13 @@ function renderEditOrderModal() {
             <div id="edit_modal_customer_form" style="padding: 0 16px; margin-bottom: 12px; display: ${editModalState.orderType ? 'block' : 'none'};">
                <div class="delivery_customer_card" style="margin-top: 0; box-shadow: none; border: 1px solid rgba(201,168,76,0.2);">
                   <div class="dcf_title" id="edit_modal_dcf_title">
-                     <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                     </svg>
-                     ${editModalState.orderType === 'delivery' ? 'تعديل بيانات عميل الديليفري' : 'تعديل بيانات العميل (اختياري)'}
+                     <div style="display:flex; align-items:center; gap:6px;">
+                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                        </svg>
+                        <span>${editModalState.orderType === 'delivery' ? 'تعديل بيانات عميل الديليفري' : 'تعديل بيانات العميل (اختياري)'}</span>
+                     </div>
+                     <button class="dcf_close_btn" onclick="clearOrderTypeInEditModal()" title="إغلاق وإلغاء نوع الطلب">✕</button>
                   </div>
                   <div class="dcf_field">
                      <span class="dcf_label">📞 رقم التليفون</span>
@@ -2954,27 +3281,27 @@ function renderEditModalOrderTypeBadge() {
   if (editModalState.orderType === "delivery" && editModalState.selectedDelivery && editModalState.selectedDeliveryFee !== null) {
     badge.innerHTML = `
       <span class="badge_icon"></span>
-      <span class="badge_name">${editModalState.selectedDelivery.name}</span>
+      <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">${editModalState.selectedDelivery.name}</span>
       <span class="badge_fee">رسوم توصيل: ${editModalState.selectedDeliveryFee} ج.م</span>
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   } else if (editModalState.orderType === "takeaway") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
-      <span class="badge_name">تيك اواي</span>
+      <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">تيك اواي</span>
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   } else if (editModalState.orderType === "dine_in") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
-      <span class="badge_name">صالة</span>
+      <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">صالة</span>
       ${editModalState.selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${editModalState.selectedDineInFee} ج.م</span>` : ''}
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   } else if (editModalState.orderType === "delivery") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
-      <span class="badge_name" style="color:var(--color-subtext);font-size:12px">لم يتم اختيار الدليفري بعد</span>
+      <span class="badge_name" style="color:var(--color-subtext);font-size:12px;cursor:pointer" onclick="showEditModalCustomerForm()">لم يتم اختيار الدليفري بعد (اضغط للإكمال)</span>
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   }
@@ -3001,10 +3328,13 @@ function selectOrderTypeInEditModal(type) {
     const title = document.getElementById("edit_modal_dcf_title");
     if (title) {
        title.innerHTML = `
-         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-         </svg>
-         ${type === 'delivery' ? 'تعديل بيانات عميل الديليفري' : 'تعديل بيانات العميل (اختياري)'}
+         <div style="display:flex; align-items:center; gap:6px;">
+           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+           </svg>
+           <span>${type === 'delivery' ? 'تعديل بيانات عميل الديليفري' : 'تعديل بيانات العميل (اختياري)'}</span>
+         </div>
+         <button class="dcf_close_btn" onclick="hideEditModalCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
        `;
     }
   }
@@ -3158,6 +3488,16 @@ function closeEditModalSub() {
     container.style.display = "none";
     container.innerHTML = "";
   }
+}
+
+function hideEditModalCustomerForm() {
+  const el = document.getElementById("edit_modal_customer_form");
+  if (el) el.style.display = "none";
+}
+
+function showEditModalCustomerForm() {
+  const el = document.getElementById("edit_modal_customer_form");
+  if (el) el.style.display = "block";
 }
 
 // --------------------------- Edit Modal Cat & Items ---------------------------
