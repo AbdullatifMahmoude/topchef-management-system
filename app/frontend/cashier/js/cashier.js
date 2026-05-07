@@ -536,16 +536,6 @@ function showConfirmModal(orderData) {
 
       const createdOrder = await res.json();
       
-      // الطلبات من الكاشير تبدأ دائماً بحالة "مؤكد" (confirmed)
-      try {
-        await apiFetch(`/orders/${createdOrder.id}/status`, {
-          method: "PATCH",
-          body: JSON.stringify({ order_status: "confirmed" })
-        });
-      } catch (err) {
-        console.error("لم يتم تحديث الحالة إلى مؤكد تلقائياً:", err);
-      }
-
       overlay.remove();
       
       // الطباعة باستخدام بيانات السيرفر لضمان مطابقة رقم الطلب والوقت
@@ -1846,8 +1836,16 @@ function handleSocketEvent(payload) {
 
   // Handle Order Created
   if (eventName === "NEW_ORDER") {
+    // Deduplication by Order Number + Date (Essential for Hybrid mode)
+    const isDuplicateNumber = (list, newItem) => {
+        return list.find(o => 
+            (o.id === newItem.id) || 
+            (o.order_number === newItem.order_number && o.order_date === newItem.order_date)
+        );
+    };
+
     if (isOnlineOrder(data)) {
-      if (!onlineOrdersList.find(o => o.id === data.id)) {
+      if (!isDuplicateNumber(onlineOrdersList, data)) {
         onlineOrdersList.unshift(data);
         hasChanged = true;
         playNotificationSound();
@@ -1855,10 +1853,12 @@ function handleSocketEvent(payload) {
       }
     }
     // Also track in all orders if loaded
-    if (typeof allOrdersList !== 'undefined' && !allOrdersList.find(o => o.id === data.id)) {
-        if (!isOnlineOrder(data)) {
-            allOrdersList.unshift(data);
-            hasChanged = true;
+    if (typeof allOrdersList !== 'undefined') {
+        if (!isDuplicateNumber(allOrdersList, data)) {
+            if (!isOnlineOrder(data)) {
+                allOrdersList.unshift(data);
+                hasChanged = true;
+            }
         }
     }
   } 

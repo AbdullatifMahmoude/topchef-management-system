@@ -30,21 +30,56 @@ class PrinterManager:
         while True:
             try:
                 job = self._job_queue.get()
-                success = False
-                attempts = 0
+                html_content = job["html"]
+                doc_name = job.get("document_name", "Top Chef Receipt")
+                
+                # Get all available printers
+                import win32print
+                printers = []
+                try:
+                    # Enum local and network printers
+                    enum_flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+                    printers_info = win32print.EnumPrinters(enum_flags)
+                    
+                    # Filter out virtual printers that show dialogs (PDF, XPS, etc.)
+                    virtual_names = {"microsoft print to pdf", "microsoft xps document writer", "onenote", "fax", "pdf creator", "pdf24"}
+                    all_printers = [p[2] for p in printers_info]
+                    printers = [
+                        name for name in all_printers 
+                        if not any(v in name.lower() for v in virtual_names)
+                    ]
+                    
+                    if not printers and all_printers:
+                        log.warning("Only virtual printers found; falling back to default printer to avoid failure.")
+                        printers = [win32print.GetDefaultPrinter()]
+                except Exception as e:
+                    log.error("Could not enumerate printers: %s", e)
+                    # Fallback to default if enumeration fails
+                    printers = [win32print.GetDefaultPrinter()]
 
-                while not success and attempts < 3:
-                    try:
-                        success = self._execute_html_print(job["html"], job.get("document_name", "Top Chef Receipt"))
-                        if success:
-                            log.info("Print successful for %s", job.get("document_name", "receipt"))
-                        else:
+                if not printers:
+                    log.warning("No printers found on device.")
+                    self._job_queue.task_done()
+                    continue
+
+                log.info("Found %d printers: %s", len(printers), printers)
+
+                # Print one copy to EACH printer
+                for printer_name in printers:
+                    success = False
+                    attempts = 0
+                    while not success and attempts < 2:
+                        try:
+                            success = self._execute_html_print(html_content, doc_name, printer_name)
+                            if success:
+                                log.info("Print successful for %s on %s", doc_name, printer_name)
+                            else:
+                                attempts += 1
+                                time.sleep(1)
+                        except Exception as exc:
                             attempts += 1
-                            time.sleep(2)
-                    except Exception as exc:
-                        attempts += 1
-                        log.error("Print error (attempt %s): %s", attempts, exc)
-                        time.sleep(2)
+                            log.error("Print error on %s (attempt %s): %s", printer_name, attempts, exc)
+                            time.sleep(1)
 
                 self._job_queue.task_done()
             except Exception as exc:
@@ -231,15 +266,25 @@ class PrinterManager:
 </html>
         """.strip()
 
-    def _execute_html_print(self, html_content: str, document_name: str) -> bool:
+    def _execute_html_print(self, html_content: str, document_name: str, printer_name: Optional[str] = None) -> bool:
         try:
             import win32api
+            import win32print
 
             temp_dir = Path(os.environ.get("TEMP", "."))
             timestamp = int(time.time() * 1000)
             temp_file = temp_dir / f"{document_name}_{timestamp}.html"
             temp_file.write_text(html_content, encoding="utf-8")
-            win32api.ShellExecute(0, "print", str(temp_file), None, str(temp_dir), 0)
+            
+            if printer_name:
+                log.info("Printing to specific printer: %s", printer_name)
+                # Use 'printto' verb which is specifically for targeting a printer
+                # The 4th argument is the printer name
+                # We use SW_HIDE (0) to try and keep it silent
+                win32api.ShellExecute(0, "printto", str(temp_file), f'"{printer_name}"', str(temp_dir), 0)
+            else:
+                log.info("Printing to default printer")
+                win32api.ShellExecute(0, "print", str(temp_file), None, str(temp_dir), 0)
 
             cleanup = threading.Thread(target=self._cleanup_temp_file, args=(temp_file,), daemon=True)
             cleanup.start()

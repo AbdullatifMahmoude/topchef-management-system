@@ -449,6 +449,38 @@ class OrderEventsManager:
                 logger.debug("Desktop bridge ignored duplicate event id=%s", event_id)
                 continue
 
+            # 3. ID Remapping for Desktop consistency
+            # If we receive an order event from the cloud, try to find if we have it locally
+            # by order_number + date. if so, remap the ID to the local one so the frontend
+            # doesn't send cloud IDs to the local API (which causes 404).
+            if event_name in {OrderEvents.CREATED.value, OrderEvents.UPDATED.value, OrderEvents.STATUS_CHANGED.value, "NEW_ORDER", "ORDER_UPDATED"}:
+                order_num = event_data.get("order_number")
+                order_date = event_data.get("order_date")
+                if order_num and order_date:
+                    from app.core.database import AsyncSessionLocal
+                    from sqlalchemy import select
+                    from app.modules.orders.models import Order
+                    
+                    try:
+                        async with AsyncSessionLocal() as session:
+                            stmt = select(Order.id).where(Order.order_number == order_num, Order.order_date == order_date)
+                            local_id = await session.scalar(stmt)
+                            if local_id:
+                                payload["data"]["id"] = local_id
+                                # Also update top-level ID if it exists
+                                if "id" in payload:
+                                    payload["id"] = local_id
+                    except Exception as e:
+                        logger.warning("Failed to remap cloud order ID for event: %s", e)
+
+            # 4. Trigger Sync Pull for order events to ensure local DB is up to date with cloud truth
+            if event_name in {
+                OrderEvents.CREATED.value, "NEW_ORDER", 
+                OrderEvents.UPDATED.value, "ORDER_UPDATED",
+                OrderEvents.STATUS_CHANGED.value
+            }:
+                outbox_sync_trigger.set()
+
             await self.broadcast_all(payload)
 
     async def _desktop_send_heartbeat(self, ws: Any, connection_started_at: float) -> None:

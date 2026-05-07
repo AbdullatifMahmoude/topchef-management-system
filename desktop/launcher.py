@@ -143,28 +143,42 @@ def main():
                             accepted = int((sync_result or {}).get("accepted", 0))
                             rejected = int((sync_result or {}).get("rejected", 0))
                             errors = (sync_result or {}).get("errors", [])
+                            
+                            from datetime import datetime, timezone, timedelta
+                            now_ts = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+
                             if sync_result and rejected == 0 and accepted >= len(pending_events):
-                                # Mark completed
-                                from datetime import datetime, timezone, timedelta
+                                # 1. Full Success
                                 for e in pending_events:
                                     e.status = OutboxEventStatus.COMPLETED
-                                    e.processed_at = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+                                    e.processed_at = now_ts
                                 await db.commit()
                                 log.info(f"📤 Outbox: Successfully synced {len(pending_events)} events to cloud.")
                             else:
+                                # 2. Partial Success or Failure
+                                # We check errors to see if they are permanent (400) or transient
+                                is_permanent_error = any("400" in err or "Cannot update" in err for err in errors)
+                                
                                 for e in pending_events:
-                                    e.retry_count = (e.retry_count or 0) + 1
-                                    if e.retry_count >= 5:
+                                    if is_permanent_error:
+                                        # If we have permanent errors in the batch, we mark all as failed 
+                                        # (or we could try to be more surgical if we had per-event IDs)
                                         e.status = OutboxEventStatus.FAILED
-                                        e.error_message = "; ".join(errors[:3]) if errors else "Cloud did not accept the outbox batch"
+                                        e.error_message = "; ".join(errors[:3]) if errors else "Cloud rejected batch with permanent error"
+                                        e.processed_at = now_ts
+                                    else:
+                                        e.retry_count = (e.retry_count or 0) + 1
+                                        if e.retry_count >= 5:
+                                            e.status = OutboxEventStatus.FAILED
+                                            e.error_message = "; ".join(errors[:3]) if errors else "Cloud did not accept the outbox batch after 5 retries"
+                                            e.processed_at = now_ts
+                                
                                 await db.commit()
                                 log.warning(
-                                    "Outbox: cloud did not fully accept batch accepted=%s rejected=%s pending=%s errors=%s",
-                                    accepted,
-                                    rejected,
-                                    len(pending_events),
-                                    errors[:3],
+                                    "Outbox: cloud did not fully accept batch accepted=%s rejected=%s errors=%s",
+                                    accepted, rejected, errors[:2]
                                 )
+                                force_master_pull = True
 
                         # 2. Pull cloud authoritative data into the local database.
                         now_mon = time.monotonic()

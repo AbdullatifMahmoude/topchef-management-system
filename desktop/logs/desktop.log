@@ -1005,3 +1005,97 @@
 [2026-05-07 17:31:15] INFO     topchef_desktop – Starting pywebview event loop.
 [2026-05-07 17:31:59] INFO     topchef_desktop – Cloud reconciliation applied 460 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 30, 'comments': 6, 'orders': 39, 'order_items': 69, 'order_status_history': 23}
 [2026-05-07 17:34:01] INFO     topchef_desktop – 📤 Outbox: Successfully synced 2 events to cloud.
+[2026-05-07 17:57:17] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 17:57:17] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 17:57:17] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 17:57:17] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 17:57:17] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 17:57:19] INFO     topchef_desktop – Tray icon started
+[2026-05-07 17:57:19] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 17:57:19] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 17:57:36] INFO     topchef_desktop – Cloud reconciliation applied 465 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 32, 'comments': 6, 'orders': 40, 'order_items': 71, 'order_status_history': 23}
+[2026-05-07 17:57:55] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 17:58:14] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed']
+[2026-05-07 17:58:35] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed']
+[2026-05-07 17:59:36] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=2 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed', 'ORDER_UPDATED error: 400: Cannot update an order that is completed']
+[2026-05-07 18:00:36] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=2 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed', 'ORDER_UPDATED error: 400: Cannot update an order that is completed']
+[2026-05-07 18:01:37] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=2 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed', 'ORDER_UPDATED error: 400: Cannot update an order that is completed']
+[2026-05-07 18:02:38] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed']
+[2026-05-07 18:02:39] INFO     topchef_desktop – Cloud reconciliation applied 249 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 2, 'order_items': 71, 'order_status_history': 25}
+[2026-05-07 18:03:07] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 18:03:07] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 18:03:07] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 18:03:07] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 18:03:08] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 18:03:09] INFO     topchef_desktop – Tray icon started
+[2026-05-07 18:03:09] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 18:03:09] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 18:03:26] INFO     topchef_desktop – Cloud reconciliation applied 467 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 32, 'comments': 6, 'orders': 40, 'order_items': 71, 'order_status_history': 25}
+[2026-05-07 18:04:07] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:04:55] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed']
+[2026-05-07 18:04:56] INFO     topchef_desktop – Cloud reconciliation applied 251 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 3, 'order_items': 71, 'order_status_history': 26}
+[2026-05-07 18:05:11] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed']
+[2026-05-07 18:05:12] INFO     topchef_desktop – Cloud reconciliation applied 253 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 4, 'order_items': 71, 'order_status_history': 27}
+[2026-05-07 18:05:13] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=2 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed', 'ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:05:14] INFO     topchef_desktop – Cloud reconciliation applied 253 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 4, 'order_items': 71, 'order_status_history': 27}
+[2026-05-07 18:05:20] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=2 pending=3 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed', 'ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:05:21] INFO     topchef_desktop – Cloud reconciliation applied 255 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 5, 'order_items': 71, 'order_status_history': 28}
+[2026-05-07 18:05:22] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=3 pending=3 errors=['ORDER_UPDATED error: 400: Cannot update an order that is completed', 'ORDER_UPDATED error: 400: Cannot update an order that is cancelled', 'ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:05:23] INFO     topchef_desktop – Cloud reconciliation applied 255 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 5, 'order_items': 71, 'order_status_history': 28}
+[2026-05-07 18:06:23] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=2 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is cancelled', 'ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:06:24] INFO     topchef_desktop – Cloud reconciliation applied 255 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 5, 'order_items': 71, 'order_status_history': 28}
+[2026-05-07 18:07:25] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:07:25] INFO     topchef_desktop – Cloud reconciliation applied 255 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 5, 'order_items': 71, 'order_status_history': 28}
+[2026-05-07 18:08:26] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:08:27] INFO     topchef_desktop – Cloud reconciliation applied 255 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 5, 'order_items': 71, 'order_status_history': 28}
+[2026-05-07 18:13:29] INFO     topchef_desktop – Cloud reconciliation applied 255 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 5, 'order_items': 71, 'order_status_history': 28}
+[2026-05-07 18:18:32] INFO     topchef_desktop – Cloud reconciliation applied 255 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 5, 'order_items': 71, 'order_status_history': 28}
+[2026-05-07 18:29:39] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 18:29:39] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 18:29:39] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 18:29:39] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 18:29:39] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 18:29:41] INFO     topchef_desktop – Tray icon started
+[2026-05-07 18:29:41] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 18:29:41] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 18:30:14] INFO     topchef_desktop – Cloud reconciliation applied 470 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 32, 'comments': 6, 'orders': 40, 'order_items': 71, 'order_status_history': 28}
+[2026-05-07 18:30:42] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:31:05] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:31:59] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:32:00] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:32:10] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:32:16] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:33:04] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:33:05] INFO     topchef_desktop – Cloud reconciliation applied 271 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 13, 'order_items': 71, 'order_status_history': 36}
+[2026-05-07 18:34:05] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:34:06] INFO     topchef_desktop – Cloud reconciliation applied 271 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 13, 'order_items': 71, 'order_status_history': 36}
+[2026-05-07 18:39:55] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 18:39:55] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 18:39:55] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 18:39:55] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 18:39:55] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 18:39:57] INFO     topchef_desktop – Tray icon started
+[2026-05-07 18:39:57] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 18:39:57] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 18:40:11] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=0 rejected=1 pending=1 errors=['ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:40:13] INFO     topchef_desktop – Cloud reconciliation applied 478 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 32, 'comments': 6, 'orders': 40, 'order_items': 71, 'order_status_history': 36}
+[2026-05-07 18:40:41] INFO     topchef_desktop – Silent print requested from frontend.
+[2026-05-07 18:40:41] WARNING  topchef_desktop – No printers found on device.
+[2026-05-07 18:40:42] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:40:43] INFO     topchef_desktop – Cloud reconciliation applied 275 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 1, 'comments': 0, 'orders': 14, 'order_items': 73, 'order_status_history': 36}
+[2026-05-07 18:40:43] WARNING  topchef_desktop – Outbox: cloud did not fully accept batch accepted=1 rejected=1 pending=2 errors=['ORDER_UPDATED error: 400: Cannot update an order that is cancelled']
+[2026-05-07 18:40:44] INFO     topchef_desktop – Cloud reconciliation applied 274 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 14, 'order_items': 73, 'order_status_history': 36}
+[2026-05-07 18:41:44] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:47:20] INFO     topchef_desktop – Starting Top Chef Enterprise POS...
+[2026-05-07 18:47:20] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-07 18:47:20] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-07 18:47:20] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-07 18:47:20] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-07 18:47:22] INFO     topchef_desktop – Tray icon started
+[2026-05-07 18:47:22] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-07 18:47:22] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-07 18:47:39] INFO     topchef_desktop – Cloud reconciliation applied 482 rows: {'users': 9, 'categories': 12, 'products': 76, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 45, 'customer_addresses': 33, 'comments': 6, 'orders': 41, 'order_items': 73, 'order_status_history': 36}
+[2026-05-07 18:48:08] INFO     topchef_desktop – Silent print requested from frontend.
+[2026-05-07 18:48:08] WARNING  topchef_desktop – No printers found on device.
+[2026-05-07 18:48:09] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-07 18:53:11] INFO     topchef_desktop – Cloud reconciliation applied 278 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 150, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 1, 'comments': 0, 'orders': 15, 'order_items': 75, 'order_status_history': 36}

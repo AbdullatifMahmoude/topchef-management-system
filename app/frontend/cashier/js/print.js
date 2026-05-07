@@ -201,11 +201,20 @@ function printReceipt(orderData) {
   doc.write(html);
   doc.close();
   
-  setTimeout(() => {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-    setTimeout(() => { document.body.removeChild(iframe); }, 1000);
-  }, 500);
+  // Use Desktop Bridge for Silent Printing if available
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.print_silent) {
+    console.log("Desktop runtime detected. Sending to silent print bridge...");
+    window.pywebview.api.print_silent(html);
+    // Cleanup the iframe immediately since we don't need it for printing
+    setTimeout(() => { if (iframe.parentElement) document.body.removeChild(iframe); }, 100);
+  } else {
+    // Fallback for browser/web runtime
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => { if (iframe.parentElement) document.body.removeChild(iframe); }, 1000);
+    }, 500);
+  }
 }
 
 function getOrderTypeLabel(type) {
