@@ -15,6 +15,7 @@ from sqlalchemy import select, and_
 from datetime import datetime, timedelta
 
 from app.core.database import get_db
+from app.core.redis import get_redis
 from app.core.logging import logger
 from app.core.config import settings
 from pydantic import BaseModel
@@ -176,6 +177,7 @@ class HeartbeatRequest(BaseModel):
 async def desktop_sync_events(
     payload: OutboxSyncRequest,
     db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
     x_desktop_token: Optional[str] = Header(None),
     current_user: User = Depends(get_current_user),
 ):
@@ -195,7 +197,7 @@ async def desktop_sync_events(
     from app.modules.orders.service import OrderService
     from app.modules.orders.models import Order, ProcessedEvent
     
-    order_service = OrderService(db)
+    order_service = OrderService(db, redis=redis)
     
     for event in sorted(payload.events, key=lambda e: e.created_at):
         try:
@@ -206,10 +208,14 @@ async def desktop_sync_events(
                     ProcessedEvent.event_id == event.event_id
                 )
             )
-            existing_processed = await db.execute(stmt)
-            if existing_processed.scalar_one_or_none():
-                accepted += 1
-                continue
+            existing_processed_record = (await db.execute(stmt)).scalar_one_or_none()
+            if existing_processed_record:
+                if event.event_type in ["SETTING_UPDATED", "ORDER_UPDATED"]:
+                    # Inherently idempotent, safe to re-process. We just won't insert a duplicate ProcessedEvent.
+                    pass
+                else:
+                    accepted += 1
+                    continue
 
             event_data = json.loads(event.payload)
             # Only process if we are indeed the cloud server
@@ -222,13 +228,15 @@ async def desktop_sync_events(
                 # Check if it already exists via idempotency_key as secondary safety
                 existing = await db.execute(select(Order).where(Order.idempotency_key == idempotency_key))
                 if existing.scalar_one_or_none():
-                    db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    if not existing_processed_record:
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                     accepted += 1
                     continue
                 
                 try:
                     await order_service.create_order(OrderCreate(**event_data), current_user_id=current_user.id if current_user else None)
-                    db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    if not existing_processed_record:
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                     accepted += 1
                 except Exception as e:
                     rejected += 1
@@ -288,7 +296,8 @@ async def desktop_sync_events(
                             except Exception as status_e:
                                 errors.append(f"ORDER_UPDATED status error for #{order_number}: {str(status_e)}")
                                 
-                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                        if not existing_processed_record:
+                            db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                         accepted += 1
                     else:
                         rejected += 1
@@ -296,6 +305,17 @@ async def desktop_sync_events(
                 except Exception as e:
                     rejected += 1
                     errors.append(f"ORDER_UPDATED error: {str(e)}")
+            elif event.event_type == "SETTING_UPDATED":
+                try:
+                    from app.modules.settings.service import SettingsService
+                    settings_service = SettingsService(db, redis=redis) 
+                    await settings_service.toggle_web_orders(event_data.get("value_bool", True))
+                    if not existing_processed_record:
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    accepted += 1
+                except Exception as e:
+                    rejected += 1
+                    errors.append(f"SETTING_UPDATED error: {str(e)}")
             else:
                 rejected += 1
                 errors.append(f"Unknown event type: {event.event_type}")

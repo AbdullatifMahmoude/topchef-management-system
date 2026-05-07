@@ -103,7 +103,7 @@ class CategoryService:
             await self._invalidate_cache()
 
         from app.core.events import order_events_manager
-        order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": createcat.id, "cat_name": createcat.cat_name}})
+        await order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": createcat.id, "cat_name": createcat.cat_name}})
         return schemas.CategoryResponse.model_validate(createcat)
 
     async def update_category(self, cat_id: int, cat_data: schemas.UpdateCategory):
@@ -121,7 +121,7 @@ class CategoryService:
             await self._invalidate_cache()
 
         from app.core.events import order_events_manager
-        order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": updatecat.id, "cat_name": updatecat.cat_name}})
+        await order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": updatecat.id, "cat_name": updatecat.cat_name}})
         return schemas.CategoryResponse.model_validate(updatecat)
 
     async def delete_category(self, category_id: int):
@@ -148,7 +148,7 @@ class CategoryService:
             await self._invalidate_cache()
 
         from app.core.events import order_events_manager
-        order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": toggle.id, "cat_name": toggle.cat_name}})
+        await order_events_manager.emit({"type": "CATEGORY_UPDATED", "data": {"id": toggle.id, "cat_name": toggle.cat_name}})
         return schemas.CategoryResponse.model_validate(toggle)
 
 
@@ -266,7 +266,7 @@ class ProductService:
             await self._invalidate_cache()
 
         from app.core.events import order_events_manager
-        order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(product_model).model_dump(mode='json')})
+        await order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(product_model).model_dump(mode='json')})
         return schemas.ProductResponse.model_validate(product_model)
 
     async def update_product(self, product_id: int, product_data: schemas.UpdateProduct):
@@ -308,7 +308,7 @@ class ProductService:
             await self._invalidate_cache()
             
         from app.core.events import order_events_manager
-        order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(existing).model_dump(mode='json')})
+        await order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(existing).model_dump(mode='json')})
         return schemas.ProductResponse.model_validate(existing)
 
     async def delete_product(self, product_id: int):
@@ -335,6 +335,6 @@ class ProductService:
             await self._invalidate_cache()
             
         from app.core.events import order_events_manager
-        order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(toggle).model_dump(mode='json')})
+        await order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(toggle).model_dump(mode='json')})
         return schemas.ProductResponse.model_validate(toggle)
 

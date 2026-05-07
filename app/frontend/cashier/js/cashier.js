@@ -1804,6 +1804,15 @@ function handleSocketEvent(payload) {
     return;
   }
 
+  if (payload.type === "SETTING_UPDATED") {
+    if (payload.data?.key === "web_orders_enabled") {
+        webOrdersEnabled = (payload.data.value_bool === true);
+        updateWebOrdersToggleUI();
+        showToast(webOrdersEnabled ? "تم تفعيل الطلبات من الإدارة" : "تم إيقاف الطلبات من الإدارة", "info");
+    }
+    return;
+  }
+
   if (payload.type === "ORDER_SNAPSHOT") {
     const orders = Array.isArray(payload.data?.orders) ? payload.data.orders : [];
     ordersSnapshotLoaded = true;

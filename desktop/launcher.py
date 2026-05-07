@@ -228,49 +228,70 @@ def main():
 
     app.router.lifespan_context = desktop_lifespan
 
-    class DesktopSyncMiddleware(BaseHTTPMiddleware):
+    class DesktopSyncMiddleware:
         """
-        Intercepts and suppresses redundant order GETs when WebSocket is active.
-        Ensures Cloud is the source of truth for orders.
+        Pure ASGI middleware to intercept and suppress redundant order GETs when WebSocket is active.
+        Ensures Cloud is the source of truth for orders without breaking WebSocket handshakes.
         """
-        async def dispatch(self, request, call_next):
-            path = request.url.path
-            method = request.method
+        def __init__(self, app):
+            self.app = app
+
+        async def __call__(self, scope, receive, send):
+            if scope["type"] != "http":
+                return await self.app(scope, receive, send)
+
+            path = scope.get("path", "")
+            method = scope.get("method", "")
             
             # 1. Update Auth Cache
-            auth_header = request.headers.get("authorization")
+            headers = dict(scope.get("headers", []))
+            auth_header = headers.get(b"authorization", b"").decode("utf-8")
             if auth_header:
                 global _auth_header_cache
                 _auth_header_cache = auth_header
                 cloud_client.update_token(auth_header)
 
             # 2. Poll Suppression & Redundancy Check
+            from fastapi.responses import JSONResponse
             if method == "GET" and sync_manager.suppress_poll(path):
-                # Return cached response if available to avoid any traffic
-                query_hash = f"cache_{path}_{request.query_params}"
+                query_string = scope.get("query_string", b"").decode("utf-8")
+                query_hash = f"cache_{path}_{query_string}"
                 cache_entry = _order_query_cache.get(query_hash)
                 
                 if cache_entry and (time.time() - cache_entry["timestamp"]) < 10.0:
-                    return JSONResponse(content=cache_entry["response"])
+                    response = JSONResponse(content=cache_entry["response"])
+                    await response(scope, receive, send)
+                    return
                 
                 # If it's a sync status request, return a lightweight "WS_ACTIVE" status
                 if "/sync/status" in path:
                     status_data = {"status": "ok", "mode": "websocket", "syncing": True}
                     _order_query_cache[query_hash] = {"timestamp": time.time(), "response": status_data}
-                    return JSONResponse(content=status_data)
+                    response = JSONResponse(content=status_data)
+                    await response(scope, receive, send)
+                    return
 
             # 3. Cloud Proxy for Orders (Strict Source of Truth)
             if path in ("/orders/", "/orders") and method == "GET":
-                source = request.query_params.get("source")
+                # Parse query string for source
+                from urllib.parse import parse_qs
+                query_string = scope.get("query_string", b"").decode("utf-8")
+                params = parse_qs(query_string)
+                source_list = params.get("source", [])
+                source = source_list[0] if source_list else None
+                
                 if source in ("online", "OrderSource.ONLINE"):
-                    params = dict(request.query_params)
-                    json_data = await cloud_client.get("/orders/", params=params)
+                    # Flatten params for cloud_client
+                    flat_params = {k: v[0] for k, v in params.items()}
+                    json_data = await cloud_client.get("/orders/", params=flat_params)
                     if json_data:
-                        query_hash = f"cache_{path}_{request.query_params}"
+                        query_hash = f"cache_{path}_{query_string}"
                         _order_query_cache[query_hash] = {"timestamp": time.time(), "response": json_data}
-                        return JSONResponse(content=json_data)
+                        response = JSONResponse(content=json_data)
+                        await response(scope, receive, send)
+                        return
 
-            return await call_next(request)
+            return await self.app(scope, receive, send)
 
     app.add_middleware(DesktopSyncMiddleware)
     

@@ -93,18 +93,19 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Self-healing database update skipped or failed: {e}")
     
-    # 2. Shared Services (WebSockets & Broadcasters)
+    # 2. Infrastructure & Cache
+    if not redis_client.is_available:
+        await redis_client.connect()
+
+    # 3. Shared Services (WebSockets & Broadcasters)
     # Every API instance needs its own listener to notify its connected clients.
     if APP_ROLE in ("api", "all"):
         await order_events_manager.start()
         logger.info(f"📡 API Broadcaster started [PID: {pid}]")
 
-    # 3. Global Worker (Leader Election for Singletons)
+    # 4. Global Worker (Leader Election for Singletons)
     # Only one instance handles these globally.
     if APP_ROLE in ("worker", "all"):
-        if not redis_client.is_available:
-            await redis_client.connect()
-            
         # Initialize Global Task Registry
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()

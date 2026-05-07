@@ -181,7 +181,7 @@ class OrderService:
             # 8. Trigger Sync and Notify
             from app.core.events import outbox_sync_trigger
             outbox_sync_trigger.set()
-            order_events_manager.emit({
+            await order_events_manager.emit({
                 "type": "NEW_ORDER",
                 "event": "order.created",
                 "data": payload_data
@@ -229,7 +229,7 @@ class OrderService:
         
         from app.core.events import outbox_sync_trigger
         outbox_sync_trigger.set()
-        order_events_manager.emit({
+        await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
             "data": payload_data
@@ -306,7 +306,7 @@ class OrderService:
         self._record_outbox_event("ORDER_UPDATED", payload_data)
         from app.core.events import outbox_sync_trigger
         outbox_sync_trigger.set()
-        order_events_manager.emit({
+        await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
             "data": payload_data

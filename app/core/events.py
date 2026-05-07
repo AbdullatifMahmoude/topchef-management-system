@@ -77,6 +77,7 @@ class OrderEventsManager:
         self._remote_bridge_ws: Any | None = None
         self._remote_bridge_connect_lock = asyncio.Lock()
         self._lock = asyncio.Lock()
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def start(self) -> None:
         if settings.RUNTIME_MODE == "desktop":
@@ -195,61 +196,73 @@ class OrderEventsManager:
         for channel in channels:
             await self.broadcast(message, channel)
 
-    def emit(self, message: dict[str, Any], channel: str = "default"):
-        asyncio.create_task(self._emit(message, channel))
+    async def emit(self, message: dict[str, Any], channel: str = "default"):
+        await self._emit(message, channel)
 
     async def _emit(self, message: dict[str, Any], channel: str = "default") -> None:
+        # 1. Immediate local broadcast (fastest, hits local clients)
+        if channel == "default":
+            await self.broadcast_all(message)
+        else:
+            await self.broadcast(message, channel)
+            
+        # 2. Publish to Redis for other workers (echo will be deduplicated by clients)
         redis_channel = f"{self.CHANNEL_PREFIX}:{channel}"
         if redis_client.backend_name == "redis" and redis_client.redis is not None:
             try:
                 await redis_client.redis.publish(redis_channel, json.dumps(message))
-                return
             except Exception as exc:
-                logger.warning("Redis publish failed for channel '%s', falling back to local broadcast: %s", channel, exc)
-        if channel == "default":
-            await self.broadcast_all(message)
-            return
-        await self.broadcast(message, channel)
+                logger.warning("Redis publish failed for channel '%s': %s", channel, exc)
 
     async def _redis_listener(self) -> None:
         if redis_client.redis is None:
             return
-        pubsub = redis_client.redis.pubsub()
-        await pubsub.psubscribe(f"{self.CHANNEL_PREFIX}:*")
-        try:
-            while True:
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                if not message:
-                    await asyncio.sleep(0.05)
-                    continue
+            
+        while True:
+            pubsub = redis_client.redis.pubsub()
+            try:
+                await pubsub.psubscribe(f"{self.CHANNEL_PREFIX}:*")
+                while True:
+                    try:
+                        message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                    except TimeoutError:
+                        continue
+                        
+                    if not message:
+                        await asyncio.sleep(0.05)
+                        continue
 
-                raw_channel = message.get("channel")
-                if isinstance(raw_channel, bytes):
-                    raw_channel = raw_channel.decode("utf-8")
+                    raw_channel = message.get("channel")
+                    if isinstance(raw_channel, bytes):
+                        raw_channel = raw_channel.decode("utf-8")
 
-                channel = raw_channel.replace(f"{self.CHANNEL_PREFIX}:", "")
+                    channel = raw_channel.replace(f"{self.CHANNEL_PREFIX}:", "")
 
-                data = message.get("data")
-                if isinstance(data, bytes):
-                    data = data.decode("utf-8")
+                    data = message.get("data")
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8")
+                    try:
+                        payload = json.loads(data)
+                    except Exception as exc:
+                        logger.warning("Failed to decode pub/sub event: %s", exc)
+                        continue
+                        
+                    if channel == "default":
+                        await self.broadcast_all(payload)
+                    else:
+                        await self.broadcast(payload, channel)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error("Order events Redis listener failed: %s. Reconnecting in 5s...", exc)
+                await asyncio.sleep(5)
+            finally:
+                with contextlib.suppress(Exception):
+                    await pubsub.punsubscribe(f"{self.CHANNEL_PREFIX}:*")
                 try:
-                    payload = json.loads(data)
-                except Exception as exc:
-                    logger.warning("Failed to decode pub/sub event: %s", exc)
-                    continue
-                if channel == "default":
-                    await self.broadcast_all(payload)
-                else:
-                    await self.broadcast(payload, channel)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            logger.error("Order events Redis listener failed: %s", exc)
-        finally:
-            with contextlib.suppress(Exception):
-                await pubsub.punsubscribe(f"{self.CHANNEL_PREFIX}:*")
-            with contextlib.suppress(Exception):
-                await pubsub.close()
+                    await pubsub.close()
+                except Exception as close_exc:
+                    logger.debug("pubsub.close() failed: %s", close_exc)
 
     async def _desktop_remote_listener_loop(self) -> None:
         import websockets
@@ -316,8 +329,11 @@ class OrderEventsManager:
                 raise
             except Exception as exc:
                 alive_for = 0.0
-                if ws is not None:
+                if ws is not None and connection_started_at > 0:
                     alive_for = max(0.0, time.monotonic() - connection_started_at)
+                    if alive_for >= self.DESKTOP_STABLE_AFTER_SECONDS:
+                        backoff_seconds = 1.0
+                        attempt = 0
                 await sync_manager.report_ws_state(
                     WebSocketConnectionState.RECONNECTING,
                     reason=f"{type(exc).__name__}: {exc}",
@@ -416,8 +432,13 @@ class OrderEventsManager:
                 OrderEvents.CREATED.value,
                 OrderEvents.UPDATED.value,
                 OrderEvents.STATUS_CHANGED.value,
+                "SETTING_UPDATED",
+                "NEW_ORDER",
+                "ORDER_UPDATED"
             }:
-                continue
+                # Also check top-level type
+                if payload.get("type") not in {"SETTING_UPDATED", "NEW_ORDER", "ORDER_UPDATED", "ORDER_SNAPSHOT"}:
+                    continue
 
             event_data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
             event_id = (
