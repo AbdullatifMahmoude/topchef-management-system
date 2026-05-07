@@ -1421,7 +1421,7 @@ async function fetchAllOrders() {
         const data = await response.json();
         const orders = Array.isArray(data.orders) ? data.orders : [];
         
-        allOrdersList = orders;
+        allOrdersList = orders.filter(o => !isOnlineOrder(o));
         onlineOrdersList = orders.filter(isOnlineOrder);
         
         updateOnlineStats();
@@ -1816,7 +1816,7 @@ function handleSocketEvent(payload) {
   if (payload.type === "ORDER_SNAPSHOT") {
     const orders = Array.isArray(payload.data?.orders) ? payload.data.orders : [];
     ordersSnapshotLoaded = true;
-    allOrdersList = orders;
+    allOrdersList = orders.filter(o => !isOnlineOrder(o));
     onlineOrdersList = orders.filter(isOnlineOrder);
     lastSocketOrderUpdate = Date.now();
     updateOnlineStats();
@@ -1856,8 +1856,10 @@ function handleSocketEvent(payload) {
     }
     // Also track in all orders if loaded
     if (typeof allOrdersList !== 'undefined' && !allOrdersList.find(o => o.id === data.id)) {
-        allOrdersList.unshift(data);
-        hasChanged = true;
+        if (!isOnlineOrder(data)) {
+            allOrdersList.unshift(data);
+            hasChanged = true;
+        }
     }
   } 
   // Handle Order Updated / Status Changed
