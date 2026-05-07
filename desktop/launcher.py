@@ -226,7 +226,7 @@ def main():
                         if not last_master_data_sync_at:
                             force_master_pull = True
                             
-                        should_pull = force_master_pull or (last_master_data_sync_at and (now_mon - last_pull_at_mon > 300))
+                        should_pull = force_master_pull or (last_master_data_sync_at and (now_mon - last_pull_at_mon > 120))
                         
                         if should_pull:
                             log.info("📥 Sync: Pulling master data from cloud (forced=%s)...", force_master_pull)
@@ -324,21 +324,27 @@ def main():
             from fastapi.responses import JSONResponse
             if method == "GET" and sync_manager.suppress_poll(path):
                 query_string = scope.get("query_string", b"").decode("utf-8")
-                query_hash = f"cache_{path}_{query_string}"
-                cache_entry = _order_query_cache.get(query_hash)
                 
-                if cache_entry and (time.time() - cache_entry["timestamp"]) < 10.0:
-                    response = JSONResponse(content=cache_entry["response"])
-                    await response(scope, receive, send)
-                    return
-                
-                # If it's a sync status request, return a lightweight "WS_ACTIVE" status
-                if "/sync/status" in path:
-                    status_data = {"status": "ok", "mode": "websocket", "syncing": True}
-                    _order_query_cache[query_hash] = {"timestamp": time.time(), "response": status_data}
-                    response = JSONResponse(content=status_data)
-                    await response(scope, receive, send)
-                    return
+                # NEVER cache online order queries - they must always go to the cloud proxy
+                # for accurate statuses (cloud is the source of truth for online orders)
+                if "source=online" in query_string:
+                    pass  # Skip cache, let it fall through to the cloud proxy below
+                else:
+                    query_hash = f"cache_{path}_{query_string}"
+                    cache_entry = _order_query_cache.get(query_hash)
+                    
+                    if cache_entry and (time.time() - cache_entry["timestamp"]) < 10.0:
+                        response = JSONResponse(content=cache_entry["response"])
+                        await response(scope, receive, send)
+                        return
+                    
+                    # If it's a sync status request, return a lightweight "WS_ACTIVE" status
+                    if "/sync/status" in path:
+                        status_data = {"status": "ok", "mode": "websocket", "syncing": True}
+                        _order_query_cache[query_hash] = {"timestamp": time.time(), "response": status_data}
+                        response = JSONResponse(content=status_data)
+                        await response(scope, receive, send)
+                        return
 
             # 3. Cloud Proxy for Orders (Strict Source of Truth)
             if path in ("/orders/", "/orders") and method == "GET":
@@ -349,16 +355,17 @@ def main():
                 source_list = params.get("source", [])
                 source = source_list[0] if source_list else None
                 
-                if source in ("online", "OrderSource.ONLINE"):
-                    # Flatten params for cloud_client
-                    flat_params = {k: v[0] for k, v in params.items()}
-                    json_data = await cloud_client.get("/orders/", params=flat_params)
-                    if json_data:
-                        query_hash = f"cache_{path}_{query_string}"
-                        _order_query_cache[query_hash] = {"timestamp": time.time(), "response": json_data}
-                        response = JSONResponse(content=json_data)
-                        await response(scope, receive, send)
-                        return
+                # Cloud is the source of truth for ALL order queries
+                # Proxy to cloud for accurate statuses, fall back to local if cloud fails
+                flat_params = {k: v[0] for k, v in params.items()}
+                json_data = await cloud_client.get("/orders/", params=flat_params)
+                if json_data:
+                    query_hash = f"cache_{path}_{query_string}"
+                    _order_query_cache[query_hash] = {"timestamp": time.time(), "response": json_data}
+                    response = JSONResponse(content=json_data)
+                    await response(scope, receive, send)
+                    return
+                # If cloud fails, fall through to local handler
 
             # 4. Cloud Proxy for Order Updates (PATCH) and Details (GET)
             # If the order is not found locally, it must be a cloud order we are currently viewing

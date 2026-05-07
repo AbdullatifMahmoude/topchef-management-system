@@ -101,15 +101,33 @@ class OrderService:
                     existing_cust = await customer_service.get_customer_by_phone(order_data.customer_phone)
                     order_data.customer_id = existing_cust.id
                 except NotFoundError:
-                    new_cust = await customer_service.create_customer(CustomerCreate(
-                        name=order_data.customer_name,
-                        phone_number=order_data.customer_phone
-                    ))
-                    order_data.customer_id = new_cust.id
+                    # Phone not found — create new customer
+                    try:
+                        new_cust = await customer_service.create_customer(CustomerCreate(
+                            name=order_data.customer_name,
+                            phone_number=order_data.customer_phone
+                        ))
+                        order_data.customer_id = new_cust.id
+                    except (ValidationError, Exception):
+                        # Race condition: phone was created between lookup and create
+                        # Fall back to lookup again
+                        fallback = await customer_service.get_customer_by_phone(order_data.customer_phone)
+                        order_data.customer_id = fallback.id
                 
                 if getattr(order_data, 'customer_address', None):
-                    new_addr = await customer_service.add_address(order_data.customer_id, CustomerAddressCreate(address=order_data.customer_address))
-                    order_data.address_id = new_addr.id
+                    # Check if customer already has this exact address
+                    existing_customer = await customer_service.repository.get_by_id(order_data.customer_id)
+                    existing_match = None
+                    if existing_customer and existing_customer.addresses:
+                        existing_match = next(
+                            (a for a in existing_customer.addresses if a.address == order_data.customer_address),
+                            None
+                        )
+                    if existing_match:
+                        order_data.address_id = existing_match.id
+                    else:
+                        new_addr = await customer_service.add_address(order_data.customer_id, CustomerAddressCreate(address=order_data.customer_address))
+                        order_data.address_id = new_addr.id
             
             # 1. Prepare Pricing Request
             pricing_items = [

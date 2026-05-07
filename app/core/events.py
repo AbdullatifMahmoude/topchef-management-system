@@ -451,10 +451,12 @@ class OrderEventsManager:
                 OrderEvents.STATUS_CHANGED.value,
                 "SETTING_UPDATED",
                 "NEW_ORDER",
-                "ORDER_UPDATED"
+                "ORDER_UPDATED",
+                "CUSTOMER_CREATED",
+                "ADDRESS_CREATED",
             }:
                 # Also check top-level type
-                if payload.get("type") not in {"SETTING_UPDATED", "NEW_ORDER", "ORDER_UPDATED", "ORDER_SNAPSHOT"}:
+                if payload.get("type") not in {"SETTING_UPDATED", "NEW_ORDER", "ORDER_UPDATED", "ORDER_SNAPSHOT", "CUSTOMER_CREATED", "ADDRESS_CREATED"}:
                     continue
 
             event_data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
@@ -495,11 +497,12 @@ class OrderEventsManager:
                     except Exception as e:
                         logger.warning("Failed to remap cloud order ID for event: %s", e)
 
-            # 4. Trigger Sync Pull for order events to ensure local DB is up to date with cloud truth
+            # 4. Trigger Sync Pull for order/customer events to ensure local DB is up to date with cloud truth
             if event_name in {
                 OrderEvents.CREATED.value, "NEW_ORDER", 
                 OrderEvents.UPDATED.value, "ORDER_UPDATED",
-                OrderEvents.STATUS_CHANGED.value
+                OrderEvents.STATUS_CHANGED.value,
+                "CUSTOMER_CREATED", "ADDRESS_CREATED",
             }:
                 get_outbox_sync_trigger().set()
 

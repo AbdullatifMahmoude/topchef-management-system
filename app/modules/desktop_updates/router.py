@@ -329,6 +329,89 @@ async def desktop_sync_events(
                 except Exception as e:
                     rejected += 1
                     errors.append(f"SETTING_UPDATED error: {str(e)}")
+            elif event.event_type == "CUSTOMER_CREATED":
+                try:
+                    from app.modules.customer.service import CustomerService
+                    from app.modules.customer.schemas import CustomerCreate
+                    customer_service = CustomerService(db, redis=redis)
+                    phone = event_data.get("phone_number")
+                    name = event_data.get("name", "عميل")
+                    if phone:
+                        # Upsert: skip if phone already exists
+                        try:
+                            existing_cust = await customer_service.get_customer_by_phone(phone)
+                            # Customer already exists, update name if different
+                            if existing_cust.name != name and name:
+                                existing_cust.name = name
+                                await db.flush()
+                        except Exception:
+                            # Not found, create new
+                            await customer_service.create_customer(CustomerCreate(
+                                name=name, phone_number=phone
+                            ))
+                    if not existing_processed_record:
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    accepted += 1
+                    # Broadcast to other WebSocket clients
+                    from app.core.events import order_events_manager
+                    await order_events_manager.emit({
+                        "type": "CUSTOMER_CREATED",
+                        "data": event_data
+                    })
+                except Exception as e:
+                    rejected += 1
+                    errors.append(f"CUSTOMER_CREATED error: {str(e)}")
+            elif event.event_type == "ADDRESS_CREATED":
+                try:
+                    from app.modules.customer.service import CustomerService
+                    from app.modules.customer.schemas import CustomerAddressCreate
+                    customer_service = CustomerService(db, redis=redis)
+                    address_text = event_data.get("address")
+                    customer_phone = event_data.get("customer_phone")
+                    customer_id_remote = event_data.get("customer_id")
+                    
+                    # Resolve customer by phone (most reliable cross-system identifier)
+                    resolved_customer_id = None
+                    if customer_phone:
+                        try:
+                            cust = await customer_service.get_customer_by_phone(customer_phone)
+                            resolved_customer_id = cust.id
+                        except Exception:
+                            pass
+                    
+                    if not resolved_customer_id and customer_id_remote:
+                        try:
+                            cust = await customer_service.get_customer(int(customer_id_remote))
+                            resolved_customer_id = cust.id
+                        except Exception:
+                            pass
+                    
+                    if resolved_customer_id and address_text:
+                        # Check for duplicate address
+                        existing_addr = await db.execute(
+                            select(CustomerAddress).where(
+                                CustomerAddress.customer_id == resolved_customer_id,
+                                CustomerAddress.address == address_text
+                            )
+                        )
+                        if not existing_addr.scalars().first():
+                            await customer_service.add_address(
+                                resolved_customer_id,
+                                CustomerAddressCreate(address=address_text)
+                            )
+                    
+                    if not existing_processed_record:
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    accepted += 1
+                    # Broadcast to other WebSocket clients
+                    from app.core.events import order_events_manager
+                    await order_events_manager.emit({
+                        "type": "ADDRESS_CREATED",
+                        "data": event_data
+                    })
+                except Exception as e:
+                    rejected += 1
+                    errors.append(f"ADDRESS_CREATED error: {str(e)}")
             else:
                 rejected += 1
                 errors.append(f"Unknown event type: {event.event_type}")

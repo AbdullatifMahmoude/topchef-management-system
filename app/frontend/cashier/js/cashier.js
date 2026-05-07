@@ -1544,9 +1544,9 @@ function renderOnlineOrdersState() {
 /**
  * Manually fetch all orders from the API (used by Refresh buttons)
  */
-async function fetchOnlineOrdersServer(page = 1) {
+async function fetchOnlineOrdersServer(page = 1, silent = false) {
     onlineOrdersCurrentPage = page;
-    showGlobalLoader(true);
+    if (!silent) showGlobalLoader(true);
     try {
         let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=online`;
         if (onlineOrdersFilter !== 'all') {
@@ -1558,22 +1558,23 @@ async function fetchOnlineOrdersServer(page = 1) {
         onlineOrdersList = data.orders || [];
         onlineOrdersTotal = data.total || 0;
         
-        const container = document.getElementById("online_orders_grid")?.parentElement;
-        if (container) container.scrollTop = 0;
+        if (!silent) {
+            const container = document.getElementById("online_orders_grid")?.parentElement;
+            if (container) container.scrollTop = 0;
+        }
         
         renderOnlineOrders();
-        // Removed: updateOnlineTabBadge(onlineOrdersTotal); // Approximate badge - this was causing the "all orders" bug
     } catch (err) {
         console.error(err);
-        showToast("فشل تحميل طلبات الأونلاين", "error");
+        if (!silent) showToast("فشل تحميل طلبات الأونلاين", "error");
     } finally {
-        showGlobalLoader(false);
+        if (!silent) showGlobalLoader(false);
     }
 }
 
-async function fetchAllOrdersServer(page = 1) {
+async function fetchAllOrdersServer(page = 1, silent = false) {
     allOrdersCurrentPage = page;
-    showGlobalLoader(true);
+    if (!silent) showGlobalLoader(true);
     try {
         let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
         if (allOrdersFilter !== 'all') {
@@ -1585,15 +1586,17 @@ async function fetchAllOrdersServer(page = 1) {
         allOrdersList = data.orders || [];
         allOrdersTotal = data.total || 0;
         
-        const container = document.getElementById("all_orders_grid")?.parentElement;
-        if (container) container.scrollTop = 0;
+        if (!silent) {
+            const container = document.getElementById("all_orders_grid")?.parentElement;
+            if (container) container.scrollTop = 0;
+        }
         
         renderAllOrders();
     } catch (err) {
         console.error(err);
-        showToast("فشل تحميل طلبات الكاشير", "error");
+        if (!silent) showToast("فشل تحميل طلبات الكاشير", "error");
     } finally {
-        showGlobalLoader(false);
+        if (!silent) showGlobalLoader(false);
     }
 }
 
@@ -1776,7 +1779,11 @@ function renderOnlineOrders() {
           <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'confirmed')" style="background:var(--color-primary); color:#000; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">مؤكد</button>
         ` : ''}
         ${order.order_status === 'confirmed' ? `
-          <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'completed')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التجهيز</button>
+          ${order.order_type === 'delivery' ? `
+            <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'delivered')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التوصيل</button>
+          ` : `
+            <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'completed')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التجهيز</button>
+          `}
         ` : ''}
         ${(order.order_status === 'new' || order.order_status === 'confirmed') ? `
           <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'cancelled')" style="background:#e40411; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">إلغاء</button>
@@ -1798,9 +1805,8 @@ async function updateOnlineStatus(orderId, newStatus) {
   const order = onlineOrdersList.find(o => o.id === orderId);
   let msg = "هل أنت متأكد؟";
   if (newStatus === 'confirmed') msg = "تأكيد واستلام الطلب؟";
-  else if (newStatus === 'completed') {
-    msg = "هل تم تجهيز الطلب؟";
-  }
+  else if (newStatus === 'completed') msg = "هل تم تجهيز الطلب؟";
+  else if (newStatus === 'delivered') msg = "هل تم توصيل الطلب؟";
   else if (newStatus === 'cancelled') msg = "إلغاء هذا الطلب؟";
 
   const confirmed = await showCustomActionConfirm(msg);
@@ -2021,7 +2027,9 @@ function handleSocketEvent(payload) {
   if (payload.type === "ORDER_SNAPSHOT") {
     const orders = Array.isArray(payload.data?.orders) ? payload.data.orders : [];
     ordersSnapshotLoaded = true;
+    // Local (cashier) orders from snapshot are authoritative on desktop
     allOrdersList = orders.filter(o => !isOnlineOrder(o));
+    // For online orders: use snapshot initially, then immediately overwrite from cloud
     onlineOrdersList = orders.filter(isOnlineOrder);
     lastSocketOrderUpdate = Date.now();
     updateOnlineStats();
@@ -2029,13 +2037,38 @@ function handleSocketEvent(payload) {
     renderAllOrders();
     refreshNewOrdersBadge();
     updateConnectionStatus("connected");
+
+    // On desktop, ORDER_SNAPSHOT reads from local SQLite which may have STALE
+    // online order statuses. Immediately fetch from cloud to get the truth.
+    if (IS_DESKTOP_RUNTIME) {
+      console.log("🔄 Desktop: Fetching online orders from cloud for accurate statuses...");
+      setTimeout(() => {
+        fetchOnlineOrdersServer(1, true);
+        fetchAllOrdersServer(1, true);
+      }, 300);
+    }
     return;
   }
 
   if (payload.type === "SYNC_COMPLETE") {
-    console.log("Desktop master data sync complete, refreshing menu and orders...");
-    init(); // This re-fetches products and categories
-    fetchAllOrders(true);
+    console.log("Desktop master data sync complete, refreshing data safely...");
+    // Safe targeted refresh: reload menu and orders without resetting UI state (cart, modals, etc.)
+    _safeSyncRefresh();
+    return;
+  }
+
+  // Customer/Address real-time sync from cloud/other device
+  if (payload.type === "CUSTOMER_CREATED" || payload.type === "ADDRESS_CREATED") {
+    console.log("Customer data synced:", payload.type, payload.data);
+    // No UI action needed - customer data will be fetched fresh when next order is placed
+    // But if delivery customer form is open with same phone, we could refresh it
+    if (payload.type === "ADDRESS_CREATED" && deliveryCustomerInfo.phone && payload.data) {
+      const eventPhone = payload.data.customer_phone;
+      if (eventPhone && eventPhone === deliveryCustomerInfo.phone) {
+        // Refresh the customer addresses in memory
+        _refreshCustomerAddresses(deliveryCustomerInfo.phone);
+      }
+    }
     return;
   }
 
@@ -2154,6 +2187,87 @@ function normalizeOrderEventName(eventName) {
   if (eventName === "order.created" || eventName === "ORDER_CREATED") return "NEW_ORDER";
   if (eventName === "order.updated" || eventName === "order.status_changed") return "ORDER_UPDATED";
   return eventName || "";
+}
+
+/**
+ * Safe background refresh triggered by SYNC_COMPLETE.
+ * Unlike init(), this does NOT reset cart, order type, modals, or any other UI state.
+ * It only silently refreshes the underlying data (menu + orders) in the background.
+ */
+let _safeSyncDebounceTimer = null;
+async function _safeSyncRefresh() {
+  // Debounce: multiple SYNC_COMPLETE events can arrive in quick succession
+  if (_safeSyncDebounceTimer) clearTimeout(_safeSyncDebounceTimer);
+  _safeSyncDebounceTimer = setTimeout(async () => {
+    try {
+      // 1. Refresh menu data (products + categories) silently
+      const [catsRes, prodsRes] = await Promise.all([
+        apiFetch("/menu/categories"),
+        apiFetch("/menu/products"),
+      ]);
+      if (catsRes.ok) {
+        const catsData = await catsRes.json();
+        categories = Array.isArray(catsData) ? catsData.filter(c => c.is_active) : [];
+        renderTabs();
+      }
+      if (prodsRes.ok) {
+        const prodsData = await prodsRes.json();
+        products = Array.isArray(prodsData) ? prodsData : (prodsData.data || []);
+        renderItems();
+      }
+
+      // 2. Refresh orders silently (no loader, no toast)
+      await Promise.all([
+        fetchOnlineOrdersServer(onlineOrdersCurrentPage || 1, true),
+        fetchAllOrdersServer(allOrdersCurrentPage || 1, true),
+        refreshNewOrdersBadge()
+      ]);
+
+      ordersSnapshotLoaded = true;
+      updateOnlineStats();
+
+      // 3. Re-render visible tabs
+      const onlineLayout = document.getElementById("online_orders_layout");
+      const allLayout = document.getElementById("all_orders_layout");
+      const ridersLayout = document.getElementById("riders_layout");
+      if (onlineLayout && onlineLayout.style.display !== "none") renderOnlineOrders();
+      if (allLayout && allLayout.style.display !== "none") renderAllOrders();
+      if (ridersLayout && ridersLayout.style.display !== "none") renderRidersTab();
+
+      console.log("✅ Safe sync refresh completed");
+    } catch (err) {
+      console.warn("Safe sync refresh failed (non-critical):", err);
+    }
+  }, 500); // 500ms debounce
+}
+
+/**
+ * Refresh customer addresses in memory when a new address is synced from another device.
+ * Only updates if the delivery form is currently showing this customer's data.
+ */
+async function _refreshCustomerAddresses(phone) {
+  if (!phone) return;
+  try {
+    const res = await apiFetch(`/customers/by-phone/${encodeURIComponent(phone)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.addresses)) {
+        deliveryCustomerInfo.addresses = data.addresses;
+        // If we had a selected address, keep it; otherwise auto-select if only one
+        if (data.addresses.length === 1) {
+          deliveryCustomerInfo.selectedAddressId = data.addresses[0].id;
+        }
+        // Re-render the address field if visible
+        const addrField = document.getElementById('dcf_address_field');
+        if (addrField && typeof renderAddressFieldHTML === 'function') {
+          addrField.innerHTML = renderAddressFieldHTML();
+        }
+        console.log("✅ Customer addresses refreshed from sync:", data.addresses.length, "addresses");
+      }
+    }
+  } catch (err) {
+    console.warn("Could not refresh customer addresses:", err);
+  }
 }
 
 function isOnlineOrder(order) {
@@ -2317,10 +2431,11 @@ function renderAllOrders() {
       if (order.order_status === "confirmed") {
         const isDelivery = order.order_type === "delivery";
         const completeLabel = isDelivery ? "تم التوصيل" : "مكتمل";
+        const completeStatus = isDelivery ? "delivered" : "completed";
 
         actionsHtml = `
           <button onclick="event.stopPropagation(); printOrderFromList(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">طباعة</button>
-          <button onclick="event.stopPropagation(); changeOrderStatus(${order.id}, 'completed')" style="background:#1d5c2b; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">${completeLabel}</button>
+          <button onclick="event.stopPropagation(); changeOrderStatus(${order.id}, '${completeStatus}')" style="background:#1d5c2b; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">${completeLabel}</button>
           <button onclick="event.stopPropagation(); changeOrderStatus(${order.id}, 'cancelled')" style="background:#e40411; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">إلغاء</button>
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'all')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer;"> تعديل</button>
         `;
@@ -2493,7 +2608,8 @@ function printOrderFromList(orderId) {
 }
 
 async function changeOrderStatus(orderId, status) {
-  const confirmed = await showCustomActionConfirm(`هل أنت متأكد من تغيير حالة الطلب إلى ${status === 'completed' ? 'مكتمل' : 'ملغي'}؟`);
+  const statusLabels = { 'completed': 'مكتمل', 'delivered': 'تم التوصيل', 'cancelled': 'ملغي', 'confirmed': 'مؤكد' };
+  const confirmed = await showCustomActionConfirm(`هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`);
   if (!confirmed) return;
   
   try {
@@ -2507,8 +2623,21 @@ async function changeOrderStatus(orderId, status) {
     });
     
     if (res.ok) {
+      // Update in-memory lists immediately
+      const updateInList = (list) => {
+        const idx = list.findIndex(o => String(o.id) === String(orderId));
+        if (idx !== -1) {
+          list[idx] = { ...list[idx], order_status: status };
+        }
+      };
+      updateInList(allOrdersList);
+      if (typeof onlineOrdersList !== 'undefined') updateInList(onlineOrdersList);
+      
       showToast("تم تحديث حالة الطلب", "success");
       renderAllOrders();
+      renderOnlineOrders();
+      updateOnlineStats();
+      refreshNewOrdersBadge();
     } else {
       const err = await res.json().catch(()=>({}));
       console.error("Change status error details:", err);
