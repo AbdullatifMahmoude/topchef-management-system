@@ -52,12 +52,70 @@ class JSAPI:
             log.error(f"Native silent print failed: {e}")
             return False
 
+CURRENT_VERSION = "1.0.0"
+
+async def check_for_updates():
+    """Checks the cloud for a newer desktop version and handles auto-update."""
+    if not getattr(sys, 'frozen', False):
+        # Don't try to auto-update when running as a python script (development)
+        return None
+
+    try:
+        import httpx
+        import subprocess
+        from app.core.cloud_client import cloud_client
+        
+        # 1. Check Version
+        res = await cloud_client.get("/desktop-updates/version")
+        if not res or not res.get("version") or res.get("version") <= CURRENT_VERSION:
+            return None
+
+        new_version = res.get("version")
+        download_url = res.get("download_url") or f"{cloud_client.base_url}/desktop-updates/download"
+        
+        log.info(f"🚀 New version found: {new_version}. Starting auto-update...")
+
+        # 2. Download to Temp File
+        current_exe = sys.executable
+        temp_exe = current_exe + ".new"
+        
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            async with client.stream("GET", download_url) as response:
+                if response.status_code != 200:
+                    log.error(f"Failed to download update: {response.status_code}")
+                    return None
+                with open(temp_exe, "wb") as f:
+                    async for chunk in response.aiter_bytes():
+                        f.write(chunk)
+
+        log.info("📥 Update downloaded. Applying...")
+
+        # 3. Create Updater Batch Script
+        # This script waits for the app to close, replaces the EXE, restarts it, and deletes itself.
+        updater_bat = os.path.join(os.path.dirname(current_exe), "updater.bat")
+        with open(updater_bat, "w", encoding="cp1252") as f:
+            f.write(f"""@echo off
+timeout /t 2 /nobreak > nul
+move /y "{temp_exe}" "{current_exe}"
+start "" "{current_exe}"
+del "%~f0"
+""")
+
+        # 4. Launch Updater and Exit
+        subprocess.Popen([updater_bat], shell=True)
+        log.info("👋 Restarting app to apply update...")
+        os._exit(0)
+
+    except Exception as e:
+        log.error(f"Auto-update failed: {e}", exc_info=True)
+    return None
+
 def main():
     if _is_already_running():
         print("Application is already running.")
         sys.exit(0)
 
-    log.info("Starting Top Chef Enterprise POS...")
+    log.info(f"Starting Top Chef Enterprise POS [v{CURRENT_VERSION}]...")
 
     # 1. Splash
     from desktop.splash import splash
@@ -470,6 +528,17 @@ def main():
         log.error("Local API failed to become ready at %s", health_url)
         splash.close()
         return
+
+    # Background update check
+    def run_update_check():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        update_info = loop.run_until_complete(check_for_updates())
+        if update_info:
+            # You can add a window notification here later if needed
+            pass
+            
+    threading.Thread(target=run_update_check, daemon=True).start()
 
     # 3. Tray
     from desktop.tray import tray_icon

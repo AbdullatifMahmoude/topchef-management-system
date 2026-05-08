@@ -5,14 +5,14 @@
 ; Requires:      Inno Setup 6+  (https://jrsoftware.org)
 ; ══════════════════════════════════════════════════════════════
 
-#define MyAppName      "Top Chef POS"
+#define MyAppName      "TopChef"
 #define MyAppVersion   "1.0.0"
 #define MyAppPublisher "Top Chef"
 #define MyAppExeName   "TopChef.exe"
 #define MyAppURL       "https://topchef-system.fastapicloud.dev"
 
 ; Path to PyInstaller output (relative to this .iss file)
-#define DistDir        "..\build\dist\TopChef"
+#define DistDir        "..\dist\TopChef"
 
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}}
