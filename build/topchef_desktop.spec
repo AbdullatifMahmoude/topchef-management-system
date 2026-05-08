@@ -11,20 +11,16 @@ import os
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(SPECPATH), ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 # Collect data/assets
 datas = [
     # Desktop package files
     (os.path.join(PROJECT_ROOT, "desktop", "settings.json"), "desktop"),
     (os.path.join(PROJECT_ROOT, "desktop", "version.txt"), "desktop"),
-    (os.path.join(PROJECT_ROOT, "desktop", "assets"), os.path.join("desktop", "assets")),
-    # App core (needed for enums, schemas reuse)
-    (os.path.join(PROJECT_ROOT, "app", "core", "enums.py"), os.path.join("app", "core")),
-    (os.path.join(PROJECT_ROOT, "app", "core", "__init__.py"), os.path.join("app", "core")),
-    # Desktop update module version metadata (if server runs locally for dev)
-    (os.path.join(PROJECT_ROOT, "app", "modules", "desktop_updates", "version_meta.json"),
-     os.path.join("app", "modules", "desktop_updates")),
+    (os.path.join(PROJECT_ROOT, "desktop", "assets"), "desktop/assets"),
+    # Include the ENTIRE app folder (frontend, core, modules, etc.)
+    (os.path.join(PROJECT_ROOT, "app"), "app"),
 ]
 
 # Hidden imports that PyInstaller misses
@@ -69,6 +65,13 @@ hiddenimports = [
     "desktop.splash",
     "app.core.enums",
     "app.main",
+    "aiosqlite",
+    "greenlet",
+    "passlib.handlers.bcrypt",
+    "redis",
+    "redis.asyncio",
+    "bcrypt",
+    "cryptography",
 ]
 
 a = Analysis(
@@ -81,9 +84,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        "asyncpg",        # PostgreSQL driver — not needed for desktop
-        "psycopg2",
-        "redis",
         "pytest",
         "matplotlib",
         "scipy",
@@ -104,7 +104,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,                      # No console window
+    console=False,                      # Enabled for debugging
     disable_windowed_traceback=False,
     icon=os.path.join(PROJECT_ROOT, "desktop", "assets", "icon.ico"),
 )

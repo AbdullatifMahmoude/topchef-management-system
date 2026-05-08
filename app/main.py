@@ -30,23 +30,21 @@ from app.core.leader import global_leader_manager
 APP_ROLE = os.getenv("APP_ROLE", "all").lower()
 _startup_executed = False
 
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _startup_executed
-    
-    # --- STARTUP ---
     pid = os.getpid()
-    
     if _startup_executed:
-        logger.warning(f"⚠️ Startup already executed for PID {pid}. Skipping duplicate call.")
         yield
         return
 
     logger.info(f"🚀 Initializing application [PID: {pid}] [Mode: {settings.RUNTIME_MODE}]")
-    logger.info("🚀 APP STARTUP INITIATED - Running self-healing logic...")
     
-    # 1. Database & Role Initialization
     if settings.RUNTIME_MODE == "desktop":
+        logger.info("🖥️ Desktop Mode: Verifying local DB tables...")
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("🖥️ Desktop Mode: Local DB tables verified.")
@@ -92,24 +90,24 @@ async def lifespan(app: FastAPI):
                     
         except Exception as e:
             logger.warning(f"Self-healing database update skipped or failed: {e}")
-    
+
     # 2. Infrastructure & Cache
+    logger.info("📡 Connecting to Redis/Infrastructure...")
     if not redis_client.is_available:
         await redis_client.connect()
+    logger.info("📡 Infrastructure connected.")
 
     # 3. Shared Services (WebSockets & Broadcasters)
-    # Every API instance needs its own listener to notify its connected clients.
     if APP_ROLE in ("api", "all"):
+        logger.info("📡 Starting API Broadcaster...")
         await order_events_manager.start()
         logger.info(f"📡 API Broadcaster started [PID: {pid}]")
 
-    # 4. Global Worker (Leader Election for Singletons)
-    # Only one instance handles these globally.
+    # 4. Global Worker
     if APP_ROLE in ("worker", "all"):
-        # Initialize Global Task Registry
+        logger.info("👷 Starting Global Workers...")
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()
-        
         await global_leader_manager.start()
         logger.info(f"👷 Global Worker active [PID: {pid}]")
     
@@ -127,11 +125,16 @@ async def lifespan(app: FastAPI):
     await redis_client.disconnect()
 
 
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    lifespan=lifespan
+    lifespan=lifespan,
 )
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "mode": settings.RUNTIME_MODE}
 
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(AuthMiddleware)
