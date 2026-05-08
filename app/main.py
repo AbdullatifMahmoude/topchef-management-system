@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
         logger.info("🖥️ Desktop Mode: Local DB tables verified.")
 
+
     # Cloud/General Self-Healing (Postgres Only)
     if settings.RUNTIME_MODE != "desktop":
         try:
@@ -91,11 +92,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Self-healing database update skipped or failed: {e}")
 
-    # 2. Infrastructure & Cache
-    logger.info("📡 Connecting to Redis/Infrastructure...")
-    if not redis_client.is_available:
+    # 2. Infrastructure & Cache (Cloud Only)
+    if settings.RUNTIME_MODE != "desktop":
+        logger.info("📡 Connecting to Redis/Infrastructure...")
+        if not redis_client.is_available:
+            await redis_client.connect()
+        logger.info("📡 Infrastructure connected.")
+    else:
+        logger.info("🖥️ Desktop Mode: Skipping external Redis connection.")
+        # Ensure the client is initialized with InMemoryCache for desktop
         await redis_client.connect()
-    logger.info("📡 Infrastructure connected.")
 
     # 3. Shared Services (WebSockets & Broadcasters)
     if APP_ROLE in ("api", "all"):
@@ -103,13 +109,15 @@ async def lifespan(app: FastAPI):
         await order_events_manager.start()
         logger.info(f"📡 API Broadcaster started [PID: {pid}]")
 
-    # 4. Global Worker
-    if APP_ROLE in ("worker", "all"):
+    # 4. Global Worker (Cloud Only)
+    if settings.RUNTIME_MODE != "desktop" and APP_ROLE in ("worker", "all"):
         logger.info("👷 Starting Global Workers...")
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()
         await global_leader_manager.start()
         logger.info(f"👷 Global Worker active [PID: {pid}]")
+    elif settings.RUNTIME_MODE == "desktop":
+        logger.info("🖥️ Desktop Mode: Global Workers/Leader Election disabled.")
     
     logger.info(f"✅ Application startup complete [PID: {pid}] [Role: {APP_ROLE}]")
     _startup_executed = True
@@ -118,11 +126,12 @@ async def lifespan(app: FastAPI):
     
     # --- SHUTDOWN ---
     logger.info(f"🛑 Shutting down application [PID: {pid}]")
-    if APP_ROLE in ("worker", "all"):
+    if settings.RUNTIME_MODE != "desktop" and APP_ROLE in ("worker", "all"):
         await global_leader_manager.stop()
     if APP_ROLE in ("api", "all"):
         await order_events_manager.stop()
-    await redis_client.disconnect()
+    if settings.RUNTIME_MODE != "desktop":
+        await redis_client.disconnect()
 
 
 
@@ -134,7 +143,27 @@ app = FastAPI(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "mode": settings.RUNTIME_MODE}
+    """
+    Health check endpoint for the application.
+    Used by the desktop launcher to verify server readiness.
+    """
+    try:
+        redis_stats = redis_client.get_stats()
+        return {
+            "status": "healthy",
+            "mode": settings.RUNTIME_MODE,
+            "redis": {
+                "status": redis_client.status_label,
+                "stats": redis_stats,
+            },
+            "database": "connected",
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "detail": str(e)}
+        )
 
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(AuthMiddleware)
@@ -165,19 +194,15 @@ def root():
     return {"message": "Welcome to RMS API"}
 
 
-@app.get("/health")
-async def health_check():
-    redis_stats = redis_client.get_stats()
-
-    return {
-        "status": "healthy",
-        "redis": {
-            "status": redis_client.status_label,
-            "stats": redis_stats,
-        },
-        "database": "connected",
-    }
+# Redundant health check removed (consolidated above)
 
 
+# Mount frontend last to avoid route shadowing
 if os.path.exists(frontend_path):
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+    # Check if index.html exists to avoid mounting empty directories
+    if os.path.exists(os.path.join(frontend_path, "index.html")):
+        app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+    else:
+        logger.warning(f"Frontend path {frontend_path} exists but index.html is missing.")
+else:
+    logger.warning(f"Frontend path {frontend_path} not found. UI will not be served locally.")

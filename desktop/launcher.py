@@ -9,10 +9,23 @@ Features:
 
 import sys
 import os
+from pathlib import Path
 
-# Redirect stdout/stderr to devnull in windowed mode to prevent crashes
-if sys.stdout is None: sys.stdout = open(os.devnull, "w")
-if sys.stderr is None: sys.stderr = open(os.devnull, "w")
+# Redirect stdout/stderr to log file in windowed mode to prevent crashes and capture errors
+if getattr(sys, 'frozen', False):
+    try:
+        _base = Path(sys.executable).parent
+        _logs_dir = _base / "desktop" / "logs"
+        _logs_dir.mkdir(parents=True, exist_ok=True)
+        _err_log = open(_logs_dir / "desktop_errors.log", "a", encoding="utf-8")
+        sys.stdout = _err_log
+        sys.stderr = _err_log
+    except Exception:
+        if sys.stdout is None: sys.stdout = open(os.devnull, "w")
+        if sys.stderr is None: sys.stderr = open(os.devnull, "w")
+else:
+    if sys.stdout is None: sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None: sys.stderr = open(os.devnull, "w")
 import time
 import threading
 import socket
@@ -136,8 +149,7 @@ def main():
 
     # Global variables for caching and background sync
     global _sync_lock
-    if _sync_lock is None:
-        _sync_lock = asyncio.Lock()
+    # Lock is lazily initialized inside the event loop in _desktop_sync_loop
         
     from app.core.sync import sync_manager
     from app.core.cloud_client import cloud_client
@@ -326,7 +338,11 @@ def main():
                                     from app.core.events import order_events_manager
                                     await order_events_manager.broadcast_all({"type": "SYNC_COMPLETE", "stats": stats})
                             elif force_master_pull:
-                                log.warning("Initial cloud reconciliation could not run; will retry on next sync tick.")
+                                log.warning("Initial cloud reconciliation failed (cloud unreachable); will retry in 30s.")
+                                # Reset force flag but set last_pull to a value that triggers retry in 30s
+                                # 120s (normal interval) - 30s (retry delay) = 90s offset
+                                last_pull_at_mon = now_mon - 90 
+                                force_master_pull = False
 
                         # 3. Periodic Heartbeat
                         if time.monotonic() - last_heartbeat_at >= 60:
@@ -345,29 +361,35 @@ def main():
                 except Exception as e:
                     log.error(f"Desktop background sync loop failed: {e}")
 
-    # Replace the existing lifespan with a wrapper that includes the desktop sync loop
+    # Robustly wrap the app lifespan to include the desktop sync loop
+    # We use a wrapper instead of replacing the property to ensure we capture the correct context
     original_lifespan = app.router.lifespan_context
-
+    
     @asynccontextmanager
-    async def desktop_lifespan(app: FastAPI):
-        log.info("🚀 Sync: Lifespan initiated...")
-        # 1. Start the desktop sync loop in the background
-        sync_task = asyncio.create_task(_desktop_sync_loop())
+    async def desktop_lifespan_wrapper(app: FastAPI):
+        log.info("🚀 Sync: Desktop lifespan wrapper started.")
         
-        # 2. Run the original app lifespan
-        log.info("🚀 Sync: Running original app lifespan...")
+        # 1. Run the original app lifespan FIRST to handle migrations and DB setup
+        log.info("🚀 Sync: Entering original app lifespan...")
         async with original_lifespan(app):
+            log.info("🚀 Sync: Original lifespan entered successfully. Starting background tasks...")
+            
+            # 2. Start the desktop sync loop ONLY after the original lifespan has 
+            # established its context and verified the database.
+            sync_task = asyncio.create_task(_desktop_sync_loop(), name="desktop-sync-worker")
+            
             yield
             
-        # 3. Cleanup
-        log.info("🚀 Sync: Cleaning up...")
-        sync_task.cancel()
-        try:
-            await sync_task
-        except asyncio.CancelledError:
-            pass
+            # 3. Cleanup
+            log.info("🚀 Sync: Cleaning up desktop tasks...")
+            sync_task.cancel()
+            try:
+                await sync_task
+            except asyncio.CancelledError:
+                pass
+            log.info("🚀 Sync: Desktop tasks cleaned up.")
 
-    app.router.lifespan_context = desktop_lifespan
+    app.router.lifespan_context = desktop_lifespan_wrapper
 
     class DesktopSyncMiddleware:
         """
@@ -499,14 +521,20 @@ def main():
     app.add_middleware(DesktopSyncMiddleware)
     
     def _run_server():
-        uvicorn.run(
-            app,
-            host="127.0.0.1",
-            port=config.local_port,
-            log_level="info",
-            ws_ping_interval=20,
-            ws_ping_timeout=20,
-        )
+        try:
+            # We pass log_config=None to prevent uvicorn from overriding our custom logging
+            # which is already configured to write to desktop.log and capture stdout/stderr
+            uvicorn.run(
+                app,
+                host="127.0.0.1",
+                port=config.local_port,
+                log_level="info",
+                log_config=None, 
+                ws_ping_interval=20,
+                ws_ping_timeout=20,
+            )
+        except Exception as e:
+            log.error(f"Uvicorn server crashed: {e}", exc_info=True)
 
     server_thread = threading.Thread(target=_run_server, daemon=True)
     server_thread.start()

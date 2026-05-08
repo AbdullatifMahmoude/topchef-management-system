@@ -24,25 +24,19 @@ def setup_logging():
     if not logger.handlers:
         logger.addHandler(loghandler)
     
-    # Desktop File Logging
+    # Desktop File Logging (Cloud/Production Only)
+    # In Desktop mode, we let the desktop launcher handle file logging to avoid locks
     if os.environ.get("RUNTIME_MODE") == "desktop":
+        logger.info("🖥️ Logging: Using shared desktop stream (file logging handled by launcher)")
+    else:
         try:
             from pathlib import Path
-            # Try to find the logs directory relative to the EXE or script
-            if getattr(sys, "frozen", False):
-                base_dir = Path(sys.executable).parent
-            else:
-                # implementation/app/core/logging.py -> implementation/desktop/logs
-                base_dir = Path(__file__).resolve().parent.parent.parent / "desktop"
-            
-            logs_dir = base_dir / "logs"
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            log_file = logs_dir / "desktop.log"
+            # Cloud logging logic...
+            log_file = Path("logs/api.log")
+            log_file.parent.mkdir(parents=True, exist_ok=True)
             
             from logging.handlers import RotatingFileHandler
             fh = RotatingFileHandler(log_file, maxBytes=5_242_880, backupCount=5, encoding="utf-8")
-            # Use a simpler formatter for the file if we want it human readable alongside JSON
-            # Or just use the same JSON formatter. Let's use the JSON one for consistency.
             fh.setFormatter(formatter)
             logger.addHandler(fh)
         except Exception:
