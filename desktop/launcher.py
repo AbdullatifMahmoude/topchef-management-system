@@ -9,6 +9,10 @@ Features:
 
 import sys
 import os
+
+# Redirect stdout/stderr to devnull in windowed mode to prevent crashes
+if sys.stdout is None: sys.stdout = open(os.devnull, "w")
+if sys.stderr is None: sys.stderr = open(os.devnull, "w")
 import time
 import threading
 import socket
@@ -513,7 +517,7 @@ def main():
     app_url = f"http://127.0.0.1:{config.local_port}/"
     health_url = f"http://127.0.0.1:{config.local_port}/health"
 
-    def _wait_for_server(timeout_seconds: int = 20) -> bool:
+    def _wait_for_server(timeout_seconds: int = 60) -> bool:
         deadline = time.time() + timeout_seconds
         while time.time() < deadline:
             try:

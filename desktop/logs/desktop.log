@@ -2705,3 +2705,236 @@ SyntaxError: '(' was never closed
 [2026-05-08 03:37:43] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
 [2026-05-08 03:37:44] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
 [2026-05-08 03:37:46] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-08 04:54:41] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 04:54:41] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 04:54:41] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 04:54:42] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 04:54:42] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 04:55:51] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 04:55:51] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 04:55:51] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 04:55:51] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 04:55:51] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 04:55:53] INFO     topchef_desktop – 🚀 Sync: Lifespan initiated...
+[2026-05-08 04:55:53] INFO     topchef_desktop – 🚀 Sync: Running original app lifespan...
+[2026-05-08 04:55:53] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-08 04:55:53] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-08 04:55:53] INFO     topchef_desktop – Tray icon started
+[2026-05-08 04:55:53] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-08 04:55:53] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-08 04:56:03] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-08 04:56:14] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 04:56:14] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 04:56:14] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 04:56:14] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 04:56:14] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 04:56:16] INFO     topchef_desktop – 🚀 Sync: Lifespan initiated...
+[2026-05-08 04:56:16] INFO     topchef_desktop – 🚀 Sync: Running original app lifespan...
+[2026-05-08 04:56:16] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-08 04:56:16] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-08 04:56:16] INFO     topchef_desktop – Tray icon started
+[2026-05-08 04:56:16] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-08 04:56:16] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-08 04:56:26] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-08 04:58:09] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 04:58:09] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 04:58:09] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 04:58:09] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 04:58:09] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 04:58:11] INFO     topchef_desktop – 🚀 Sync: Lifespan initiated...
+[2026-05-08 04:58:11] INFO     topchef_desktop – 🚀 Sync: Running original app lifespan...
+[2026-05-08 04:58:11] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-08 04:58:11] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-08 04:58:11] INFO     topchef_desktop – Tray icon started
+[2026-05-08 04:58:11] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-08 04:58:11] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-08 04:58:21] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-08 04:58:31] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-08 05:00:29] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 05:00:29] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 05:00:29] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 05:00:29] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 05:00:29] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 05:00:31] INFO     topchef_desktop – 🚀 Sync: Lifespan initiated...
+[2026-05-08 05:00:31] INFO     topchef_desktop – 🚀 Sync: Running original app lifespan...
+[2026-05-08 05:00:31] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-08 05:00:31] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-08 05:00:31] INFO     topchef_desktop – Tray icon started
+[2026-05-08 05:00:31] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-08 05:00:31] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-08 05:00:41] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-08 05:11:46] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 05:11:46] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 05:11:46] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 05:11:47] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 05:11:47] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 05:11:48] INFO     topchef_desktop – 🚀 Sync: Lifespan initiated...
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Sync: Lifespan initiated..."}
+[2026-05-08 05:11:48] INFO     topchef_desktop – 🚀 Sync: Running original app lifespan...
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Sync: Running original app lifespan..."}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "🚀 Initializing application [PID: 22272] [Mode: desktop]"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "🖥️ Desktop Mode: Verifying local DB tables..."}
+[2026-05-08 05:11:48] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "topchef_desktop", "message": "⚙️ Sync: Background worker task started."}
+[2026-05-08 05:11:48] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "topchef_desktop", "message": "⚙️ Sync: Entering main loop..."}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "🖥️ Desktop Mode: Local DB tables verified."}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "📡 Connecting to Redis/Infrastructure..."}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "Desktop mode cache initialized with in-memory backend"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "📡 Infrastructure connected."}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "📡 Starting API Broadcaster..."}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "Order events manager started with desktop remote bridge"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "📡 API Broadcaster started [PID: 22272]"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "👷 Starting Global Workers..."}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "Leader manager started for main_worker (ID: Abdullatif_22272)"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "👷 Global Worker active [PID: 22272]"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "✅ Application startup complete [PID: 22272] [Role: all]"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "WebSocket state transition: disconnected -> connecting reason=attempt=1"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "Desktop bridge connecting to wss://topchef-system.fastapicloud.dev/orders/ws attempt=1"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "👑 Instance Abdullatif_22272 is now the LEADER for main_worker"}
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "root", "message": "🛠 Global Task: Running database integrity check..."}
+[2026-05-08 05:11:48] INFO     topchef_desktop – Tray icon started
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "topchef_desktop", "message": "Tray icon started"}
+[2026-05-08 05:11:48] INFO     topchef_desktop – Launching desktop window via pywebview.
+{"timestamp": "2026-05-08 05:11:48", "level": "INFO", "name": "topchef_desktop", "message": "Launching desktop window via pywebview."}
+{"timestamp": "2026-05-08 05:11:49", "level": "INFO", "name": "root", "message": "SYNC MODE: switched to REAL-TIME (WebSocket)"}
+{"timestamp": "2026-05-08 05:11:49", "level": "INFO", "name": "root", "message": "WebSocket state transition: connecting -> connected"}
+{"timestamp": "2026-05-08 05:11:49", "level": "INFO", "name": "root", "message": "Desktop bridge connected to cloud ping_interval=30s ping_timeout=20s"}
+[2026-05-08 05:11:58] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+{"timestamp": "2026-05-08 05:11:58", "level": "INFO", "name": "topchef_desktop", "message": "Outbox: Waiting for user activity to capture Auth header..."}
+[2026-05-08 05:12:18] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 05:12:18] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 05:12:18] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 05:12:18] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 05:12:18] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 05:12:20] INFO     topchef_desktop – 🚀 Sync: Lifespan initiated...
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Sync: Lifespan initiated..."}
+[2026-05-08 05:12:20] INFO     topchef_desktop – 🚀 Sync: Running original app lifespan...
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Sync: Running original app lifespan..."}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "🚀 Initializing application [PID: 23452] [Mode: desktop]"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "🖥️ Desktop Mode: Verifying local DB tables..."}
+[2026-05-08 05:12:20] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "topchef_desktop", "message": "⚙️ Sync: Background worker task started."}
+[2026-05-08 05:12:20] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "topchef_desktop", "message": "⚙️ Sync: Entering main loop..."}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "🖥️ Desktop Mode: Local DB tables verified."}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "📡 Connecting to Redis/Infrastructure..."}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "Desktop mode cache initialized with in-memory backend"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "📡 Infrastructure connected."}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "📡 Starting API Broadcaster..."}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "Order events manager started with desktop remote bridge"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "📡 API Broadcaster started [PID: 23452]"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "👷 Starting Global Workers..."}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "Leader manager started for main_worker (ID: Abdullatif_23452)"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "👷 Global Worker active [PID: 23452]"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "✅ Application startup complete [PID: 23452] [Role: all]"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "WebSocket state transition: disconnected -> connecting reason=attempt=1"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "Desktop bridge connecting to wss://topchef-system.fastapicloud.dev/orders/ws attempt=1"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "👑 Instance Abdullatif_23452 is now the LEADER for main_worker"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "🛠 Global Task: Running database integrity check..."}
+[2026-05-08 05:12:20] INFO     topchef_desktop – Tray icon started
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "topchef_desktop", "message": "Tray icon started"}
+[2026-05-08 05:12:20] INFO     topchef_desktop – Launching desktop window via pywebview.
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "topchef_desktop", "message": "Launching desktop window via pywebview."}
+[2026-05-08 05:12:20] INFO     topchef_desktop – Starting pywebview event loop.
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "topchef_desktop", "message": "Starting pywebview event loop."}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "SYNC MODE: switched to REAL-TIME (WebSocket)"}
+{"timestamp": "2026-05-08 05:12:20", "level": "INFO", "name": "root", "message": "WebSocket state transition: connecting -> connected"}
+{"timestamp": "2026-05-08 05:12:21", "level": "INFO", "name": "root", "message": "Desktop bridge connected to cloud ping_interval=30s ping_timeout=20s"}
+[2026-05-08 05:20:04] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 05:20:04] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 05:20:04] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 05:20:04] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 05:20:04] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 05:21:57] INFO     topchef_desktop – 🚀 Sync: Lifespan initiated...
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Sync: Lifespan initiated..."}
+[2026-05-08 05:21:57] INFO     topchef_desktop – 🚀 Sync: Running original app lifespan...
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Sync: Running original app lifespan..."}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "🚀 Initializing application [PID: 2808] [Mode: desktop]"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "🖥️ Desktop Mode: Verifying local DB tables..."}
+[2026-05-08 05:21:57] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "topchef_desktop", "message": "⚙️ Sync: Background worker task started."}
+[2026-05-08 05:21:57] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "topchef_desktop", "message": "⚙️ Sync: Entering main loop..."}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "🖥️ Desktop Mode: Local DB tables verified."}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "📡 Connecting to Redis/Infrastructure..."}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "Desktop mode cache initialized with in-memory backend"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "📡 Infrastructure connected."}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "📡 Starting API Broadcaster..."}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "Order events manager started with desktop remote bridge"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "📡 API Broadcaster started [PID: 2808]"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "👷 Starting Global Workers..."}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "Leader manager started for main_worker (ID: Abdullatif_2808)"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "👷 Global Worker active [PID: 2808]"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "✅ Application startup complete [PID: 2808] [Role: all]"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "WebSocket state transition: disconnected -> connecting reason=attempt=1"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "Desktop bridge connecting to wss://topchef-system.fastapicloud.dev/orders/ws attempt=1"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "👑 Instance Abdullatif_2808 is now the LEADER for main_worker"}
+{"timestamp": "2026-05-08 05:21:57", "level": "INFO", "name": "root", "message": "🛠 Global Task: Running database integrity check..."}
+[2026-05-08 05:21:58] INFO     topchef_desktop – Tray icon started
+{"timestamp": "2026-05-08 05:21:58", "level": "INFO", "name": "topchef_desktop", "message": "Tray icon started"}
+[2026-05-08 05:21:58] INFO     topchef_desktop – Launching desktop window via pywebview.
+{"timestamp": "2026-05-08 05:21:58", "level": "INFO", "name": "topchef_desktop", "message": "Launching desktop window via pywebview."}
+[2026-05-08 05:21:58] INFO     topchef_desktop – Starting pywebview event loop.
+{"timestamp": "2026-05-08 05:21:58", "level": "INFO", "name": "topchef_desktop", "message": "Starting pywebview event loop."}
+{"timestamp": "2026-05-08 05:21:58", "level": "INFO", "name": "root", "message": "SYNC MODE: switched to REAL-TIME (WebSocket)"}
+{"timestamp": "2026-05-08 05:21:58", "level": "INFO", "name": "root", "message": "WebSocket state transition: connecting -> connected"}
+{"timestamp": "2026-05-08 05:21:58", "level": "INFO", "name": "root", "message": "Desktop bridge connected to cloud ping_interval=30s ping_timeout=20s"}
+[2026-05-08 05:23:08] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 05:23:08] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 05:23:08] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 05:23:08] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 05:23:08] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 05:24:12] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-08 05:24:12] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-08 05:24:12] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-08 05:24:12] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-08 05:24:12] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-08 05:24:14] INFO     topchef_desktop – Waiting up to 180s for local API to become ready...
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "Waiting up to 180s for local API to become ready..."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 🚀 Sync: Lifespan initiated...
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Sync: Lifespan initiated..."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 🚀 Sync: Running original app lifespan...
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Sync: Running original app lifespan..."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 🚀 Initializing application [PID: 14724] [Mode: desktop]
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "🚀 Initializing application [PID: 14724] [Mode: desktop]"}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 🖥️ Desktop Mode: Verifying local DB tables...
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "🖥️ Desktop Mode: Verifying local DB tables..."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "⚙️ Sync: Background worker task started."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "⚙️ Sync: Entering main loop..."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 🖥️ Desktop Mode: Local DB tables verified.
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "🖥️ Desktop Mode: Local DB tables verified."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 📡 Connecting to Redis/Infrastructure...
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "📡 Connecting to Redis/Infrastructure..."}
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "root", "message": "Desktop mode cache initialized with in-memory backend"}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 📡 Infrastructure connected.
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "📡 Infrastructure connected."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 📡 Starting API Broadcaster...
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "📡 Starting API Broadcaster..."}
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "root", "message": "Order events manager started with desktop remote bridge"}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 📡 API Broadcaster started [PID: 14724]
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "📡 API Broadcaster started [PID: 14724]"}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 👷 Starting Global Workers...
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "👷 Starting Global Workers..."}
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "root", "message": "Leader manager started for main_worker (ID: Abdullatif_14724)"}
+[2026-05-08 05:24:14] INFO     topchef_desktop – 👷 Global Worker active [PID: 14724]
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "👷 Global Worker active [PID: 14724]"}
+[2026-05-08 05:24:14] INFO     topchef_desktop – ✅ Application startup complete [PID: 14724] [Role: all]
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "✅ Application startup complete [PID: 14724] [Role: all]"}
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "root", "message": "WebSocket state transition: disconnected -> connecting reason=attempt=1"}
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "root", "message": "Desktop bridge connecting to wss://topchef-system.fastapicloud.dev/orders/ws attempt=1"}
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "root", "message": "👑 Instance Abdullatif_14724 is now the LEADER for main_worker"}
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "root", "message": "🛠 Global Task: Running database integrity check..."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – Local API is READY.
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "Local API is READY."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – Tray icon started
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "Tray icon started"}
+[2026-05-08 05:24:14] INFO     topchef_desktop – Launching desktop window via pywebview.
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "Launching desktop window via pywebview."}
+[2026-05-08 05:24:14] INFO     topchef_desktop – Starting pywebview event loop.
+{"timestamp": "2026-05-08 05:24:14", "level": "INFO", "name": "topchef_desktop", "message": "Starting pywebview event loop."}
+{"timestamp": "2026-05-08 05:24:15", "level": "INFO", "name": "root", "message": "SYNC MODE: switched to REAL-TIME (WebSocket)"}
+{"timestamp": "2026-05-08 05:24:15", "level": "INFO", "name": "root", "message": "WebSocket state transition: connecting -> connected"}
+{"timestamp": "2026-05-08 05:24:15", "level": "INFO", "name": "root", "message": "Desktop bridge connected to cloud ping_interval=30s ping_timeout=20s"}
