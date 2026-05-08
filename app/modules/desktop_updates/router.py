@@ -226,6 +226,28 @@ async def desktop_sync_events(
                 if event.event_type in ["SETTING_UPDATED", "ORDER_UPDATED"]:
                     # Inherently idempotent, safe to re-process. We just won't insert a duplicate ProcessedEvent.
                     pass
+                elif event.event_type == "ORDER_CREATED":
+                    # Verify the order was actually created (not just the ProcessedEvent record)
+                    event_data_check = json.loads(event.payload)
+                    order_number_check = event_data_check.get("order_number")
+                    if order_number_check:
+                        existing_order = await db.execute(
+                            select(Order).where(Order.order_number == order_number_check)
+                        )
+                        if existing_order.scalar_one_or_none():
+                            # Order exists, safe to skip
+                            accepted += 1
+                            continue
+                        else:
+                            # Order NOT found despite ProcessedEvent existing = stale record
+                            logger.warning(f"ORDER_CREATED: ProcessedEvent exists but order {order_number_check} NOT found. Re-processing...")
+                            await db.delete(existing_processed_record)
+                            await db.flush()
+                            existing_processed_record = None
+                            # Fall through to process the event below
+                    else:
+                        accepted += 1
+                        continue
                 else:
                     accepted += 1
                     continue
@@ -238,20 +260,91 @@ async def desktop_sync_events(
                 if not idempotency_key:
                     idempotency_key = f"{payload.device_id}_{event.event_id}"
                 
+                logger.info(f"Processing ORDER_CREATED: key={idempotency_key}, order_number={event_data.get('order_number')}")
+                
                 # Check if it already exists via idempotency_key as secondary safety
                 existing = await db.execute(select(Order).where(Order.idempotency_key == idempotency_key))
                 if existing.scalar_one_or_none():
+                    logger.info(f"ORDER_CREATED: Skipped (already exists by idempotency_key={idempotency_key})")
                     if not existing_processed_record:
                         db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                     accepted += 1
                     continue
                 
                 try:
-                    await order_service.create_order(OrderCreate(**event_data), current_user_id=current_user.id if current_user else None)
+                    # === ID REMAPPING: Desktop local IDs -> Cloud IDs ===
+                    # The event payload contains LOCAL SQLite IDs which don't match cloud Postgres IDs.
+                    # We must resolve them using cross-system identifiers (phone, address text, etc.)
+                    
+                    # 1. Remap customer_id via phone number
+                    if event_data.get("customer_phone"):
+                        try:
+                            from app.modules.customer.service import CustomerService
+                            customer_service = CustomerService(db, redis=redis)
+                            cloud_cust = await customer_service.get_customer_by_phone(event_data["customer_phone"])
+                            event_data["customer_id"] = cloud_cust.id
+                            logger.info(f"ORDER_CREATED: Remapped customer_id to {cloud_cust.id} via phone {event_data['customer_phone']}")
+                            
+                            # 2. Remap address_id via text match
+                            if event_data.get("address_id") and event_data.get("customer_address"):
+                                matched_addr = next(
+                                    (a for a in (cloud_cust.addresses or []) if a.address == event_data["customer_address"]),
+                                    None
+                                )
+                                if matched_addr:
+                                    event_data["address_id"] = matched_addr.id
+                                    logger.info(f"ORDER_CREATED: Remapped address_id to {matched_addr.id}")
+                                else:
+                                    # Address doesn't exist on cloud yet, let create_order handle it
+                                    event_data["address_id"] = None
+                            elif event_data.get("address_id"):
+                                # No address text to match, clear local ID
+                                event_data["address_id"] = None
+                        except Exception:
+                            # Customer doesn't exist on cloud yet - let create_order handle it via phone
+                            event_data["customer_id"] = None
+                            event_data["address_id"] = None
+                    else:
+                        event_data["customer_id"] = None
+                        event_data["address_id"] = None
+                    
+                    # 3. Remap delivery_person_id via username lookup
+                    if event_data.get("delivery_person_id") and event_data.get("delivery_person_name"):
+                        try:
+                            from app.modules.users.models import User
+                            dp_result = await db.execute(
+                                select(User).where(User.full_name == event_data["delivery_person_name"])
+                            )
+                            cloud_dp = dp_result.scalars().first()
+                            if cloud_dp:
+                                event_data["delivery_person_id"] = cloud_dp.id
+                                logger.info(f"ORDER_CREATED: Remapped delivery_person_id to {cloud_dp.id}")
+                            else:
+                                event_data["delivery_person_id"] = None
+                        except Exception:
+                            event_data["delivery_person_id"] = None
+                    
+                    # 4. Remove response-only fields that OrderCreate doesn't expect
+                    for key in ["id", "created_at", "order_status", "subtotal", "discount_amount", 
+                                "total_amount", "creator_name", "delivery_person_name", "address"]:
+                        event_data.pop(key, None)
+                    # Clean item response fields
+                    for item in event_data.get("items", []):
+                        item.pop("id", None)
+                        item.pop("total_price", None)
+                    
+                    # 5. Set the idempotency_key so the cloud can track this order
+                    event_data["idempotency_key"] = idempotency_key
+                    
+                    order_create_data = OrderCreate(**event_data)
+                    logger.info(f"ORDER_CREATED: Creating order on cloud: num={order_create_data.order_number}, source={order_create_data.source}, items={len(order_create_data.items)}")
+                    created = await order_service.create_order(order_create_data, current_user_id=current_user.id if current_user else None)
+                    logger.info(f"ORDER_CREATED: Successfully created cloud order ID={created.id}, num={created.order_number}")
                     if not existing_processed_record:
                         db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                     accepted += 1
                 except Exception as e:
+                    logger.error(f"ORDER_CREATED error: {str(e)}", exc_info=True)
                     rejected += 1
                     errors.append(f"ORDER_CREATED error: {str(e)}")
             elif event.event_type == "ORDER_UPDATED":

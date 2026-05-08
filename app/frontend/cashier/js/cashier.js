@@ -609,13 +609,16 @@ function showConfirmModal(orderData) {
           }
       }
 
-      // Update all orders tab if active
-      if (document.getElementById("tab_all_orders") && document.getElementById("tab_all_orders").classList.contains("active")) {
-          renderAllOrders();
-      }
-      if (document.getElementById("tab_online") && document.getElementById("tab_online").classList.contains("active")) {
-          renderOnlineOrders();
-      }
+      // Always re-render order tabs so the new order shows up
+      renderAllOrders();
+      renderOnlineOrders();
+      updateOnlineStats();
+
+      // Delayed server fetch to get the synced version from cloud
+      setTimeout(() => {
+        fetchAllOrdersServer(1, true);
+        fetchOnlineOrdersServer(1, true);
+      }, 2000);
 
     } catch (err) {
       console.error(err);
@@ -1397,12 +1400,21 @@ function renderRidersTab() {
     return;
   }
 
+  // حساب بداية يوم العمل (الساعة 5 صباحاً)
+  const now = new Date();
+  const businessDayStart = new Date(now);
+  businessDayStart.setHours(5, 0, 0, 0);
+  if (now.getHours() < 5) businessDayStart.setDate(businessDayStart.getDate() - 1);
+
   // تجميع كل الطلبات
   const combinedOrders = [...allOrdersList, ...onlineOrdersList];
   
-  // فلترة الطلبات التي بها دليفري (تجاهل الطلبات الملغية لو أردت أرقام "مؤكدة" فقط)
-  // هنا سنحسب كل الطلبات التي تم تخصيص مندوب لها ولم تلغَ
-  const deliveryOrders = combinedOrders.filter(o => o.delivery_person_id && o.order_status !== 'cancelled');
+  // فلترة طلبات الدليفري ضمن يوم العمل الحالي (من الساعة 5 صباحاً)
+  const deliveryOrders = combinedOrders.filter(o => {
+    if (!o.delivery_person_id || o.order_status === 'cancelled') return false;
+    const t = o.created_at ? new Date(o.created_at) : null;
+    return t && t >= businessDayStart;
+  });
 
   // تجميع البيانات لكل مندوب
   const riderStats = {};

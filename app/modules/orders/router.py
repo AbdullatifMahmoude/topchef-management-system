@@ -67,6 +67,59 @@ async def get_dashboard_stats(
 ):
     return await service.get_today_stats()
 
+@router.get("/riders/stats")
+async def get_rider_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: any = Depends(get_current_user)
+):
+    """Get delivery rider stats for the current business day (5 AM to 5 AM)."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import select, func, and_
+    from app.modules.orders.models import Order
+    from app.modules.users.models import User
+    
+    # Calculate business day start (5 AM boundary)
+    # Using Egypt timezone (UTC+3)
+    tz = timezone(timedelta(hours=3))
+    now = datetime.now(tz).replace(tzinfo=None)
+    business_day_start = now.replace(hour=5, minute=0, second=0, microsecond=0)
+    
+    # If current time is before 5 AM, the business day started yesterday at 5 AM
+    if now.hour < 5:
+        business_day_start = business_day_start - timedelta(days=1)
+    
+    # Query: Count orders per delivery person within the business day
+    query = (
+        select(
+            User.id.label("rider_id"),
+            User.full_name.label("rider_name"),
+            User.username.label("username"),
+            func.count(Order.id).label("total_orders")
+        )
+        .join(Order, User.id == Order.delivery_person_id)
+        .where(
+            and_(
+                Order.created_at >= business_day_start,
+                Order.delivery_person_id.isnot(None)
+            )
+        )
+        .group_by(User.id)
+    )
+    
+    result = await db.execute(query)
+    stats = []
+    for row in result.all():
+        stats.append({
+            "id": row.rider_id,
+            "name": row.rider_name or row.username,
+            "total_orders": row.total_orders
+        })
+    
+    return {
+        "business_day_start": business_day_start.isoformat(),
+        "stats": stats
+    }
+
 @router.patch("/{order_id}", response_model=schemas.OrderResponse)
 async def update_order(
     order_id: int,

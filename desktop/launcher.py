@@ -97,6 +97,8 @@ def main():
             force_master_pull = True
             last_heartbeat_at = 0.0
             last_pull_at_mon = 0.0
+            _last_sync_failure_at = None
+            _sync_backoff_seconds = 5
             
             log.info("⚙️ Sync: Entering main loop...")
         except Exception as e:
@@ -128,6 +130,12 @@ def main():
                 if loop_counter % 10 == 0:
                     log.info("Outbox: Waiting for user activity to capture Auth header...")
                 continue
+
+            # Handle network backoff
+            if _last_sync_failure_at:
+                seconds_since_failure = (asyncio.get_event_loop().time() - _last_sync_failure_at)
+                if seconds_since_failure < _sync_backoff_seconds:
+                    continue
             
             # If we just got the token and haven't synced yet, force a pull
             if last_master_data_sync_at is None:
@@ -169,6 +177,7 @@ def main():
                             }
                             
                             sync_result = await cloud_client.post_json("/desktop-updates/sync/events", payload)
+                            log.info(f"Outbox: Cloud response: {sync_result}")
                             accepted = int((sync_result or {}).get("accepted", 0))
                             rejected = int((sync_result or {}).get("rejected", 0))
                             errors = (sync_result or {}).get("errors", [])
@@ -203,20 +212,28 @@ def main():
                                 await db.commit()
                                 if accepted > 0:
                                     log.info(f"📤 Outbox: Successfully synced {accepted} events to cloud.")
+                                    # Reset backoff on success
+                                    _last_sync_failure_at = None
+                                    _sync_backoff_seconds = 5
                                 if rejected > 0:
                                     log.warning(f"⚠️ Outbox: {rejected} events were rejected by cloud.")
                             else:
-                                # Total failure (network error, etc.) - increment retry on all
+                                # Total failure (network error, etc.) 
+                                # We stay PENDING because we want to retry when internet is back.
+                                _last_sync_failure_at = asyncio.get_event_loop().time()
+                                # Exponential backoff up to 60 seconds
+                                _sync_backoff_seconds = min(_sync_backoff_seconds * 2, 60)
+                                
                                 for e in pending_events:
                                     e.retry_count = (e.retry_count or 0) + 1
-                                    if e.retry_count >= 10: # More lenient for network errors
+                                    if e.retry_count >= 100: # Very high limit for network errors
                                         e.status = OutboxEventStatus.FAILED
-                                        e.error_message = "Persistent network failure"
+                                        e.error_message = "Persistent network failure (100 retries)"
                                         e.processed_at = now_ts
                                 await db.commit()
                                 log.warning(
-                                    "Outbox: cloud did not fully accept batch accepted=%s rejected=%s errors=%s",
-                                    accepted, rejected, errors[:2]
+                                    "Outbox: cloud unreachable (backoff=%ds). Batch stays PENDING.",
+                                    _sync_backoff_seconds
                                 )
                                 force_master_pull = True
 
@@ -346,7 +363,7 @@ def main():
                         await response(scope, receive, send)
                         return
 
-            # 3. Cloud Proxy for Orders (Strict Source of Truth)
+            # 3. Cloud Proxy for Orders (Source of Truth for ONLINE orders only)
             if path in ("/orders/", "/orders") and method == "GET":
                 # Parse query string for source
                 from urllib.parse import parse_qs
@@ -355,17 +372,18 @@ def main():
                 source_list = params.get("source", [])
                 source = source_list[0] if source_list else None
                 
-                # Cloud is the source of truth for ALL order queries
-                # Proxy to cloud for accurate statuses, fall back to local if cloud fails
-                flat_params = {k: v[0] for k, v in params.items()}
-                json_data = await cloud_client.get("/orders/", params=flat_params)
-                if json_data:
-                    query_hash = f"cache_{path}_{query_string}"
-                    _order_query_cache[query_hash] = {"timestamp": time.time(), "response": json_data}
-                    response = JSONResponse(content=json_data)
-                    await response(scope, receive, send)
-                    return
-                # If cloud fails, fall through to local handler
+                # Only proxy to cloud for ONLINE orders (cloud is the source of truth)
+                # For CASHIER orders, use local SQLite (desktop is the source of truth)
+                if source != "cashier":
+                    flat_params = {k: v[0] for k, v in params.items()}
+                    json_data = await cloud_client.get("/orders/", params=flat_params)
+                    if json_data:
+                        query_hash = f"cache_{path}_{query_string}"
+                        _order_query_cache[query_hash] = {"timestamp": time.time(), "response": json_data}
+                        response = JSONResponse(content=json_data)
+                        await response(scope, receive, send)
+                        return
+                # If source=cashier or cloud fails, fall through to local handler
 
             # 4. Cloud Proxy for Order Updates (PATCH) and Details (GET)
             # If the order is not found locally, it must be a cloud order we are currently viewing
