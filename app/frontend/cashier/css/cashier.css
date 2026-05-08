@@ -938,9 +938,34 @@ nav {
   color: var(--color-primary);
   display: flex;
   align-items: center;
+  justify-content: space-between; /* Ensure X is on the other side */
   gap: 6px;
   margin-bottom: 2px;
   letter-spacing: 0.3px;
+}
+
+.dcf_close_btn {
+  background: rgba(201, 168, 76, 0.1);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  border-radius: 50%; /* Circular for a cleaner look */
+  color: var(--color-primary);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.dcf_close_btn:hover {
+  background: var(--color-danger);
+  color: #fff;
+  border-color: var(--color-danger);
+  transform: rotate(90deg); /* Subtle animation */
 }
 
 .dcf_field {
