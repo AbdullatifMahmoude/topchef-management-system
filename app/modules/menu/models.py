@@ -26,6 +26,8 @@ class Category(Base):
     id = Column(Integer, primary_key=True)
     cat_name = Column(String(100), unique=True, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True,)
+    is_deleted = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     products = relationship("Product", back_populates="category",cascade="all, delete-orphan")
@@ -47,6 +49,7 @@ class Product(Base):
     )
     description = Column(String(500), nullable=True)
     is_available = Column(Boolean, default=True, nullable=False)
+    is_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     update_at = Column(DateTime, default=datetime.utcnow,
                        onupdate=datetime.utcnow, nullable=False)
@@ -70,6 +73,8 @@ class Variant(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
     name = Column(String(50), nullable=False)
     price = Column(Numeric(10,2), nullable=False, default=0)
+    is_deleted = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     
     product = relationship("Product", back_populates="variants")

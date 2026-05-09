@@ -145,7 +145,8 @@ class CustomerService:
             existing_addr_result = await self.db.execute(
                 select(models.CustomerAddress).where(
                     models.CustomerAddress.customer_id == customer_id,
-                    models.CustomerAddress.address == address_data.address
+                    models.CustomerAddress.address == address_data.address,
+                    models.CustomerAddress.is_deleted == False
                 )
             )
             existing_addr = existing_addr_result.scalars().first()

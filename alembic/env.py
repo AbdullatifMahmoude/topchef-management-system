@@ -8,6 +8,8 @@ from app.modules.users.models import User
 from app.modules.offer.models import Offer, OfferUsage
 from app.modules.orders.models import Order, OrderItem, OrderStatusHistory
 from app.modules.customer.models import Customer, CustomerAddress
+from app.modules.comments.models import Comment
+from app.modules.settings.models import AppSetting
 
 # Alembic Config object
 config = context.config

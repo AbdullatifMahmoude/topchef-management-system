@@ -19,12 +19,18 @@ class OfferRepository:
         return new_offer
 
     async def get_by_id(self, offer_id: int) -> Offer:
-        query = select(Offer).where(Offer.offer_id == offer_id)
+        query = select(Offer).where(
+            Offer.offer_id == offer_id,
+            Offer.is_deleted == False
+        )
         result = await self.db.execute(query)
         return result.scalars().first()
 
     async def get_by_code(self, code: str, lock: bool = False) -> Offer:
-        query = select(Offer).where(Offer.code == code)
+        query = select(Offer).where(
+            Offer.code == code,
+            Offer.is_deleted == False
+        )
         if lock:
             query = query.with_for_update()
         result = await self.db.execute(query)
@@ -51,11 +57,14 @@ class OfferRepository:
         self.db.add(new_usage)
 
     async def list_offers(self, only_active: bool = False) -> list[Offer]:
-        query = select(Offer)
+        query = select(Offer).where(Offer.is_deleted == False)
         if only_active:
             query = query.where(Offer.is_active == True)
         result = await self.db.execute(query)
         return result.scalars().all()
 
     async def delete(self, offer: Offer):
-        await self.db.delete(offer)
+        import time
+        ts = int(time.time())
+        offer.is_deleted = True
+        offer.code = f"{offer.code}_deleted_{ts}"

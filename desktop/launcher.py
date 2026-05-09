@@ -221,11 +221,22 @@ def main():
                     from app.modules.orders.models import OutboxEvent, OutboxEventStatus
                     
                     async with AsyncSessionLocal() as db:
-                        # 1. Drain Outbox
+                        # 1. Drain Outbox — dependency-aware ordering:
+                        #    0: CUSTOMER_CREATED  (customer must exist first)
+                        #    1: ADDRESS_CREATED   (address needs customer)
+                        #    2: ORDER_CREATED     (order needs customer + address)
+                        #    3: everything else   (updates need their parent entity)
+                        from sqlalchemy import case, literal
+                        event_priority = case(
+                            (OutboxEvent.event_type == 'CUSTOMER_CREATED', literal(0)),
+                            (OutboxEvent.event_type == 'ADDRESS_CREATED',  literal(1)),
+                            (OutboxEvent.event_type == 'ORDER_CREATED',    literal(2)),
+                            else_=literal(3)
+                        )
                         result = await db.execute(
                             select(OutboxEvent)
                             .where(OutboxEvent.status == OutboxEventStatus.PENDING)
-                            .order_by(OutboxEvent.created_at.asc())
+                            .order_by(event_priority, OutboxEvent.created_at.asc())
                             .limit(50)
                         )
                         pending_events = result.scalars().all()
@@ -584,14 +595,25 @@ def main():
         import webview
         splash.close()
         api = JSAPI()
-        webview.create_window(
+        window = webview.create_window(
             "Top Chef POS",
             app_url,
             js_api=api,
-            width=1280, height=800
+            width=1280, height=800,
+            on_top=True,  # Temporarily on top to ensure visibility after splash
         )
+        
+        def _on_shown():
+            """Bring window to foreground then disable always-on-top."""
+            import time
+            time.sleep(0.5)
+            try:
+                window.on_top = False  # Allow normal window behavior after showing
+            except Exception:
+                pass
+
         log.info("Starting pywebview event loop.")
-        webview.start(gui="edgechromium")
+        webview.start(gui="edgechromium", func=_on_shown)
     except Exception as e:
         log.error(f"UI Failed: {e}")
         try:

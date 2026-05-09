@@ -25,7 +25,10 @@ class OrderRepository:
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address)
-        ).where(models.Order.id == order_id)
+        ).where(
+            models.Order.id == order_id,
+            models.Order.is_deleted == False
+        )
         result = await self.db.execute(query)
         return result.scalars().first()
 
@@ -36,7 +39,8 @@ class OrderRepository:
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address)
         ).where(
-            models.Order.idempotency_key == key
+            models.Order.idempotency_key == key,
+            models.Order.is_deleted == False
         )
         result = await self.db.execute(query)
         return result.scalars().first()
@@ -51,7 +55,8 @@ class OrderRepository:
             selectinload(models.Order.address)
         ).where(
             models.Order.order_number == order_number,
-            models.Order.order_date == order_date
+            models.Order.order_date == order_date,
+            models.Order.is_deleted == False
         )
         result = await self.db.execute(query)
         return result.scalars().first()
@@ -71,7 +76,7 @@ class OrderRepository:
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address)
-        )
+        ).where(models.Order.is_deleted == False)
         
         if source:
             query = query.where(models.Order.order_source == source)
@@ -85,7 +90,7 @@ class OrderRepository:
 
         
         # Count total
-        count_query = select(func.count()).select_from(models.Order)
+        count_query = select(func.count()).select_from(models.Order).where(models.Order.is_deleted == False)
         if source:
             count_query = count_query.where(models.Order.order_source == source)
         if status:
@@ -114,7 +119,7 @@ class OrderRepository:
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address)
-        )
+        ).where(models.Order.is_deleted == False)
         if source:
             query = query.where(models.Order.order_source == source)
         if status:
@@ -153,7 +158,8 @@ class OrderRepository:
         bind = self.db.bind
         if bind is not None and bind.dialect.name == "sqlite":
             count_query = select(func.count()).select_from(models.Order).where(
-                models.Order.order_date == business_date
+                models.Order.order_date == business_date,
+                models.Order.is_deleted == False
             )
             current_count = await self.db.scalar(count_query) or 0
             return f"{prefix}-{current_count + 1:04d}"
@@ -258,7 +264,10 @@ class OrderRepository:
             func.sum(models.Order.total_amount).label("total_sales"),
             func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.COMPLETED).label("completed_count"),
             func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.CANCELLED).label("cancelled_count"),
-        ).where(models.Order.order_date == business_date)
+        ).where(
+            models.Order.order_date == business_date,
+            models.Order.is_deleted == False
+        )
         
         result = await self.db.execute(query)
         row = result.mappings().first()
@@ -266,6 +275,7 @@ class OrderRepository:
         # Also get active orders (new or confirmed)
         active_query = select(func.count(models.Order.id)).where(
             models.Order.order_date == business_date,
+            models.Order.is_deleted == False,
             models.Order.order_status.in_([OrderStatus.NEW, OrderStatus.CONFIRMED])
         )
         active_count = await self.db.scalar(active_query) or 0

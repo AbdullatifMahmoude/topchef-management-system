@@ -8,23 +8,37 @@ class UserRepository:
         self.db = db
 
     async def get_by_id(self, user_id:int):
-        user= await self.db.execute(select(models.User).where(models.User.id == user_id))
+        user = await self.db.execute(select(models.User).where(
+            models.User.id == user_id,
+            models.User.is_deleted == False
+        ))
         return user.scalar_one_or_none()
 
     async def get_by_name(self, user_name:str):
-        username = await self.db.execute(select(models.User).where(models.User.username == user_name))
+        username = await self.db.execute(select(models.User).where(
+            models.User.username == user_name,
+            models.User.is_deleted == False
+        ))
         return username.scalar_one_or_none()
     
     async def get_by_phone(self, user_phone: str):
-        userphone= await self.db.execute(select(models.User).where(models.User.phone == user_phone))
+        userphone = await self.db.execute(select(models.User).where(
+            models.User.phone == user_phone,
+            models.User.is_deleted == False
+        ))
         return userphone.scalar_one_or_none()
 
     async def get_by_role(self, user_role: str):
-        rolelist = await self.db.execute(select(models.User).where(models.User.role == user_role))
+        rolelist = await self.db.execute(select(models.User).where(
+            models.User.role == user_role,
+            models.User.is_deleted == False
+        ))
         return rolelist.scalars().all()
 
     async def list_users(self):
-        userslist = await self.db.execute(select(models.User).order_by(models.User.id))
+        userslist = await self.db.execute(
+            select(models.User).where(models.User.is_deleted == False).order_by(models.User.id)
+        )
         return userslist.scalars().all()
     
     async def create_user(self, userdata: schemas.CreateUser):
@@ -41,7 +55,11 @@ class UserRepository:
         return user
 
     async def delete_user(self, user: models.User):
-        await self.db.delete(user)
+        import time
+        ts = int(time.time())
+        user.is_deleted = True
+        user.username = f"{user.username}_deleted_{ts}"
+        user.phone = f"{user.phone}_deleted_{ts}"
     
     async def toggle_user(self, user: models.User):
         user.toggle_active()

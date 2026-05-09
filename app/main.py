@@ -44,10 +44,37 @@ async def lifespan(app: FastAPI):
     logger.info(f"🚀 Initializing application [PID: {pid}] [Mode: {settings.RUNTIME_MODE}]")
     
     if settings.RUNTIME_MODE == "desktop":
-        logger.info("🖥️ Desktop Mode: Verifying local DB tables...")
+        logger.info("🖥️ Desktop Mode: Verifying local DB schema...")
         async with engine.begin() as conn:
+            # 1. Create any missing tables
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("🖥️ Desktop Mode: Local DB tables verified.")
+            
+            # 2. Self-heal missing columns (SQLite doesn't support 'IF NOT EXISTS' in ALTER TABLE easily)
+            tables_to_fix = [
+                "categories", "products", "variants", "users", "customers", 
+                "customer_addresses", "offers", "comments", "orders", 
+                "order_items", "order_status_history", "app_settings"
+            ]
+            
+            for table in tables_to_fix:
+                try:
+                    # Check existing columns
+                    res = await conn.execute(text(f"PRAGMA table_info({table})"))
+                    existing_cols = [r[1] for r in res.all()]
+                    
+                    if "is_deleted" not in existing_cols:
+                        logger.info(f"Adding 'is_deleted' to {table}...")
+                        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN is_deleted BOOLEAN DEFAULT 0 NOT NULL"))
+                    
+                    if "updated_at" not in existing_cols:
+                        # Only certain tables need updated_at for sync
+                        if table in ["categories", "products", "variants", "customers", "customer_addresses", "offers", "comments", "app_settings", "order_items", "order_status_history"]:
+                            logger.info(f"Adding 'updated_at' to {table}...")
+                            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+                except Exception as e:
+                    logger.warning(f"Could not self-heal table {table}: {e}")
+                    
+        logger.info("🖥️ Desktop Mode: Local DB schema verified.")
 
 
     # Cloud/General Self-Healing (Postgres Only)

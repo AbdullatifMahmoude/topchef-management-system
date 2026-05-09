@@ -23,6 +23,8 @@ class Offer(Base):
     usage_per_user = Column(Integer, nullable=True)
     current_usage = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
+    is_deleted = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     valid_from = Column(DateTime, nullable=False, default=datetime.utcnow)
     valid_to = Column(DateTime, nullable=False)
     # NOTE: Version column kept for potential future optimistic locking

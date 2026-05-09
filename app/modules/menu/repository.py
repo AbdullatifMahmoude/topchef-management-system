@@ -12,15 +12,21 @@ class CategoryRepository:
         self.db = db
 
     async def get_by_name(self, catname: str):
-        cat = await self.db.execute(select(models.Category).where(models.Category.cat_name == catname))
+        cat = await self.db.execute(select(models.Category).where(
+            models.Category.cat_name == catname,
+            models.Category.is_deleted == False
+        ))
         return cat.scalars().first()
 
     async def get_by_id(self, catid: int):
-        cat = await self.db.execute(select(models.Category).where(models.Category.id == catid))
+        cat = await self.db.execute(select(models.Category).where(
+            models.Category.id == catid,
+            models.Category.is_deleted == False
+        ))
         return cat.scalars().first()
 
     async def list_category(self, only_active: bool = False):
-        query = select(models.Category)
+        query = select(models.Category).where(models.Category.is_deleted == False)
         if only_active:
             query = query.where(models.Category.is_active == True)
         
@@ -41,7 +47,18 @@ class CategoryRepository:
         return category
 
     async def delete_category(self, category: models.Category):
-        await self.db.delete(category)
+        import time
+        ts = int(time.time())
+        category.is_deleted = True
+        category.cat_name = f"{category.cat_name}_deleted_{ts}"
+        
+        # Also soft delete all products in this category
+        for product in category.products:
+            product.is_deleted = True
+            product.product_name = f"{product.product_name}_deleted_{ts}"
+            # Also soft delete variants for each product
+            for variant in product.variants:
+                variant.is_deleted = True
 
     async def toggle_active(self, category: models.Category):
         category.toggle_active()
@@ -57,7 +74,7 @@ class ProductRepository:
         stmt = select(models.Product).options(
             selectinload(models.Product.category),
             selectinload(models.Product.variants)
-        ).where(models.Product.id == productid)
+        ).where(models.Product.id == productid, models.Product.is_deleted == False)
         product = await self.db.execute(stmt)
         return product.scalar_one_or_none()
 
@@ -67,7 +84,8 @@ class ProductRepository:
             selectinload(models.Product.variants)
         ).where(
             models.Product.product_name == productname,
-            models.Product.cat_id == cat_id
+            models.Product.cat_id == cat_id,
+            models.Product.is_deleted == False
         )
         product = await self.db.execute(stmt)
         return product.scalars().first()
@@ -79,7 +97,10 @@ class ProductRepository:
         stmt = select(models.Product).options(
             selectinload(models.Product.category),
             selectinload(models.Product.variants)
-        ).where(models.Product.id.in_(product_ids))
+        ).where(
+            models.Product.id.in_(product_ids),
+            models.Product.is_deleted == False
+        )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
@@ -87,7 +108,7 @@ class ProductRepository:
         stmt = select(models.Product).options(
             selectinload(models.Product.category),
             selectinload(models.Product.variants)
-        )
+        ).where(models.Product.is_deleted == False)
         
         if only_active:
             stmt = stmt.join(models.Category).where(
@@ -111,7 +132,13 @@ class ProductRepository:
         return product
 
     async def delete_product(self, product: models.Product):
-        await self.db.delete(product)
+        import time
+        ts = int(time.time())
+        product.is_deleted = True
+        product.product_name = f"{product.product_name}_deleted_{ts}"
+        # Also soft delete variants
+        for variant in product.variants:
+            variant.is_deleted = True
 
     async def toggle_active(self, product: models.Product):
         product.toggle_availability()
@@ -124,7 +151,12 @@ class VariantRepository:
         self.db = db
 
     async def get_by_product_id(self, productid: int):
-        result = await self.db.execute(select(models.Variant).where(models.Variant.product_id == productid).order_by(models.Variant.id))
+        result = await self.db.execute(
+            select(models.Variant).where(
+                models.Variant.product_id == productid,
+                models.Variant.is_deleted == False
+            ).order_by(models.Variant.id)
+        )
         return result.scalars().all()
 
     async def create_variant(self, variant: list[models.Variant]):
@@ -132,32 +164,8 @@ class VariantRepository:
         return variant
 
     async def delete_by_product_id(self, product_id: int):
-        stmt = delete(models.Variant).where(
+        from sqlalchemy import update
+        stmt = update(models.Variant).where(
             models.Variant.product_id == product_id
-        )
+        ).values(is_deleted=True)
         await self.db.execute(stmt)
-
-
-# # ============== addons ===============#
-# class AddonsRepository:
-#     def __init__(self, db: AsyncSession):
-#         self.db = db
-
-#     async def get_by_addon_id(self, addonsid: int):
-#         addon = await self.db.execute(select(models.Addon).where(models.Addon.id == addonsid))
-#         return addon.scalars().first()
-
-#     async def create_addon(self, addondata: schemas.CreateAddon):
-#         addon = models.Addon(**addondata.model_dump())
-#         self.db.add(addon)
-#         return addon
-
-#     async def update_addon(self, addon: models.Addon, addondata: schemas.UpdateAddon):
-#         update_addon = addondata.model_dump(exclude_unset=True)
-#         for key, value in update_addon.items():
-#             setattr(addon, key, value)
-
-#         return addon
-
-#     async def delete_addon(self, addon: models.Addon):
-#         await self.db.delete(addon)
