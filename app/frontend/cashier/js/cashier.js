@@ -1,5 +1,7 @@
 const API_BASE = window.location.origin;
-const IS_DESKTOP_RUNTIME = ["127.0.0.1", "localhost"].includes(window.location.hostname);
+const IS_DESKTOP_RUNTIME = ["127.0.0.1", "localhost"].includes(
+  window.location.hostname,
+);
 
 // ===================================================
 //  Global API Fetch Wrapper
@@ -7,20 +9,22 @@ const IS_DESKTOP_RUNTIME = ["127.0.0.1", "localhost"].includes(window.location.h
 async function apiFetch(path, options = {}) {
   const token = localStorage.getItem("token");
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
-  
+
   const headers = {
     "Content-Type": "application/json",
-    ...(token ? { "Authorization": "Bearer " + token } : {}),
-    ...(options.headers || {})
+    ...(token ? { Authorization: "Bearer " + token } : {}),
+    ...(options.headers || {}),
   };
 
   try {
     const response = await fetch(url, { ...options, headers });
-    
+
     // إذا انتهت الجلسة أو الـ Token غير صالح (401)
     // ومسموح لنا بالتحويل التلقائي (الوضع الافتراضي)
     if (response.status === 401 && !options.suppress401) {
-      console.warn("Session expired or unauthorized (401). Redirecting to login...");
+      console.warn(
+        "Session expired or unauthorized (401). Redirecting to login...",
+      );
       localStorage.clear();
       window.location.replace("../index.html");
       return new Promise(() => {}); // إيقاف التنفيذ الحالي
@@ -37,14 +41,14 @@ async function apiFetch(path, options = {}) {
 //  State
 // ===================================================
 let categories = [];
-let products   = [];
+let products = [];
 let activeCatId = null;
 let cart = [];
 
 // Online Orders State
 let onlineOrdersList = [];
-let onlineOrdersFilter = 'all'; // 'all', 'new', 'ready', 'cancelled'
-let onlineOrdersSearchTerm = '';
+let onlineOrdersFilter = "all"; // 'all', 'new', 'ready', 'cancelled'
+let onlineOrdersSearchTerm = "";
 let onlineOrdersCurrentPage = 1;
 let onlineOrdersTotal = 0;
 let totalNewOrdersGlobalCount = 0; // New orders only
@@ -61,16 +65,16 @@ let orderType = null;
 // بيانات الديليفري المختار
 let selectedDelivery = null; // { id, name }
 let selectedDeliveryFee = null; // number
-let selectedDineInFee = null;   // number (رسوم الصالة)
+let selectedDineInFee = null; // number (رسوم الصالة)
 
 // بيانات عميل الديليفري
 let deliveryCustomerInfo = {
-  phone: '',
-  name: '',
+  phone: "",
+  name: "",
   customerId: null,
   addresses: [],
   selectedAddressId: null,
-  newAddress: ''
+  newAddress: "",
 };
 let _phoneSearchTimeout = null;
 
@@ -80,7 +84,7 @@ let _phoneSearchTimeout = null;
 async function init() {
   // Start WebSocket connection early
   setupWebSocket();
-  
+
   showGlobalLoader(true);
 
   try {
@@ -92,9 +96,11 @@ async function init() {
     if (!catsRes.ok || !prodsRes.ok) throw new Error("API error loading menu");
 
     categories = await catsRes.json();
-    products   = await prodsRes.json();
+    products = await prodsRes.json();
 
-    categories = Array.isArray(categories) ? categories.filter(c => c.is_active) : [];
+    categories = Array.isArray(categories)
+      ? categories.filter((c) => c.is_active)
+      : [];
 
     if (categories.length > 0) {
       activeCatId = categories[0].id;
@@ -103,7 +109,7 @@ async function init() {
     renderTabs();
     renderItems();
     initWebOrdersToggle();
-    
+
     // Initial badge refresh
     refreshNewOrdersBadge();
   } catch (err) {
@@ -122,7 +128,7 @@ function renderTabs() {
   const container = document.getElementById("category_tabs");
   container.innerHTML = "";
 
-  categories.forEach(cat => {
+  categories.forEach((cat) => {
     const btn = document.createElement("button");
     btn.className = "tab_btn" + (cat.id === activeCatId ? " active" : "");
     btn.textContent = cat.cat_name;
@@ -143,7 +149,7 @@ function renderItems() {
   grid.innerHTML = "";
 
   const catProducts = products.filter(
-    p => p.cat_id === activeCatId && p.is_available
+    (p) => p.cat_id === activeCatId && p.is_available,
   );
 
   if (catProducts.length === 0) {
@@ -151,20 +157,26 @@ function renderItems() {
     return;
   }
 
-  catProducts.forEach(product => {
+  catProducts.forEach((product) => {
     const variants = product.variants || [];
     const prices = variants
-      .map(v => parseFloat(v.price))
-      .filter(p => !isNaN(p) && p > 0);
+      .map((v) => parseFloat(v.price))
+      .filter((p) => !isNaN(p) && p > 0);
 
     const price = prices.length > 0 ? Math.min(...prices) : 0;
 
-    const priceLabel = variants.length > 1
-      ? ` ${price} ج.م`
-      : price > 0 ? `${price} ج.م` : "السعر غير محدد";
+    const priceLabel =
+      variants.length > 1
+        ? ` ${price} ج.م`
+        : price > 0
+          ? `${price} ج.م`
+          : "السعر غير محدد";
 
-    const description = product.description || product.desc || product.product_desc || "";
-    const descriptionHtml = description ? `<p style="font-size: 11px; color: var(--color-subtext);  line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;margin:0">${description}</p>` : "";
+    const description =
+      product.description || product.desc || product.product_desc || "";
+    const descriptionHtml = description
+      ? `<p style="font-size: 11px; color: var(--color-subtext);  line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis;margin:0">${description}</p>`
+      : "";
 
     const card = document.createElement("div");
     card.className = "item_card";
@@ -184,7 +196,11 @@ function renderItems() {
 function handleProductClick(product, defaultPrice) {
   const variants = product.variants || [];
   if (variants.length <= 1) {
-    addToCart({ id: product.id, name: product.product_name, price: defaultPrice });
+    addToCart({
+      id: product.id,
+      name: product.product_name,
+      price: defaultPrice,
+    });
     return;
   }
   showVariantPicker(product);
@@ -213,7 +229,7 @@ function showVariantPicker(product) {
     <p style="color:var(--color-subtext);font-size:13px;text-align:center;margin:0">اختر الحجم</p>
   `;
 
-  product.variants.forEach(v => {
+  product.variants.forEach((v) => {
     const btn = document.createElement("button");
     btn.style.cssText = `
       background:var(--color-primary-light);border:1px solid var(--color-primary-border);
@@ -225,7 +241,7 @@ function showVariantPicker(product) {
     btn.onclick = () => {
       addToCart({
         id: `${product.id}_${v.id}`,
-        name: `${product.product_name} - ${v.name}`,
+        name: `${v.name} - ${product.product_name}`,
         price: parseFloat(v.price),
       });
       overlay.remove();
@@ -244,7 +260,9 @@ function showVariantPicker(product) {
   box.appendChild(cancelBtn);
 
   overlay.appendChild(box);
-  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = (e) => {
+    if (e.target === overlay) overlay.remove();
+  };
   document.body.appendChild(overlay);
 }
 
@@ -252,7 +270,7 @@ function showVariantPicker(product) {
 //  Cart Logic
 // ===================================================
 function addToCart(item) {
-  const existing = cart.find(c => String(c.item.id) === String(item.id));
+  const existing = cart.find((c) => String(c.item.id) === String(item.id));
   if (existing) {
     existing.qty++;
   } else {
@@ -262,30 +280,32 @@ function addToCart(item) {
 }
 
 function removeFromCart(itemId) {
-  cart = cart.filter(c => String(c.item.id) !== String(itemId));
+  cart = cart.filter((c) => String(c.item.id) !== String(itemId));
   renderCart();
 }
 
 function changeQty(itemId, delta) {
-  const entry = cart.find(c => String(c.item.id) === String(itemId));
+  const entry = cart.find((c) => String(c.item.id) === String(itemId));
   if (!entry) return;
   entry.qty += delta;
   if (entry.qty <= 0) {
-    cart = cart.filter(c => String(c.item.id) !== String(itemId));
+    cart = cart.filter((c) => String(c.item.id) !== String(itemId));
   }
   renderCart();
 }
 
 function renderCart() {
-  const list    = document.getElementById("cart_list");
-  const empty   = document.getElementById("cart_empty");
+  const list = document.getElementById("cart_list");
+  const empty = document.getElementById("cart_empty");
   const totalEl = document.getElementById("total_price");
 
   const itemsTotal = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
   let fee = 0;
-  if (orderType === "delivery" && selectedDeliveryFee !== null) fee = selectedDeliveryFee;
-  else if (orderType === "dine_in" && selectedDineInFee !== null) fee = selectedDineInFee;
-  
+  if (orderType === "delivery" && selectedDeliveryFee !== null)
+    fee = selectedDeliveryFee;
+  else if (orderType === "dine_in" && selectedDineInFee !== null)
+    fee = selectedDineInFee;
+
   const grandTotal = itemsTotal + fee;
   totalEl.textContent = grandTotal.toFixed(2) + " ج.م";
 
@@ -302,13 +322,13 @@ function renderCart() {
   if (empty) empty.style.display = "none";
 
   const existingCards = {};
-  list.querySelectorAll(".total_card[data-id]").forEach(el => {
+  list.querySelectorAll(".total_card[data-id]").forEach((el) => {
     existingCards[el.dataset.id] = el;
   });
 
-  const newIds = new Set(cart.map(c => String(c.item.id)));
+  const newIds = new Set(cart.map((c) => String(c.item.id)));
 
-  Object.keys(existingCards).forEach(id => {
+  Object.keys(existingCards).forEach((id) => {
     if (!newIds.has(id)) existingCards[id].remove();
   });
 
@@ -317,7 +337,8 @@ function renderCart() {
 
     if (existingCards[idStr]) {
       existingCards[idStr].querySelector(".qty_num").textContent = qty;
-      existingCards[idStr].querySelector(".card_price").textContent = (item.price * qty).toFixed(2) + " ج.م";
+      existingCards[idStr].querySelector(".card_price").textContent =
+        (item.price * qty).toFixed(2) + " ج.م";
     } else {
       const card = document.createElement("div");
       card.className = "total_card";
@@ -361,9 +382,11 @@ function confirmOrder() {
 
   const itemsTotal = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
   let fee = 0;
-  if (orderType === "delivery" && selectedDeliveryFee !== null) fee = selectedDeliveryFee;
-  else if (orderType === "dine_in" && selectedDineInFee !== null) fee = selectedDineInFee;
-  
+  if (orderType === "delivery" && selectedDeliveryFee !== null)
+    fee = selectedDeliveryFee;
+  else if (orderType === "dine_in" && selectedDineInFee !== null)
+    fee = selectedDineInFee;
+
   const grandTotal = itemsTotal + fee;
 
   const orderData = {
@@ -374,12 +397,16 @@ function confirmOrder() {
     itemsTotal,
     grandTotal,
     customerPhone: deliveryCustomerInfo.phone || null,
-    customerName:  deliveryCustomerInfo.name  || null,
-    customerAddress: (
-      deliveryCustomerInfo.addresses.length > 0 && deliveryCustomerInfo.selectedAddressId
-        ? getAddressText(deliveryCustomerInfo.addresses.find(a => a.id === deliveryCustomerInfo.selectedAddressId) || {})
-        : deliveryCustomerInfo.newAddress || null
-    )
+    customerName: deliveryCustomerInfo.name || null,
+    customerAddress:
+      deliveryCustomerInfo.addresses.length > 0 &&
+      deliveryCustomerInfo.selectedAddressId
+        ? getAddressText(
+            deliveryCustomerInfo.addresses.find(
+              (a) => a.id === deliveryCustomerInfo.selectedAddressId,
+            ) || {},
+          )
+        : deliveryCustomerInfo.newAddress || null,
   };
 
   showConfirmModal(orderData);
@@ -436,17 +463,17 @@ function showConfirmModal(orderData) {
     btn.style.cursor = "not-allowed";
 
     try {
-      const items = cart.map(c => {
+      const items = cart.map((c) => {
         let prodId = c.item.id;
-        if (typeof prodId === 'string' && prodId.includes('_')) {
-          prodId = parseInt(prodId.split('_')[0], 10);
+        if (typeof prodId === "string" && prodId.includes("_")) {
+          prodId = parseInt(prodId.split("_")[0], 10);
         } else {
           prodId = parseInt(prodId, 10);
         }
         return {
           product_id: prodId,
           quantity: c.qty,
-          unit_price: c.item.price
+          unit_price: c.item.price,
         };
       });
 
@@ -455,13 +482,13 @@ function showConfirmModal(orderData) {
       else if (orderType === "delivery") mappedOrderType = "delivery";
 
       // معالجة بيانات العميل لجميع أنواع الطلبات
-      const dcfNameInput = document.getElementById('dcf_name');
-      const dcfAddrInput = document.getElementById('dcf_address_input');
+      const dcfNameInput = document.getElementById("dcf_name");
+      const dcfAddrInput = document.getElementById("dcf_address_input");
       if (dcfNameInput) deliveryCustomerInfo.name = dcfNameInput.value;
       if (dcfAddrInput) deliveryCustomerInfo.newAddress = dcfAddrInput.value;
 
       let resolvedCustomerId = deliveryCustomerInfo.customerId;
-      
+
       if (deliveryCustomerInfo.phone) {
         // 1. لو العميل جديد تماماً، نقوم بإنشائه أولاً
         if (!resolvedCustomerId) {
@@ -470,8 +497,8 @@ function showConfirmModal(orderData) {
               method: "POST",
               body: JSON.stringify({
                 name: deliveryCustomerInfo.name || "عميل",
-                phone_number: deliveryCustomerInfo.phone
-              })
+                phone_number: deliveryCustomerInfo.phone,
+              }),
             });
             if (custRes.ok) {
               const newCust = await custRes.json();
@@ -488,10 +515,15 @@ function showConfirmModal(orderData) {
         // 2. لو في عنوان جديد مكتوب يدوياً، نحفظه في قاعدة البيانات
         if (resolvedCustomerId && deliveryCustomerInfo.newAddress) {
           try {
-            const addrRes = await apiFetch(`/customers/${resolvedCustomerId}/addresses`, {
-              method: "POST",
-              body: JSON.stringify({ address: deliveryCustomerInfo.newAddress })
-            });
+            const addrRes = await apiFetch(
+              `/customers/${resolvedCustomerId}/addresses`,
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  address: deliveryCustomerInfo.newAddress,
+                }),
+              },
+            );
             if (addrRes.ok) {
               const addrData = await addrRes.json();
               // نحدث الـ ID بتاع العنوان المختار عشان يتبعت مع الطلب
@@ -505,29 +537,37 @@ function showConfirmModal(orderData) {
         }
       }
 
-      const customerNotes = (orderType === "delivery" && !deliveryCustomerInfo.selectedAddressId && deliveryCustomerInfo.newAddress)
-        ? deliveryCustomerInfo.newAddress : null;
+      const customerNotes =
+        orderType === "delivery" &&
+        !deliveryCustomerInfo.selectedAddressId &&
+        deliveryCustomerInfo.newAddress
+          ? deliveryCustomerInfo.newAddress
+          : null;
 
       const payload = {
         customer_id: resolvedCustomerId || null,
         customer_phone: deliveryCustomerInfo.phone || null,
-        customer_name:  deliveryCustomerInfo.name  || null,
+        customer_name: deliveryCustomerInfo.name || null,
         order_type: mappedOrderType,
         source: "cashier",
         customer_notes: customerNotes,
         internal_notes: null,
         items: items,
-        idempotency_key: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        idempotency_key:
+          Date.now().toString() + Math.random().toString(36).substr(2, 9),
         address_id: deliveryCustomerInfo.selectedAddressId || null,
         customer_address: deliveryCustomerInfo.newAddress || null, // ✅ Fix: Send address string so backend can create a record
         delivery_person_id: selectedDelivery ? selectedDelivery.id : null,
-        delivery_fee: (orderType === "delivery" ? selectedDeliveryFee : selectedDineInFee) || 0,
-        offer_code: null
+        delivery_fee:
+          (orderType === "delivery"
+            ? selectedDeliveryFee
+            : selectedDineInFee) || 0,
+        offer_code: null,
       };
 
       const res = await apiFetch("/orders/", {
         method: "POST",
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -535,34 +575,45 @@ function showConfirmModal(orderData) {
         console.error("API Error:", errData);
         let errMsg = "حدث خطأ أثناء إرسال الطلب";
         if (Array.isArray(errData.detail)) {
-          errMsg = errData.detail.map(d => `${d.loc ? d.loc.join('.') : 'Error'}: ${d.msg}`).join(', ');
+          errMsg = errData.detail
+            .map((d) => `${d.loc ? d.loc.join(".") : "Error"}: ${d.msg}`)
+            .join(", ");
         } else if (errData.detail) {
-          errMsg = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+          errMsg =
+            typeof errData.detail === "string"
+              ? errData.detail
+              : JSON.stringify(errData.detail);
         }
         throw new Error(errMsg);
       }
 
       const createdOrder = await res.json();
-      
+
       overlay.remove();
-      
+
       // الطباعة باستخدام بيانات السيرفر لضمان مطابقة رقم الطلب والوقت
       if (typeof printReceipt === "function") {
         // نقوم بتجهيز قائمة الأصناف بالأسماء بناءً على الـ IDS قبل الطباعة
-        const cartMapped = (createdOrder.items || []).map(item => {
-          let prod = products.find(p => p.id === item.product_id);
+        const cartMapped = (createdOrder.items || []).map((item) => {
+          let prod = products.find((p) => p.id === item.product_id);
           let variantName = "";
           if (prod && prod.variants) {
-             let v = prod.variants.find(v => parseFloat(v.price) === parseFloat(item.unit_price));
-             if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
+            let v = prod.variants.find(
+              (v) => parseFloat(v.price) === parseFloat(item.unit_price),
+            );
+            if (v && v.name !== prod.product_name)
+              variantName = " (" + v.name + ")";
           }
-          let name = prod ? prod.product_name + variantName : `صنف #${item.product_id}`;
+          let name = prod
+            ? variantName + prod.product_name
+            : `صنف #${item.product_id}`;
+
           return {
             qty: item.quantity,
             item: {
               name: name,
-              price: parseFloat(item.unit_price)
-            }
+              price: parseFloat(item.unit_price),
+            },
           };
         });
 
@@ -571,14 +622,22 @@ function showConfirmModal(orderData) {
         const printData = {
           ...createdOrder,
           cart: cartMapped,
-          customerPhone: createdOrder.customer_phone || deliveryCustomerInfo.phone || null,
-          customerName: createdOrder.customer_name || deliveryCustomerInfo.name || null,
-          customerAddress: createdOrder.customer_address || orderData.customerAddress || deliveryCustomerInfo.newAddress || null
+          customerPhone:
+            createdOrder.customer_phone || deliveryCustomerInfo.phone || null,
+          customerName:
+            createdOrder.customer_name || deliveryCustomerInfo.name || null,
+          customerAddress:
+            createdOrder.customer_address ||
+            orderData.customerAddress ||
+            deliveryCustomerInfo.newAddress ||
+            null,
         };
 
         printReceipt(printData);
       } else {
-        console.error("Function printReceipt not found. ensure print.js is loaded.");
+        console.error(
+          "Function printReceipt not found. ensure print.js is loaded.",
+        );
       }
 
       // تصفية السلة وعودة الحالة للصفر
@@ -589,24 +648,31 @@ function showConfirmModal(orderData) {
       selectedDineInFee = null;
       resetDeliveryCustomerInfo();
       const dcFormOk = document.getElementById("delivery_customer_form");
-      if (dcFormOk) { dcFormOk.style.display = "none"; dcFormOk.innerHTML = ""; }
+      if (dcFormOk) {
+        dcFormOk.style.display = "none";
+        dcFormOk.innerHTML = "";
+      }
       renderCart();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
 
       showToast("تم تأكيد الطلب بنجاح", "success");
-      
+
       // ✅ NEW: Update local memory lists immediately so the order appears without refresh
       if (isOnlineOrder(createdOrder)) {
-          if (typeof onlineOrdersList !== 'undefined') {
-              const exists = onlineOrdersList.find(o => String(o.id) === String(createdOrder.id));
-              if (!exists) onlineOrdersList.unshift(createdOrder);
-          }
+        if (typeof onlineOrdersList !== "undefined") {
+          const exists = onlineOrdersList.find(
+            (o) => String(o.id) === String(createdOrder.id),
+          );
+          if (!exists) onlineOrdersList.unshift(createdOrder);
+        }
       } else {
-          if (typeof allOrdersList !== 'undefined') {
-              const exists = allOrdersList.find(o => String(o.id) === String(createdOrder.id));
-              if (!exists) allOrdersList.unshift(createdOrder);
-          }
+        if (typeof allOrdersList !== "undefined") {
+          const exists = allOrdersList.find(
+            (o) => String(o.id) === String(createdOrder.id),
+          );
+          if (!exists) allOrdersList.unshift(createdOrder);
+        }
       }
 
       // Always re-render order tabs so the new order shows up
@@ -619,7 +685,6 @@ function showConfirmModal(orderData) {
         fetchAllOrdersServer(1, true);
         fetchOnlineOrdersServer(1, true);
       }, 2000);
-
     } catch (err) {
       console.error(err);
       showToast(err.message, "error");
@@ -634,7 +699,9 @@ function showConfirmModal(orderData) {
     overlay.remove();
   };
 
-  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = (e) => {
+    if (e.target === overlay) overlay.remove();
+  };
 }
 
 function cancelOrder() {
@@ -690,7 +757,10 @@ function showCancelModal() {
     selectedDineInFee = null;
     resetDeliveryCustomerInfo();
     const dcFormCancel = document.getElementById("delivery_customer_form");
-    if (dcFormCancel) { dcFormCancel.style.display = "none"; dcFormCancel.innerHTML = ""; }
+    if (dcFormCancel) {
+      dcFormCancel.style.display = "none";
+      dcFormCancel.innerHTML = "";
+    }
     renderCart();
     renderOrderTypeBadge();
     renderOrderTypeButtons();
@@ -701,11 +771,15 @@ function showCancelModal() {
     overlay.remove();
   };
 
-  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = (e) => {
+    if (e.target === overlay) overlay.remove();
+  };
 }
 
 function showToast(message, type) {
-  const container = document.querySelector(".total_cards") || document.getElementById("cart_list");
+  const container =
+    document.querySelector(".total_cards") ||
+    document.getElementById("cart_list");
   if (!container) return;
 
   const existing = document.querySelector(".toast_msg");
@@ -732,22 +806,23 @@ function showToast(message, type) {
     animation: fadeInOutToast 2.5s ease-in-out forwards;
   `;
 
-  if (type === 'success') {
-    toast.style.backgroundColor = '#1d5c2b';
-    toast.style.border = '2px solid #238038';
-    toast.style.boxShadow = '0 0 40px rgba(35, 128, 56, 0.6)';
-    toast.style.textShadow = '0 0 10px rgba(0,0,0,0.5)';
+  if (type === "success") {
+    toast.style.backgroundColor = "#1d5c2b";
+    toast.style.border = "2px solid #238038";
+    toast.style.boxShadow = "0 0 40px rgba(35, 128, 56, 0.6)";
+    toast.style.textShadow = "0 0 10px rgba(0,0,0,0.5)";
   } else {
-    toast.style.backgroundColor = '#b00b16';
-    toast.style.border = '2px solid #e40411';
-    toast.style.boxShadow = '0 0 40px rgba(228, 4, 17, 0.6)';
-    toast.style.textShadow = '0 0 10px rgba(0,0,0,0.5)';
+    toast.style.backgroundColor = "#b00b16";
+    toast.style.border = "2px solid #e40411";
+    toast.style.boxShadow = "0 0 40px rgba(228, 4, 17, 0.6)";
+    toast.style.textShadow = "0 0 10px rgba(0,0,0,0.5)";
   }
 
   if (!document.getElementById("toast_keyframes")) {
     const style = document.createElement("style");
     style.id = "toast_keyframes";
-    style.innerHTML = "@keyframes fadeInOutToast { 0% { opacity: 0; transform: translate(-50%, -30%); } 15% { opacity: 1; transform: translate(-50%, -50%); } 85% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -70%); } }";
+    style.innerHTML =
+      "@keyframes fadeInOutToast { 0% { opacity: 0; transform: translate(-50%, -30%); } 15% { opacity: 1; transform: translate(-50%, -50%); } 85% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -70%); } }";
     document.head.appendChild(style);
   }
 
@@ -765,7 +840,7 @@ function showToast(message, type) {
 const ORDER_TYPES = [
   { key: "delivery", label: "دليفري" },
   { key: "takeaway", label: "تيك اواي" },
-  { key: "dine_in",  label: "صالة" },
+  { key: "dine_in", label: "صالة" },
 ];
 
 function renderOrderTypeButtons() {
@@ -773,7 +848,7 @@ function renderOrderTypeButtons() {
   if (!container) return;
   container.innerHTML = "";
 
-  ORDER_TYPES.forEach(t => {
+  ORDER_TYPES.forEach((t) => {
     const btn = document.createElement("button");
     const isActive = orderType === t.key;
     btn.className = "order_type_btn" + (isActive ? " active" : "");
@@ -795,7 +870,11 @@ function renderOrderTypeBadge() {
 
   badge.style.display = "flex";
 
-  if (orderType === "delivery" && selectedDelivery && selectedDeliveryFee !== null) {
+  if (
+    orderType === "delivery" &&
+    selectedDelivery &&
+    selectedDeliveryFee !== null
+  ) {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">${selectedDelivery.name}</span>
@@ -812,7 +891,7 @@ function renderOrderTypeBadge() {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">صالة</span>
-      ${selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${selectedDineInFee} ج.م</span>` : ''}
+      ${selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${selectedDineInFee} ج.م</span>` : ""}
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   } else if (orderType === "delivery") {
@@ -831,7 +910,10 @@ function clearOrderType() {
   orderType = null;
   resetDeliveryCustomerInfo();
   const dcFormClear = document.getElementById("delivery_customer_form");
-  if (dcFormClear) { dcFormClear.style.display = "none"; dcFormClear.innerHTML = ""; }
+  if (dcFormClear) {
+    dcFormClear.style.display = "none";
+    dcFormClear.innerHTML = "";
+  }
   renderOrderTypeBadge();
   renderOrderTypeButtons();
   renderCart();
@@ -850,7 +932,7 @@ function selectOrderType(type) {
     renderOrderTypeBadge();
     renderOrderTypeButtons();
     renderCart(); // سيستدعي updatePricingPreview داخلياً
-    renderDeliveryCustomerForm(); 
+    renderDeliveryCustomerForm();
   }
 }
 
@@ -864,20 +946,20 @@ async function updatePricingPreview() {
 
   // Debounce لمنع كثرة الطلبات أثناء تعديل الكميات
   if (_pricingTimeout) clearTimeout(_pricingTimeout);
-  
+
   _pricingTimeout = setTimeout(async () => {
     try {
-      const items = cart.map(c => {
+      const items = cart.map((c) => {
         let prodId = c.item.id;
-        if (typeof prodId === 'string' && prodId.includes('_')) {
-          prodId = parseInt(prodId.split('_')[0], 10);
+        if (typeof prodId === "string" && prodId.includes("_")) {
+          prodId = parseInt(prodId.split("_")[0], 10);
         } else {
           prodId = parseInt(prodId, 10);
         }
         return {
           product_id: prodId,
           quantity: c.qty,
-          unit_price: c.item.price
+          unit_price: c.item.price,
         };
       });
 
@@ -885,7 +967,9 @@ async function updatePricingPreview() {
       if (orderType === "takeaway") mappedOrderType = "takeaway";
       else if (orderType === "delivery") mappedOrderType = "delivery";
 
-      const currentFee = (orderType === "delivery" ? selectedDeliveryFee : selectedDineInFee) || 0;
+      const currentFee =
+        (orderType === "delivery" ? selectedDeliveryFee : selectedDineInFee) ||
+        0;
 
       const payload = {
         items: items,
@@ -893,28 +977,30 @@ async function updatePricingPreview() {
         source: "cashier",
         delivery_fee: currentFee,
         offer_code: null,
-        customer_phone: (orderType === "delivery" ? deliveryCustomerInfo.phone : null),
-        cashier_id: parseInt(localStorage.getItem("user_id"), 10) || null
+        customer_phone:
+          orderType === "delivery" ? deliveryCustomerInfo.phone : null,
+        cashier_id: parseInt(localStorage.getItem("user_id"), 10) || null,
       };
 
       const res = await apiFetch("/pricing/preview", {
         method: "POST",
         body: JSON.stringify(payload),
-        hideLoader: true // لا نريد إيقاف الواجهة في المعاينة
+        hideLoader: true, // لا نريد إيقاف الواجهة في المعاينة
       });
 
       if (res.ok) {
         const data = await res.json();
         const totalEl = document.getElementById("total_price");
         if (totalEl && data.total_amount) {
-          totalEl.textContent = parseFloat(data.total_amount).toFixed(2) + " ج.م";
+          totalEl.textContent =
+            parseFloat(data.total_amount).toFixed(2) + " ج.م";
           // يمكننا مستقبلاً عرض الخصم والـ subtotal هنا
         }
       }
     } catch (err) {
       console.warn("Pricing preview failed:", err);
     }
-  }, 400); 
+  }, 400);
 }
 
 // ===================================================
@@ -924,7 +1010,10 @@ function showDineInFeeSelector() {
   const container = document.getElementById("delivery_modal_container");
   if (!container) return;
 
-  const fees = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+  const fees = [
+    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    100,
+  ];
 
   container.style.display = "flex";
   container.innerHTML = `
@@ -936,9 +1025,13 @@ function showDineInFeeSelector() {
       <div class="delivery_modal_body">
         <p style="color:var(--color-subtext);font-size:13px;text-align:center;margin-bottom:16px">اختر قيمة رسوم الخدمة</p>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-          ${fees.map(fee => `
+          ${fees
+            .map(
+              (fee) => `
             <button class="delivery_fee_btn" onclick="selectDineInFee(${fee})">${fee} ج.م</button>
-          `).join('')}
+          `,
+            )
+            .join("")}
           <button class="delivery_fee_btn" onclick="selectDineInFee(0)" style="background:rgba(255,255,255,0.05);color:var(--color-subtext)">بدون</button>
         </div>
       </div>
@@ -983,13 +1076,16 @@ async function showDeliveryModal() {
     const res = await apiFetch("/user/users/delivery", { suppress401: true });
     if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
     const users = await res.json();
-    const riders = Array.isArray(users) ? users.filter(u => u.role === "delivery" && u.is_active) : [];
+    const riders = Array.isArray(users)
+      ? users.filter((u) => u.role === "delivery" && u.is_active)
+      : [];
     _deliveryRidersCache = riders;
     renderDeliveryNames(riders);
   } catch (err) {
     if (err.message.includes("401")) {
       const list = document.getElementById("delivery_names_list");
-      if (list) list.innerHTML = `<p style="color:#e40411;text-align:center;font-size:12px;padding:10px">عفواً، لا يملك حسابك صلاحية الوصول لقائمة المناديب</p>`;
+      if (list)
+        list.innerHTML = `<p style="color:#e40411;text-align:center;font-size:12px;padding:10px">عفواً، لا يملك حسابك صلاحية الوصول لقائمة المناديب</p>`;
     } else {
       console.error("خطأ في جلب الدليفري:", err);
       renderDeliveryNames([]);
@@ -1007,11 +1103,12 @@ function renderDeliveryNames(riders) {
   }
 
   list.innerHTML = "";
-  riders.forEach(r => {
+  riders.forEach((r) => {
     const btn = document.createElement("button");
     btn.className = "delivery_name_btn";
     btn.textContent = r.full_name || r.username;
-    btn.onclick = () => showDeliveryFeeSelector({ id: r.id, name: r.full_name || r.username });
+    btn.onclick = () =>
+      showDeliveryFeeSelector({ id: r.id, name: r.full_name || r.username });
     list.appendChild(btn);
   });
 }
@@ -1020,7 +1117,10 @@ function showDeliveryFeeSelector(rider) {
   const list = document.getElementById("delivery_names_list");
   if (!list) return;
 
-  const fees = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+  const fees = [
+    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    100,
+  ];
 
   list.innerHTML = `
     <button onclick="backToDeliveryNames()" style="
@@ -1033,9 +1133,10 @@ function showDeliveryFeeSelector(rider) {
   `;
 
   const grid = document.createElement("div");
-  grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:8px;";
+  grid.style.cssText =
+    "display:grid;grid-template-columns:repeat(4,1fr);gap:8px;";
 
-  fees.forEach(fee => {
+  fees.forEach((fee) => {
     const btn = document.createElement("button");
     btn.className = "delivery_fee_btn";
     btn.textContent = `${fee} ج.م`;
@@ -1072,7 +1173,9 @@ async function backToDeliveryNames() {
     const res = await apiFetch("/user/users", { suppress401: true });
     if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
     const users = await res.json();
-    const riders = Array.isArray(users) ? users.filter(u => u.role === "delivery" && u.is_active) : [];
+    const riders = Array.isArray(users)
+      ? users.filter((u) => u.role === "delivery" && u.is_active)
+      : [];
     _deliveryRidersCache = riders;
     renderDeliveryNames(riders);
   } catch (err) {
@@ -1097,18 +1200,24 @@ function closeDeliveryModal() {
 // ===================================================
 function resetDeliveryCustomerInfo() {
   deliveryCustomerInfo = {
-    phone: '',
-    name: '',
+    phone: "",
+    name: "",
     customerId: null,
     addresses: [],
     selectedAddressId: null,
-    newAddress: '',
-    manualAddressMode: false // لحفظ هل بنكتب عنوان جديد لعميل موجود؟
+    newAddress: "",
+    manualAddressMode: false, // لحفظ هل بنكتب عنوان جديد لعميل موجود؟
   };
 }
 
 function getAddressText(addr) {
-  return addr.address || addr.address_line || addr.full_address || addr.street || "عنوان محفوظ";
+  return (
+    addr.address ||
+    addr.address_line ||
+    addr.full_address ||
+    addr.street ||
+    "عنوان محفوظ"
+  );
 }
 
 function renderAddressFieldHTML() {
@@ -1117,7 +1226,7 @@ function renderAddressFieldHTML() {
   // لو العميل موجود (عنده ID)
   if (deliveryCustomerInfo.customerId) {
     const addresses = deliveryCustomerInfo.addresses || [];
-    
+
     // لو وضع الكتابة اليدوية مفعل (اختير "إضافة جديد")
     if (deliveryCustomerInfo.manualAddressMode) {
       return `
@@ -1133,11 +1242,14 @@ function renderAddressFieldHTML() {
     }
 
     // عرض القائمة المنسدلة
-    const options = addresses.map(a => {
-      const text = getAddressText(a);
-      const sel = deliveryCustomerInfo.selectedAddressId === a.id ? 'selected' : '';
-      return `<option value="${a.id}" ${sel}>${text}</option>`;
-    }).join('');
+    const options = addresses
+      .map((a) => {
+        const text = getAddressText(a);
+        const sel =
+          deliveryCustomerInfo.selectedAddressId === a.id ? "selected" : "";
+        return `<option value="${a.id}" ${sel}>${text}</option>`;
+      })
+      .join("");
 
     return `
       ${label}
@@ -1145,7 +1257,7 @@ function renderAddressFieldHTML() {
         onchange="handleAddressSelect(this.value)">
         ${addresses.length === 0 ? '<option value="">-- لا توجد عناوين محفوظة --</option>' : '<option value="">-- اختر العنوان --</option>'}
         ${options}
-        <option value="NEW_ADDRESS" ${deliveryCustomerInfo.manualAddressMode ? 'selected' : ''}>➕ إضافة عنوان جديد...</option>
+        <option value="NEW_ADDRESS" ${deliveryCustomerInfo.manualAddressMode ? "selected" : ""}>➕ إضافة عنوان جديد...</option>
       </select>
     `;
   } else {
@@ -1164,26 +1276,26 @@ function handleAddressSelect(val) {
   if (val === "NEW_ADDRESS") {
     deliveryCustomerInfo.manualAddressMode = true;
     deliveryCustomerInfo.selectedAddressId = null;
-    deliveryCustomerInfo.newAddress = '';
+    deliveryCustomerInfo.newAddress = "";
   } else {
     deliveryCustomerInfo.manualAddressMode = false;
     deliveryCustomerInfo.selectedAddressId = parseInt(val) || null;
-    deliveryCustomerInfo.newAddress = '';
+    deliveryCustomerInfo.newAddress = "";
   }
   renderDeliveryCustomerForm();
 }
 
 function renderDeliveryCustomerForm() {
-  const container = document.getElementById('delivery_customer_form');
+  const container = document.getElementById("delivery_customer_form");
   if (!container) return;
 
   if (!orderType) {
-    container.style.display = 'none';
-    container.innerHTML = '';
+    container.style.display = "none";
+    container.innerHTML = "";
     return;
   }
 
-  container.style.display = 'block';
+  container.style.display = "block";
   container.innerHTML = `
     <div class="delivery_customer_card">
       <div class="dcf_title">
@@ -1191,7 +1303,7 @@ function renderDeliveryCustomerForm() {
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          ${orderType === 'delivery' ? 'بيانات عميل الديليفري' : 'بيانات العميل (اختياري)'}
+          ${orderType === "delivery" ? "بيانات عميل الديليفري" : "بيانات العميل (اختياري)"}
         </div>
         <button class="dcf_close_btn" onclick="hideDeliveryCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
       </div>
@@ -1223,81 +1335,87 @@ function renderDeliveryCustomerForm() {
 
   // إذا كان في بيانات محفوظة، اعمل restore للحالة
   if (deliveryCustomerInfo.customerId) {
-    const nameInput = document.getElementById('dcf_name');
+    const nameInput = document.getElementById("dcf_name");
     if (nameInput) {
       nameInput.readOnly = true;
-      nameInput.style.opacity = '0.75';
-      nameInput.classList.add('filled');
+      nameInput.style.opacity = "0.75";
+      nameInput.classList.add("filled");
     }
   }
 }
 
 function hideDeliveryCustomerForm() {
-  const container = document.getElementById('delivery_customer_form');
-  if (container) container.style.display = 'none';
+  const container = document.getElementById("delivery_customer_form");
+  if (container) container.style.display = "none";
 }
 
 function handlePhoneInput(phone) {
   deliveryCustomerInfo.phone = phone;
-  deliveryCustomerInfo.name = '';
+  deliveryCustomerInfo.name = "";
   deliveryCustomerInfo.customerId = null;
   deliveryCustomerInfo.addresses = [];
   deliveryCustomerInfo.selectedAddressId = null;
-  deliveryCustomerInfo.newAddress = '';
+  deliveryCustomerInfo.newAddress = "";
   deliveryCustomerInfo.manualAddressMode = false;
 
-  const nameInput = document.getElementById('dcf_name');
+  const nameInput = document.getElementById("dcf_name");
   if (nameInput) {
-    nameInput.value = '';
+    nameInput.value = "";
     nameInput.readOnly = false;
-    nameInput.style.opacity = '1';
-    nameInput.classList.remove('filled');
+    nameInput.style.opacity = "1";
+    nameInput.classList.remove("filled");
   }
 
-  const addrField = document.getElementById('dcf_address_field');
+  const addrField = document.getElementById("dcf_address_field");
   if (addrField) addrField.innerHTML = renderAddressFieldHTML();
 
   clearTimeout(_phoneSearchTimeout);
-  const status = document.getElementById('dcf_phone_status');
+  const status = document.getElementById("dcf_phone_status");
 
-  const digits = phone.replace(/\D/g, '');
+  const digits = phone.replace(/\D/g, "");
   if (digits.length >= 11) {
-    if (status) status.innerHTML = '<span style="color:var(--color-subtext)">جاري البحث...</span>';
+    if (status)
+      status.innerHTML =
+        '<span style="color:var(--color-subtext)">جاري البحث...</span>';
     _phoneSearchTimeout = setTimeout(() => lookupCustomerByPhone(phone), 700);
   } else {
-    if (status) status.innerHTML = '';
+    if (status) status.innerHTML = "";
   }
 }
 
 async function lookupCustomerByPhone(phone) {
-  const status = document.getElementById('dcf_phone_status');
+  const status = document.getElementById("dcf_phone_status");
 
   const applyFound = (found) => {
     deliveryCustomerInfo.customerId = found.id;
-    deliveryCustomerInfo.name = found.name || '';
-    deliveryCustomerInfo.addresses = Array.isArray(found.addresses) ? found.addresses : [];
+    deliveryCustomerInfo.name = found.name || "";
+    deliveryCustomerInfo.addresses = Array.isArray(found.addresses)
+      ? found.addresses
+      : [];
 
     if (deliveryCustomerInfo.addresses.length === 1) {
-      deliveryCustomerInfo.selectedAddressId = deliveryCustomerInfo.addresses[0].id;
+      deliveryCustomerInfo.selectedAddressId =
+        deliveryCustomerInfo.addresses[0].id;
     } else {
       deliveryCustomerInfo.selectedAddressId = null;
     }
 
     if (deliveryCustomerInfo.addresses.length === 1) {
-      deliveryCustomerInfo.selectedAddressId = deliveryCustomerInfo.addresses[0].id;
+      deliveryCustomerInfo.selectedAddressId =
+        deliveryCustomerInfo.addresses[0].id;
     } else {
       deliveryCustomerInfo.selectedAddressId = null;
     }
-    
-    const nameInput = document.getElementById('dcf_name');
+
+    const nameInput = document.getElementById("dcf_name");
     if (nameInput) {
       nameInput.value = deliveryCustomerInfo.name;
       nameInput.readOnly = true;
-      nameInput.style.opacity = '0.75';
-      nameInput.classList.add('filled');
+      nameInput.style.opacity = "0.75";
+      nameInput.classList.add("filled");
     }
     if (status) status.innerHTML = '<span style="color:#3d9e6b">✓ موجود</span>';
-    const addrField = document.getElementById('dcf_address_field');
+    const addrField = document.getElementById("dcf_address_field");
     if (addrField) addrField.innerHTML = renderAddressFieldHTML();
   };
 
@@ -1306,40 +1424,53 @@ async function lookupCustomerByPhone(phone) {
     deliveryCustomerInfo.addresses = [];
     deliveryCustomerInfo.selectedAddressId = null;
 
-    const nameInput = document.getElementById('dcf_name');
+    const nameInput = document.getElementById("dcf_name");
     if (nameInput) {
-      nameInput.value = '';
+      nameInput.value = "";
       nameInput.readOnly = false;
-      nameInput.style.opacity = '1';
-      nameInput.classList.remove('filled');
+      nameInput.style.opacity = "1";
+      nameInput.classList.remove("filled");
     }
-    if (status) status.innerHTML = '<span style="color:var(--color-primary)">✦ جديد</span>';
-    const addrField = document.getElementById('dcf_address_field');
+    if (status)
+      status.innerHTML =
+        '<span style="color:var(--color-primary)">✦ جديد</span>';
+    const addrField = document.getElementById("dcf_address_field");
     if (addrField) addrField.innerHTML = renderAddressFieldHTML();
   };
 
-  const token = localStorage.getItem('token');
-  const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+  const token = localStorage.getItem("token");
+  const headers = token ? { Authorization: "Bearer " + token } : {};
 
   // ── المحاولة الأولى: by-phone (أسرع وأدق) ──
   try {
-    const r1 = await apiFetch(`/customers/by-phone/${encodeURIComponent(phone)}`);
+    const r1 = await apiFetch(
+      `/customers/by-phone/${encodeURIComponent(phone)}`,
+    );
     if (r1.ok) {
       const data = await r1.json();
       applyFound(data);
       return;
     }
-  } catch (_) { /* تجاهل وانتقل للخطوة التالية */ }
+  } catch (_) {
+    /* تجاهل وانتقل للخطوة التالية */
+  }
 
   // ── المحاولة الثانية: قايمة كل العملاء + فلتر ──
   try {
     const r2 = await apiFetch("/customers/");
     if (r2.ok) {
       const list = await r2.json();
-      const found = Array.isArray(list) ? list.find(c => c.phone_number === phone) : null;
-      if (found) { applyFound(found); return; }
+      const found = Array.isArray(list)
+        ? list.find((c) => c.phone_number === phone)
+        : null;
+      if (found) {
+        applyFound(found);
+        return;
+      }
     }
-  } catch (_) { /* تجاهل */ }
+  } catch (_) {
+    /* تجاهل */
+  }
 
   // ── كلاهما فشل → عميل جديد ──
   applyNew();
@@ -1369,11 +1500,12 @@ function showGlobalLoader(show) {
       </div>
       <p style="color: var(--color-primary); font-family: Cairo, sans-serif; font-size: 16px; font-weight: 700; margin-top: 16px;">جاري التحميل...</p>
     `;
-    
+
     if (!document.getElementById("loader_spin_style")) {
       const style = document.createElement("style");
       style.id = "loader_spin_style";
-      style.innerHTML = "@keyframes spinLoader { to { transform: rotate(360deg); } }";
+      style.innerHTML =
+        "@keyframes spinLoader { to { transform: rotate(360deg); } }";
       document.head.appendChild(style);
     }
 
@@ -1395,7 +1527,11 @@ function renderRidersTab() {
   const body = document.getElementById("riders_table_body");
   if (!body) return;
 
-  if (allOrdersList.length === 0 && onlineOrdersList.length === 0 && !ordersSnapshotLoaded) {
+  if (
+    allOrdersList.length === 0 &&
+    onlineOrdersList.length === 0 &&
+    !ordersSnapshotLoaded
+  ) {
     body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل البيانات...</td></tr>`;
     return;
   }
@@ -1404,14 +1540,15 @@ function renderRidersTab() {
   const now = new Date();
   const businessDayStart = new Date(now);
   businessDayStart.setHours(5, 0, 0, 0);
-  if (now.getHours() < 5) businessDayStart.setDate(businessDayStart.getDate() - 1);
+  if (now.getHours() < 5)
+    businessDayStart.setDate(businessDayStart.getDate() - 1);
 
   // تجميع كل الطلبات
   const combinedOrders = [...allOrdersList, ...onlineOrdersList];
-  
+
   // فلترة طلبات الدليفري ضمن يوم العمل الحالي (من الساعة 5 صباحاً)
-  const deliveryOrders = combinedOrders.filter(o => {
-    if (!o.delivery_person_id || o.order_status === 'cancelled') return false;
+  const deliveryOrders = combinedOrders.filter((o) => {
+    if (!o.delivery_person_id || o.order_status === "cancelled") return false;
     const t = o.created_at ? new Date(o.created_at) : null;
     return t && t >= businessDayStart;
   });
@@ -1419,20 +1556,20 @@ function renderRidersTab() {
   // تجميع البيانات لكل مندوب
   const riderStats = {};
 
-  deliveryOrders.forEach(order => {
+  deliveryOrders.forEach((order) => {
     const rid = order.delivery_person_id;
     const rname = order.delivery_person_name || "مندوب غير معروف";
-    
+
     if (!riderStats[rid]) {
       riderStats[rid] = {
         id: rid,
         name: rname,
         count: 0,
         total: 0,
-        orderNumbers: []
+        orderNumbers: [],
       };
     }
-    
+
     riderStats[rid].count++;
     riderStats[rid].total += parseFloat(order.total_amount || 0);
     riderStats[rid].orderNumbers.push(order.order_number || order.id);
@@ -1448,7 +1585,9 @@ function renderRidersTab() {
   // ترتيب حسب عدد الطلبات تنازلياً
   ridersArr.sort((a, b) => b.count - a.count);
 
-  body.innerHTML = ridersArr.map(r => `
+  body.innerHTML = ridersArr
+    .map(
+      (r) => `
     <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
       <td style="padding: 15px; font-weight: 700; color: #fff;">${r.name}</td>
       <td style="padding: 15px;">
@@ -1459,7 +1598,9 @@ function renderRidersTab() {
       </td>
       <td style="padding: 15px; font-weight: 900; color: var(--color-primary);">${r.total.toFixed(2)} ج.م</td>
     </tr>
-  `).join('');
+  `,
+    )
+    .join("");
 }
 
 function showRiderOrdersPopup(riderName, orderNumbers) {
@@ -1483,9 +1624,13 @@ function showRiderOrdersPopup(riderName, orderNumbers) {
       <div style="flex: 1; overflow-y: auto; padding-left: 8px;">
         <p style="color: var(--color-subtext); font-size: 13px; margin-bottom: 12px;">قائمة بأرقام الطلبات التي قام بتوصيلها:</p>
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-          ${orderNumbers.map(num => `
+          ${orderNumbers
+            .map(
+              (num) => `
             <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; text-align: center; color: #fff; font-weight: 700;">#${num}</div>
-          `).join('')}
+          `,
+            )
+            .join("")}
         </div>
       </div>
       
@@ -1494,7 +1639,9 @@ function showRiderOrdersPopup(riderName, orderNumbers) {
   `;
 
   document.body.appendChild(overlay);
-  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = (e) => {
+    if (e.target === overlay) overlay.remove();
+  };
 }
 
 // ===================================================
@@ -1557,106 +1704,117 @@ function renderOnlineOrdersState() {
  * Manually fetch all orders from the API (used by Refresh buttons)
  */
 async function fetchOnlineOrdersServer(page = 1, silent = false) {
-    onlineOrdersCurrentPage = page;
-    if (!silent) showGlobalLoader(true);
-    try {
-        let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=online`;
-        if (onlineOrdersFilter !== 'all') {
-            url += `&status=${onlineOrdersFilter}`;
-        }
-        const res = await apiFetch(url);
-        if (!res.ok) throw new Error("Failed to fetch online orders");
-        const data = await res.json();
-        onlineOrdersList = data.orders || [];
-        onlineOrdersTotal = data.total || 0;
-        
-        if (!silent) {
-            const container = document.getElementById("online_orders_grid")?.parentElement;
-            if (container) container.scrollTop = 0;
-        }
-        
-        renderOnlineOrders();
-    } catch (err) {
-        console.error(err);
-        if (!silent) showToast("فشل تحميل طلبات الأونلاين", "error");
-    } finally {
-        if (!silent) showGlobalLoader(false);
+  onlineOrdersCurrentPage = page;
+  if (!silent) showGlobalLoader(true);
+  try {
+    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=online`;
+    if (onlineOrdersFilter !== "all") {
+      url += `&status=${onlineOrdersFilter}`;
     }
+    const res = await apiFetch(url);
+    if (!res.ok) throw new Error("Failed to fetch online orders");
+    const data = await res.json();
+    onlineOrdersList = data.orders || [];
+    onlineOrdersTotal = data.total || 0;
+
+    if (!silent) {
+      const container =
+        document.getElementById("online_orders_grid")?.parentElement;
+      if (container) container.scrollTop = 0;
+    }
+
+    renderOnlineOrders();
+  } catch (err) {
+    console.error(err);
+    if (!silent) showToast("فشل تحميل طلبات الأونلاين", "error");
+  } finally {
+    if (!silent) showGlobalLoader(false);
+  }
 }
 
 async function fetchAllOrdersServer(page = 1, silent = false) {
-    allOrdersCurrentPage = page;
-    if (!silent) showGlobalLoader(true);
-    try {
-        let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
-        if (allOrdersFilter !== 'all') {
-            url += `&order_type=${allOrdersFilter}`;
-        }
-        const res = await apiFetch(url);
-        if (!res.ok) throw new Error("Failed to fetch all orders");
-        const data = await res.json();
-        allOrdersList = data.orders || [];
-        allOrdersTotal = data.total || 0;
-        
-        if (!silent) {
-            const container = document.getElementById("all_orders_grid")?.parentElement;
-            if (container) container.scrollTop = 0;
-        }
-        
-        renderAllOrders();
-    } catch (err) {
-        console.error(err);
-        if (!silent) showToast("فشل تحميل طلبات الكاشير", "error");
-    } finally {
-        if (!silent) showGlobalLoader(false);
+  allOrdersCurrentPage = page;
+  if (!silent) showGlobalLoader(true);
+  try {
+    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
+    if (allOrdersFilter !== "all") {
+      url += `&order_type=${allOrdersFilter}`;
     }
+    const res = await apiFetch(url);
+    if (!res.ok) throw new Error("Failed to fetch all orders");
+    const data = await res.json();
+    allOrdersList = data.orders || [];
+    allOrdersTotal = data.total || 0;
+
+    if (!silent) {
+      const container =
+        document.getElementById("all_orders_grid")?.parentElement;
+      if (container) container.scrollTop = 0;
+    }
+
+    renderAllOrders();
+  } catch (err) {
+    console.error(err);
+    if (!silent) showToast("فشل تحميل طلبات الكاشير", "error");
+  } finally {
+    if (!silent) showGlobalLoader(false);
+  }
 }
 
 async function fetchAllOrders(skipSync = false) {
-    showGlobalLoader(true);
-    try {
-        if (IS_DESKTOP_RUNTIME && !skipSync) {
-            try {
-                await apiFetch("/desktop-updates/trigger-pull", { method: "POST", suppress401: true });
-                await new Promise(resolve => setTimeout(resolve, 800));
-            } catch (e) {
-                console.warn("Could not trigger background sync:", e);
-            }
-        }
-
-        // Fetch first page of both and the badge count
-        await Promise.all([
-            fetchOnlineOrdersServer(1),
-            fetchAllOrdersServer(1),
-            refreshNewOrdersBadge()
-        ]);
-        
-        ordersSnapshotLoaded = true;
-        updateOnlineStats();
-        renderRidersTab();
-        
-        showToast("تم تحديث البيانات بنجاح", "success");
-    } catch (err) {
-        console.error("Error refreshing orders:", err);
-        showToast("فشل تحديث البيانات", "error");
-    } finally {
-        showGlobalLoader(false);
+  showGlobalLoader(true);
+  try {
+    if (IS_DESKTOP_RUNTIME && !skipSync) {
+      try {
+        await apiFetch("/desktop-updates/trigger-pull", {
+          method: "POST",
+          suppress401: true,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      } catch (e) {
+        console.warn("Could not trigger background sync:", e);
+      }
     }
+
+    // Fetch first page of both and the badge count
+    await Promise.all([
+      fetchOnlineOrdersServer(1),
+      fetchAllOrdersServer(1),
+      refreshNewOrdersBadge(),
+    ]);
+
+    ordersSnapshotLoaded = true;
+    updateOnlineStats();
+    renderRidersTab();
+
+    showToast("تم تحديث البيانات بنجاح", "success");
+  } catch (err) {
+    console.error("Error refreshing orders:", err);
+    showToast("فشل تحديث البيانات", "error");
+  } finally {
+    showGlobalLoader(false);
+  }
 }
 
 /**
  * Alias for fetchAllOrders to satisfy the online orders refresh button
  */
 async function fetchOnlineOrders() {
-    await fetchAllOrders();
+  await fetchAllOrders();
 }
 
 function updateOnlineStats() {
-  const newCount = onlineOrdersList.filter(o => o.order_status === 'new').length;
+  const newCount = onlineOrdersList.filter(
+    (o) => o.order_status === "new",
+  ).length;
   //جاهز = confirmed, مكتمل = completed. For stats, let's show confirmed as ready in progress?
   // User asked: "Ready" (جاهزة) stat box. Let's use confirmed + completed for now or just confirmed.
-  const readyCount = onlineOrdersList.filter(o => o.order_status === 'confirmed' || o.order_status === 'completed').length;
-  const cancelledCount = onlineOrdersList.filter(o => o.order_status === 'cancelled').length;
+  const readyCount = onlineOrdersList.filter(
+    (o) => o.order_status === "confirmed" || o.order_status === "completed",
+  ).length;
+  const cancelledCount = onlineOrdersList.filter(
+    (o) => o.order_status === "cancelled",
+  ).length;
 
   const statBoxes = document.querySelectorAll(".stat_box h2");
   if (statBoxes.length >= 3) {
@@ -1667,32 +1825,41 @@ function updateOnlineStats() {
 }
 
 async function refreshNewOrdersBadge() {
-    try {
-        // Fetch count of new online orders specifically
-        const res = await apiFetch("/orders/?status=new&page=1&page_size=1&source=online");
-        if (res.ok) {
-            const data = await res.json();
-            totalNewOrdersGlobalCount = data.total || 0;
-            updateOnlineTabBadge(totalNewOrdersGlobalCount);
-        }
-    } catch (e) {
-        console.error("Error refreshing badge count:", e);
+  try {
+    // Fetch count of new online orders specifically
+    const res = await apiFetch(
+      "/orders/?status=new&page=1&page_size=1&source=online",
+    );
+    if (res.ok) {
+      const data = await res.json();
+      totalNewOrdersGlobalCount = data.total || 0;
+      updateOnlineTabBadge(totalNewOrdersGlobalCount);
     }
+  } catch (e) {
+    console.error("Error refreshing badge count:", e);
+  }
 }
 
 // Sound reminder loop: if there are new orders, play sound every 2 minutes
-setInterval(() => {
+setInterval(
+  () => {
     if (totalNewOrdersGlobalCount > 0 && isNotificationSoundEnabled) {
-        console.log("Sound reminder: Still have", totalNewOrdersGlobalCount, "new orders.");
-        playNotificationSound();
+      console.log(
+        "Sound reminder: Still have",
+        totalNewOrdersGlobalCount,
+        "new orders.",
+      );
+      playNotificationSound();
     }
-}, 2 * 60 * 1000);
+  },
+  2 * 60 * 1000,
+);
 
 function setOnlineOrdersFilter(filter, btn) {
   onlineOrdersFilter = filter;
-  const btns = document.querySelectorAll('#online_orders_layout .filter_btn');
-  btns.forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
+  const btns = document.querySelectorAll("#online_orders_layout .filter_btn");
+  btns.forEach((b) => b.classList.remove("active"));
+  if (btn) btn.classList.add("active");
   onlineOrdersCurrentPage = 1;
   fetchOnlineOrdersServer(1);
 }
@@ -1720,25 +1887,31 @@ function renderOnlineOrders() {
   grid.innerHTML = "";
 
   const statusMap = {
-    "new": { label: "جديد", cls: "badge_new" },
-    "confirmed": { label: "مؤكد", cls: "badge_ready" },
-    "completed": { label: "مكتمل", cls: "badge_ready" },
-    "cancelled": { label: "ملغي", cls: "badge_canceled" },
-    "delivered": { label: "تم التوصيل", cls: "badge_ready" }
+    new: { label: "جديد", cls: "badge_new" },
+    confirmed: { label: "مؤكد", cls: "badge_ready" },
+    completed: { label: "مكتمل", cls: "badge_ready" },
+    cancelled: { label: "ملغي", cls: "badge_canceled" },
+    delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
 
-  onlineOrdersList.forEach(order => {
-    let statusObj = statusMap[order.order_status] || { label: order.order_status, cls: "" };
-    
+  onlineOrdersList.forEach((order) => {
+    let statusObj = statusMap[order.order_status] || {
+      label: order.order_status,
+      cls: "",
+    };
+
     let timeStr = "";
     const orderTime = order.created_at || order.order_date;
     if (orderTime) {
       const d = new Date(orderTime);
       if (!isNaN(d)) {
         if (String(orderTime).length > 10) {
-          timeStr = d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+          timeStr = d.toLocaleTimeString("ar-EG", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
         } else {
-          timeStr = d.toLocaleDateString('ar-EG');
+          timeStr = d.toLocaleDateString("ar-EG");
         }
       } else {
         timeStr = orderTime;
@@ -1747,7 +1920,7 @@ function renderOnlineOrders() {
 
     const card = document.createElement("div");
     card.className = "online_order_card";
-    card.onclick = () => openOrderDetails(order.id, 'online');
+    card.onclick = () => openOrderDetails(order.id, "online");
     card.innerHTML = `
       <div class="card_header">
         <span class="order_status ${statusObj.cls}">${statusObj.label}</span>
@@ -1767,59 +1940,98 @@ function renderOnlineOrders() {
         </div>
         <div class="detail_row">
           <span style="font-size:12px">
-            ${(typeof order.address === 'object' && order.address !== null) 
-               ? order.address.address 
-               : (order.customer_address || order.address || order.customer_notes || "لا يوجد عنوان")}
+            ${
+              typeof order.address === "object" && order.address !== null
+                ? order.address.address
+                : order.customer_address ||
+                  order.address ||
+                  order.customer_notes ||
+                  "لا يوجد عنوان"
+            }
           </span>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
         </div>
-        ${order.customer_notes ? `
+        ${
+          order.customer_notes
+            ? `
         <div class="detail_row">
           <span style="font-size:12px">ملاحظات: ${order.customer_notes}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-        </div>` : ''}
-        ${(order.order_type === 'delivery' && (order.delivery_person_id || order.delivery_person_name)) ? `
+        </div>`
+            : ""
+        }
+        ${
+          order.order_type === "delivery" &&
+          (order.delivery_person_id || order.delivery_person_name)
+            ? `
         <div class="detail_row" style="color:var(--color-primary); font-weight:bold;">
-          <span>المندوب: ${order.delivery_person_name || '...'}</span>
+          <span>المندوب: ${order.delivery_person_name || "..."}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-        </div>` : ''}
+        </div>`
+            : ""
+        }
         </div>
       </div>
       
       <div style="margin-top:auto; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05); display:flex; flex-wrap:wrap; gap:8px; justify-content:center;">
-        ${order.order_status === 'new' ? `
+        ${
+          order.order_status === "new"
+            ? `
           <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'confirmed')" style="background:var(--color-primary); color:#000; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">مؤكد</button>
-        ` : ''}
-        ${order.order_status === 'confirmed' ? `
-          ${order.order_type === 'delivery' ? `
+        `
+            : ""
+        }
+        ${
+          order.order_status === "confirmed"
+            ? `
+          ${
+            order.order_type === "delivery"
+              ? `
             <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'delivered')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التوصيل</button>
-          ` : `
+          `
+              : `
             <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'completed')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التجهيز</button>
-          `}
-        ` : ''}
-        ${(order.order_status === 'new' || order.order_status === 'confirmed') ? `
+          `
+          }
+        `
+            : ""
+        }
+        ${
+          order.order_status === "new" || order.order_status === "confirmed"
+            ? `
           <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'cancelled')" style="background:#e40411; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">إلغاء</button>
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'online')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تعديل</button>
-        ` : ''}
-        ${order.order_status !== 'cancelled' ? `
+        `
+            : ""
+        }
+        ${
+          order.order_status !== "cancelled"
+            ? `
           <button onclick="event.stopPropagation(); printOrderFromOnline(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">طباعة</button>
-        ` : ''}
+        `
+            : ""
+        }
       </div>
     `;
     grid.appendChild(card);
   });
 
-  const pagination = renderPagination(onlineOrdersTotal, onlineOrdersCurrentPage, ordersPageSize, 'changeOnlinePage');
+  const pagination = renderPagination(
+    onlineOrdersTotal,
+    onlineOrdersCurrentPage,
+    ordersPageSize,
+    "changeOnlinePage",
+  );
   if (pagination) grid.appendChild(pagination);
 }
 
 async function updateOnlineStatus(orderId, newStatus) {
-  const order = onlineOrdersList.find(o => o.id === orderId);
+  const order = onlineOrdersList.find((o) => o.id === orderId);
   let msg = "هل أنت متأكد؟";
-  if (newStatus === 'confirmed') msg = "تأكيد واستلام الطلب؟";
-  else if (newStatus === 'completed') msg = "هل تم تجهيز الطلب؟";
-  else if (newStatus === 'delivered') msg = "هل تم توصيل الطلب؟";
-  else if (newStatus === 'cancelled') msg = "إلغاء هذا الطلب؟";
+  if (newStatus === "confirmed") msg = "تأكيد واستلام الطلب؟";
+  else if (newStatus === "completed") msg = "هل تم تجهيز الطلب؟";
+  else if (newStatus === "delivered") msg = "هل تم توصيل الطلب؟";
+  else if (newStatus === "cancelled") msg = "إلغاء هذا الطلب؟";
 
   const confirmed = await showCustomActionConfirm(msg);
   if (!confirmed) return;
@@ -1827,19 +2039,19 @@ async function updateOnlineStatus(orderId, newStatus) {
   try {
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ order_status: newStatus })
+      body: JSON.stringify({ order_status: newStatus }),
     });
 
     if (res.ok) {
       // ✅ Update local memory state
       const updateInList = (list) => {
-        const idx = list.findIndex(o => String(o.id) === String(orderId));
+        const idx = list.findIndex((o) => String(o.id) === String(orderId));
         if (idx !== -1) {
           list[idx] = { ...list[idx], order_status: newStatus };
         }
       };
       updateInList(onlineOrdersList);
-      if (typeof allOrdersList !== 'undefined') updateInList(allOrdersList);
+      if (typeof allOrdersList !== "undefined") updateInList(allOrdersList);
 
       updateOnlineStats();
       refreshNewOrdersBadge();
@@ -1867,11 +2079,17 @@ async function initWebOrdersToggle() {
     if (res.ok) {
       const data = await res.json();
       // Robust parsing: handle raw boolean or object with value_bool/value
-      webOrdersEnabled = (typeof data === 'boolean') ? data : (data.value_bool === true || data.value === true);
+      webOrdersEnabled =
+        typeof data === "boolean"
+          ? data
+          : data.value_bool === true || data.value === true;
       updateWebOrdersToggleUI();
     }
   } catch (err) {
-    console.warn("Failed to fetch web-orders setting, defaulting to enabled", err);
+    console.warn(
+      "Failed to fetch web-orders setting, defaulting to enabled",
+      err,
+    );
     updateWebOrdersToggleUI();
   }
 }
@@ -1881,9 +2099,9 @@ async function toggleWebOrders() {
   if (!btn) return;
 
   const newValue = !webOrdersEnabled;
-  const span = btn.querySelector('span');
+  const span = btn.querySelector("span");
   const originalText = span ? span.textContent : "تشغيل الطلبات";
-  
+
   btn.style.opacity = "0.7";
   btn.style.pointerEvents = "none";
   if (span) span.textContent = "جاري الحفظ...";
@@ -1891,13 +2109,19 @@ async function toggleWebOrders() {
   try {
     const res = await apiFetch("/settings/web-orders", {
       method: "PATCH",
-      body: JSON.stringify({ value_bool: newValue })
+      body: JSON.stringify({ value_bool: newValue }),
     });
 
     if (res.ok) {
       const data = await res.json();
-      webOrdersEnabled = (typeof data === 'boolean') ? data : (data.value_bool === true || data.value === true);
-      showToast(webOrdersEnabled ? "تم تشغيل الطلبات بنجاح" : "تم إيقاف الطلبات بنجاح", "success");
+      webOrdersEnabled =
+        typeof data === "boolean"
+          ? data
+          : data.value_bool === true || data.value === true;
+      showToast(
+        webOrdersEnabled ? "تم تشغيل الطلبات بنجاح" : "تم إيقاف الطلبات بنجاح",
+        "success",
+      );
     } else {
       throw new Error("Failed to update setting");
     }
@@ -1915,9 +2139,9 @@ async function toggleWebOrders() {
 function updateWebOrdersToggleUI() {
   const btn = document.getElementById("toggle_online_btn");
   if (!btn) return;
-  
-  const span = btn.querySelector('span');
-  
+
+  const span = btn.querySelector("span");
+
   if (webOrdersEnabled) {
     btn.classList.add("active");
     if (span) span.textContent = "تشغيل الطلبات";
@@ -1959,16 +2183,19 @@ function setupWebSocket() {
     clearTimeout(reconnectTimerId);
     reconnectTimerId = null;
   }
-  
+
   updateConnectionStatus("connecting");
 
-  if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) {
+  if (
+    socket &&
+    [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)
+  ) {
     return;
   }
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${protocol}//${window.location.host}/orders/ws/cashier`;
-  
+
   console.log("📡 Attempting WebSocket connection:", wsUrl);
   const ws = new WebSocket(wsUrl);
   socket = ws;
@@ -1991,7 +2218,7 @@ function setupWebSocket() {
     try {
       const payload = JSON.parse(event.data);
       if (payload.type !== "HEARTBEAT" && payload.type !== "HEARTBEAT_ACK") {
-          console.debug("📥 Received WS message:", payload.type);
+        console.debug("📥 Received WS message:", payload.type);
       }
       handleSocketEvent(payload);
     } catch (err) {
@@ -2002,16 +2229,18 @@ function setupWebSocket() {
   ws.onclose = (e) => {
     clearTimeout(connectTimeoutId);
     if (socket !== ws) return;
-    console.warn(`🔴 WebSocket disconnected. Code: ${e.code}, Reason: ${e.reason || 'None'}`);
+    console.warn(
+      `🔴 WebSocket disconnected. Code: ${e.code}, Reason: ${e.reason || "None"}`,
+    );
     socket = null;
     updateConnectionStatus("disconnected");
-    
+
     // Exponential backoff or simple delay
     if (!reconnectTimerId) {
-        reconnectTimerId = setTimeout(() => {
-            reconnectTimerId = null;
-            setupWebSocket();
-        }, 3000);
+      reconnectTimerId = setTimeout(() => {
+        reconnectTimerId = null;
+        setupWebSocket();
+      }, 3000);
     }
   };
 
@@ -2023,24 +2252,36 @@ function setupWebSocket() {
 }
 
 function handleSocketEvent(payload) {
-  if (!payload || payload.type === "HEARTBEAT" || payload.type === "HEARTBEAT_ACK" || payload.type === "heartbeat_ack") {
+  if (
+    !payload ||
+    payload.type === "HEARTBEAT" ||
+    payload.type === "HEARTBEAT_ACK" ||
+    payload.type === "heartbeat_ack"
+  ) {
     return;
   }
 
   if (payload.type === "SETTING_UPDATED") {
     if (payload.data?.key === "web_orders_enabled") {
-        webOrdersEnabled = (payload.data.value_bool === true);
-        updateWebOrdersToggleUI();
-        showToast(webOrdersEnabled ? "تم تفعيل الطلبات من الإدارة" : "تم إيقاف الطلبات من الإدارة", "info");
+      webOrdersEnabled = payload.data.value_bool === true;
+      updateWebOrdersToggleUI();
+      showToast(
+        webOrdersEnabled
+          ? "تم تفعيل الطلبات من الإدارة"
+          : "تم إيقاف الطلبات من الإدارة",
+        "info",
+      );
     }
     return;
   }
 
   if (payload.type === "ORDER_SNAPSHOT") {
-    const orders = Array.isArray(payload.data?.orders) ? payload.data.orders : [];
+    const orders = Array.isArray(payload.data?.orders)
+      ? payload.data.orders
+      : [];
     ordersSnapshotLoaded = true;
     // Local (cashier) orders from snapshot are authoritative on desktop
-    allOrdersList = orders.filter(o => !isOnlineOrder(o));
+    allOrdersList = orders.filter((o) => !isOnlineOrder(o));
     // For online orders: use snapshot initially, then immediately overwrite from cloud
     onlineOrdersList = orders.filter(isOnlineOrder);
     lastSocketOrderUpdate = Date.now();
@@ -2053,7 +2294,9 @@ function handleSocketEvent(payload) {
     // On desktop, ORDER_SNAPSHOT reads from local SQLite which may have STALE
     // online order statuses. Immediately fetch from cloud to get the truth.
     if (IS_DESKTOP_RUNTIME) {
-      console.log("🔄 Desktop: Fetching online orders from cloud for accurate statuses...");
+      console.log(
+        "🔄 Desktop: Fetching online orders from cloud for accurate statuses...",
+      );
       setTimeout(() => {
         fetchOnlineOrdersServer(1, true);
         fetchAllOrdersServer(1, true);
@@ -2070,11 +2313,18 @@ function handleSocketEvent(payload) {
   }
 
   // Customer/Address real-time sync from cloud/other device
-  if (payload.type === "CUSTOMER_CREATED" || payload.type === "ADDRESS_CREATED") {
+  if (
+    payload.type === "CUSTOMER_CREATED" ||
+    payload.type === "ADDRESS_CREATED"
+  ) {
     console.log("Customer data synced:", payload.type, payload.data);
     // No UI action needed - customer data will be fetched fresh when next order is placed
     // But if delivery customer form is open with same phone, we could refresh it
-    if (payload.type === "ADDRESS_CREATED" && deliveryCustomerInfo.phone && payload.data) {
+    if (
+      payload.type === "ADDRESS_CREATED" &&
+      deliveryCustomerInfo.phone &&
+      payload.data
+    ) {
       const eventPhone = payload.data.customer_phone;
       if (eventPhone && eventPhone === deliveryCustomerInfo.phone) {
         // Refresh the customer addresses in memory
@@ -2098,10 +2348,12 @@ function handleSocketEvent(payload) {
   if (eventName === "NEW_ORDER") {
     // Deduplication by Order Number + Date (Essential for Hybrid mode)
     const isDuplicateNumber = (list, newItem) => {
-        return list.find(o => 
-            (o.id === newItem.id) || 
-            (o.order_number === newItem.order_number && o.order_date === newItem.order_date)
-        );
+      return list.find(
+        (o) =>
+          o.id === newItem.id ||
+          (o.order_number === newItem.order_number &&
+            o.order_date === newItem.order_date),
+      );
     };
 
     if (isOnlineOrder(data)) {
@@ -2109,38 +2361,53 @@ function handleSocketEvent(payload) {
         onlineOrdersList.unshift(data);
         hasChanged = true;
         playNotificationSound();
-        showToast("طلب أونلاين جديد! #" + (data.order_number || data.id), "success");
+        showToast(
+          "طلب أونلاين جديد! #" + (data.order_number || data.id),
+          "success",
+        );
       }
     }
     // Also track in all orders if loaded
-    if (typeof allOrdersList !== 'undefined') {
-        if (!isDuplicateNumber(allOrdersList, data)) {
+    if (typeof allOrdersList !== "undefined") {
+      if (!isDuplicateNumber(allOrdersList, data)) {
         if (!isOnlineOrder(data)) {
-            allOrdersList.unshift(data);
-            hasChanged = true;
-            }
+          allOrdersList.unshift(data);
+          hasChanged = true;
         }
+      }
     }
-  } 
+  }
   // Handle Order Updated / Status Changed
   else if (eventName === "ORDER_UPDATED") {
-    console.log("Processing update for order:", data.order_number, "Status:", data.order_status);
-    
-    const findIdx = (list) => list.findIndex(o => 
-        (String(o.id) === String(data.id)) || 
-        (o.order_number === data.order_number && o.order_date === data.order_date)
+    console.log(
+      "Processing update for order:",
+      data.order_number,
+      "Status:",
+      data.order_status,
     );
+
+    const findIdx = (list) =>
+      list.findIndex(
+        (o) =>
+          String(o.id) === String(data.id) ||
+          (o.order_number === data.order_number &&
+            o.order_date === data.order_date),
+      );
 
     const oIdx = findIdx(onlineOrdersList);
     if (oIdx !== -1) {
       const localId = onlineOrdersList[oIdx].id;
       // Merge but preserve local ID to avoid 404s on local actions
-      onlineOrdersList[oIdx] = { ...onlineOrdersList[oIdx], ...data, id: localId };
+      onlineOrdersList[oIdx] = {
+        ...onlineOrdersList[oIdx],
+        ...data,
+        id: localId,
+      };
       hasChanged = true;
       console.log("Updated onlineOrdersList at index", oIdx);
     }
-    
-    if (typeof allOrdersList !== 'undefined') {
+
+    if (typeof allOrdersList !== "undefined") {
       const aIdx = findIdx(allOrdersList);
       if (aIdx !== -1) {
         const localId = allOrdersList[aIdx].id;
@@ -2151,25 +2418,34 @@ function handleSocketEvent(payload) {
     }
 
     if (hasChanged) {
-        showToast(`تحديث طلب #${data.order_number || data.id}: ${data.order_status}`, "success");
+      showToast(
+        `تحديث طلب #${data.order_number || data.id}: ${data.order_status}`,
+        "success",
+      );
     } else {
-        console.warn("Order update received but could not find order in local lists. Triggering full refresh...");
-        setTimeout(fetchAllOrders, 500); // Fallback for safety, delayed to allow DB commit
+      console.warn(
+        "Order update received but could not find order in local lists. Triggering full refresh...",
+      );
+      setTimeout(fetchAllOrders, 500); // Fallback for safety, delayed to allow DB commit
     }
   }
 
   // Real-time Menu Updates
   if (payload.type === "PRODUCT_UPDATED") {
-    apiFetch("/menu/products").then(res => res.json()).then(prods => {
-       products = Array.isArray(prods) ? prods : (prods.data || []);
-       renderItems();
-    });
+    apiFetch("/menu/products")
+      .then((res) => res.json())
+      .then((prods) => {
+        products = Array.isArray(prods) ? prods : prods.data || [];
+        renderItems();
+      });
   } else if (payload.type === "CATEGORY_UPDATED") {
-    apiFetch("/menu/categories").then(res => res.json()).then(cats => {
-       categories = Array.isArray(cats) ? cats.filter(c => c.is_active) : [];
-       renderTabs();
-       renderItems();
-    });
+    apiFetch("/menu/categories")
+      .then((res) => res.json())
+      .then((cats) => {
+        categories = Array.isArray(cats) ? cats.filter((c) => c.is_active) : [];
+        renderTabs();
+        renderItems();
+      });
   }
 
   // 2. Trigger UI Refresh if we are on a relevant tab
@@ -2177,7 +2453,7 @@ function handleSocketEvent(payload) {
     const onlineLayout = document.getElementById("online_orders_layout");
     const allLayout = document.getElementById("all_orders_layout");
     const ridersLayout = document.getElementById("riders_layout");
-    
+
     if (onlineLayout && onlineLayout.style.display !== "none") {
       updateOnlineStats();
       renderOnlineOrders();
@@ -2188,7 +2464,7 @@ function handleSocketEvent(payload) {
     if (ridersLayout && ridersLayout.style.display !== "none") {
       renderRidersTab();
     }
-    
+
     // Update count badge from server
     refreshNewOrdersBadge();
     lastNewOrdersCount = totalNewOrdersGlobalCount; // for legacy sync if any
@@ -2196,8 +2472,10 @@ function handleSocketEvent(payload) {
 }
 
 function normalizeOrderEventName(eventName) {
-  if (eventName === "order.created" || eventName === "ORDER_CREATED") return "NEW_ORDER";
-  if (eventName === "order.updated" || eventName === "order.status_changed") return "ORDER_UPDATED";
+  if (eventName === "order.created" || eventName === "ORDER_CREATED")
+    return "NEW_ORDER";
+  if (eventName === "order.updated" || eventName === "order.status_changed")
+    return "ORDER_UPDATED";
   return eventName || "";
 }
 
@@ -2219,12 +2497,14 @@ async function _safeSyncRefresh() {
       ]);
       if (catsRes.ok) {
         const catsData = await catsRes.json();
-        categories = Array.isArray(catsData) ? catsData.filter(c => c.is_active) : [];
+        categories = Array.isArray(catsData)
+          ? catsData.filter((c) => c.is_active)
+          : [];
         renderTabs();
       }
       if (prodsRes.ok) {
         const prodsData = await prodsRes.json();
-        products = Array.isArray(prodsData) ? prodsData : (prodsData.data || []);
+        products = Array.isArray(prodsData) ? prodsData : prodsData.data || [];
         renderItems();
       }
 
@@ -2232,7 +2512,7 @@ async function _safeSyncRefresh() {
       await Promise.all([
         fetchOnlineOrdersServer(onlineOrdersCurrentPage || 1, true),
         fetchAllOrdersServer(allOrdersCurrentPage || 1, true),
-        refreshNewOrdersBadge()
+        refreshNewOrdersBadge(),
       ]);
 
       ordersSnapshotLoaded = true;
@@ -2242,9 +2522,11 @@ async function _safeSyncRefresh() {
       const onlineLayout = document.getElementById("online_orders_layout");
       const allLayout = document.getElementById("all_orders_layout");
       const ridersLayout = document.getElementById("riders_layout");
-      if (onlineLayout && onlineLayout.style.display !== "none") renderOnlineOrders();
+      if (onlineLayout && onlineLayout.style.display !== "none")
+        renderOnlineOrders();
       if (allLayout && allLayout.style.display !== "none") renderAllOrders();
-      if (ridersLayout && ridersLayout.style.display !== "none") renderRidersTab();
+      if (ridersLayout && ridersLayout.style.display !== "none")
+        renderRidersTab();
 
       console.log("✅ Safe sync refresh completed");
     } catch (err) {
@@ -2260,7 +2542,9 @@ async function _safeSyncRefresh() {
 async function _refreshCustomerAddresses(phone) {
   if (!phone) return;
   try {
-    const res = await apiFetch(`/customers/by-phone/${encodeURIComponent(phone)}`);
+    const res = await apiFetch(
+      `/customers/by-phone/${encodeURIComponent(phone)}`,
+    );
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.addresses)) {
@@ -2270,11 +2554,15 @@ async function _refreshCustomerAddresses(phone) {
           deliveryCustomerInfo.selectedAddressId = data.addresses[0].id;
         }
         // Re-render the address field if visible
-        const addrField = document.getElementById('dcf_address_field');
-        if (addrField && typeof renderAddressFieldHTML === 'function') {
+        const addrField = document.getElementById("dcf_address_field");
+        if (addrField && typeof renderAddressFieldHTML === "function") {
           addrField.innerHTML = renderAddressFieldHTML();
         }
-        console.log("✅ Customer addresses refreshed from sync:", data.addresses.length, "addresses");
+        console.log(
+          "✅ Customer addresses refreshed from sync:",
+          data.addresses.length,
+          "addresses",
+        );
       }
     }
   } catch (err) {
@@ -2283,14 +2571,16 @@ async function _refreshCustomerAddresses(phone) {
 }
 
 function isOnlineOrder(order) {
-  const source = String(order?.source || order?.order_source || "").toLowerCase();
+  const source = String(
+    order?.source || order?.order_source || "",
+  ).toLowerCase();
   return source === "online" || source === "ordersource.online";
 }
 
 function updateOnlineTabBadge(count) {
   const badge = document.getElementById("online_orders_badge");
   if (!badge) return;
-  
+
   if (count > 0) {
     badge.textContent = count;
     badge.style.display = "flex";
@@ -2301,13 +2591,18 @@ function updateOnlineTabBadge(count) {
 
 function playNotificationSound() {
   if (!isNotificationSoundEnabled) return;
-  
+
   try {
     // صوت تنبيه مميز (Bell)
-    const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-    audio.play().catch(e => {
-        // المتصفح قد يمنع الـ Autoplay إذا لم يحدث تفاعل
-        console.warn("Notification sound blocked by browser. Interaction needed.", e);
+    const audio = new Audio(
+      "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
+    );
+    audio.play().catch((e) => {
+      // المتصفح قد يمنع الـ Autoplay إذا لم يحدث تفاعل
+      console.warn(
+        "Notification sound blocked by browser. Interaction needed.",
+        e,
+      );
     });
   } catch (e) {
     console.error("Error playing notification sound:", e);
@@ -2316,7 +2611,7 @@ function playNotificationSound() {
 
 function toggleSound() {
   isNotificationSoundEnabled = !isNotificationSoundEnabled;
-  
+
   const iconOn = document.getElementById("sound_icon_on");
   const iconOff = document.getElementById("sound_icon_off");
   const btn = document.getElementById("sound_toggle_btn");
@@ -2325,7 +2620,7 @@ function toggleSound() {
     if (iconOn) iconOn.style.display = "block";
     if (iconOff) iconOff.style.display = "none";
     if (btn) {
-      btn.style.background = "rgba(61, 158, 107, 0.2)"; 
+      btn.style.background = "rgba(61, 158, 107, 0.2)";
       btn.style.borderColor = "var(--color-accent, #3d9e6b)";
       btn.style.color = "var(--color-accent, #3d9e6b)";
     }
@@ -2344,23 +2639,27 @@ function toggleSound() {
 }
 
 function printOrderFromOnline(orderId) {
-  const order = onlineOrdersList.find(o => o.id === orderId);
+  const order = onlineOrdersList.find((o) => o.id === orderId);
   if (!order) return;
-  
-  const cartMapped = (order.items || []).map(item => {
-    let prod = products.find(p => p.id === item.product_id);
+
+  const cartMapped = (order.items || []).map((item) => {
+    let prod = products.find((p) => p.id === item.product_id);
     let variantName = "";
     if (prod && prod.variants) {
-       let v = prod.variants.find(v => parseFloat(v.price) === parseFloat(item.unit_price));
-       if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
+      let v = prod.variants.find(
+        (v) => parseFloat(v.price) === parseFloat(item.unit_price),
+      );
+      if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
     }
-    let name = prod ? prod.product_name + variantName : `صنف #${item.product_id}`;
+    let name = prod
+      ? variantName + prod.product_name
+      : `صنف #${item.product_id}`;
     return {
       qty: item.quantity,
       item: {
         name: name,
-        price: parseFloat(item.unit_price)
-      }
+        price: parseFloat(item.unit_price),
+      },
     };
   });
 
@@ -2374,16 +2673,16 @@ function printOrderFromOnline(orderId) {
 //  All Orders
 // ===================================================
 let allOrdersList = [];
-let allOrdersFilter = 'all';
-let allOrdersSearchTerm = '';
+let allOrdersFilter = "all";
+let allOrdersSearchTerm = "";
 let allOrdersCurrentPage = 1;
 let allOrdersTotal = 0;
 
 function setAllOrdersFilter(filter, btn) {
   allOrdersFilter = filter;
-  const btns = document.querySelectorAll('#all_orders_filters .filter_btn');
-  btns.forEach(b => b.classList.remove('active'));
-  if(btn) btn.classList.add('active');
+  const btns = document.querySelectorAll("#all_orders_filters .filter_btn");
+  btns.forEach((b) => b.classList.remove("active"));
+  if (btn) btn.classList.add("active");
   allOrdersCurrentPage = 1;
   fetchAllOrdersServer(1);
 }
@@ -2407,94 +2706,114 @@ function renderAllOrders() {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات</p>`;
     return;
   }
-  
+
   grid.innerHTML = "";
-  
+
   const statusMap = {
-    "new": { label: "جديد", cls: "badge_new" },
-    "completed": { label: "مكتمل", cls: "badge_ready" },
-    "cancelled": { label: "ملغي", cls: "badge_canceled" },
-    "confirmed": { label: "مؤكد", cls: "badge_ready" },
-    "delivered": { label: "تم التوصيل", cls: "badge_ready" }
+    new: { label: "جديد", cls: "badge_new" },
+    completed: { label: "مكتمل", cls: "badge_ready" },
+    cancelled: { label: "ملغي", cls: "badge_canceled" },
+    confirmed: { label: "مؤكد", cls: "badge_ready" },
+    delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
-  
-  allOrdersList.forEach(order => {
-      const typeLabel = order.order_type === "delivery" ? "دليفري" : 
-                        order.order_type === "takeaway" ? "تيك أواي" : "صالة";
-                        
-      let statusObj = statusMap[order.order_status] || { label: order.order_status, cls: "" };
-      let badgeHtml = `<span class="order_status ${statusObj.cls}">${statusObj.label}</span>`;
-      
-      let timeStr = "---";
-      const backendTime = order.created_at || order.order_date;
-      if (backendTime) {
-        let d = new Date(backendTime);
-        if (!isNaN(d)) {
-           const timePart = d.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'});
-           const datePart = d.toLocaleDateString('ar-EG');
-           timeStr = (String(backendTime).length > 10) ? `${timePart} - ${datePart}` : datePart;
-        } else {
-           timeStr = backendTime;
-        }
+
+  allOrdersList.forEach((order) => {
+    const typeLabel =
+      order.order_type === "delivery"
+        ? "دليفري"
+        : order.order_type === "takeaway"
+          ? "تيك أواي"
+          : "صالة";
+
+    let statusObj = statusMap[order.order_status] || {
+      label: order.order_status,
+      cls: "",
+    };
+    let badgeHtml = `<span class="order_status ${statusObj.cls}">${statusObj.label}</span>`;
+
+    let timeStr = "---";
+    const backendTime = order.created_at || order.order_date;
+    if (backendTime) {
+      let d = new Date(backendTime);
+      if (!isNaN(d)) {
+        const timePart = d.toLocaleTimeString("ar-EG", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const datePart = d.toLocaleDateString("ar-EG");
+        timeStr =
+          String(backendTime).length > 10
+            ? `${timePart} - ${datePart}`
+            : datePart;
+      } else {
+        timeStr = backendTime;
       }
+    }
 
-      let actionsHtml = "";
+    let actionsHtml = "";
 
-      if (order.order_status === "confirmed") {
-        const isDelivery = order.order_type === "delivery";
-        const completeLabel = isDelivery ? "تم التوصيل" : "مكتمل";
-        const completeStatus = isDelivery ? "delivered" : "completed";
+    if (order.order_status === "confirmed") {
+      const isDelivery = order.order_type === "delivery";
+      const completeLabel = isDelivery ? "تم التوصيل" : "مكتمل";
+      const completeStatus = isDelivery ? "delivered" : "completed";
 
-        actionsHtml = `
+      actionsHtml = `
           <button onclick="event.stopPropagation(); printOrderFromList(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">طباعة</button>
           <button onclick="event.stopPropagation(); changeOrderStatus(${order.id}, '${completeStatus}')" style="background:#1d5c2b; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">${completeLabel}</button>
           <button onclick="event.stopPropagation(); changeOrderStatus(${order.id}, 'cancelled')" style="background:#e40411; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">إلغاء</button>
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'all')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer;"> تعديل</button>
         `;
-      } else if (order.order_status === "new") {
-        actionsHtml = `
+    } else if (order.order_status === "new") {
+      actionsHtml = `
           <button onclick="event.stopPropagation(); printOrderFromList(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">طباعة</button>
           <button onclick="event.stopPropagation(); changeOrderStatus(${order.id}, 'confirmed')" style="background:var(--color-primary); color:#000; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">مؤكد</button>
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'all')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer;"> تعديل</button>
         `;
-      } else if (order.order_status !== 'cancelled') {
-        actionsHtml = `
+    } else if (order.order_status !== "cancelled") {
+      actionsHtml = `
           <button onclick="event.stopPropagation(); printOrderFromList(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer;">طباعة</button>
         `;
-      }
+    }
 
-      const totalAmount = parseFloat(order.total_amount || 0).toFixed(2);
-      
-      let itemsHtml = "";
-      if (order.items && order.items.length > 0) {
-        let itemsList = order.items.map(item => {
-          let prod = products.find(p => p.id === item.product_id);
+    const totalAmount = parseFloat(order.total_amount || 0).toFixed(2);
+
+    let itemsHtml = "";
+    if (order.items && order.items.length > 0) {
+      let itemsList = order.items
+        .map((item) => {
+          let prod = products.find((p) => p.id === item.product_id);
           let variantName = "";
           if (prod && prod.variants) {
-             let v = prod.variants.find(v => parseFloat(v.price) === parseFloat(item.unit_price));
-             if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
+            let v = prod.variants.find(
+              (v) => parseFloat(v.price) === parseFloat(item.unit_price),
+            );
+            if (v && v.name !== prod.product_name) variantName = v.name + " - ";
           }
-          let name = prod ? prod.product_name + variantName : `صنف #${item.product_id}`;
+          let name = prod
+            ? variantName + prod.product_name
+            : ` صنف #${item.product_id}`;
           return `
             <div style="display:flex; justify-content:space-between; margin-bottom:2px; font-size:11px;">
               <span style="color:var(--color-text);">- ${name}</span>
               <span style="color:var(--color-subtext);">${item.quantity}x (${parseFloat(item.unit_price).toFixed(2)} ج.م)</span>
             </div>
           `;
-        }).join('');
-        
-        itemsHtml = `
+        })
+        .join("");
+
+      itemsHtml = `
           <div style="background:rgba(0,0,0,0.15); padding:6px; border-radius:6px; margin-top:6px;">
             ${itemsList}
           </div>
         `;
-      }
+    }
 
-      const card = document.createElement("div");
-      card.className = "online_order_card";
-      card.onclick = () => openOrderDetails(order.id, 'all');
-      card.style.cssText = "padding:12px; gap:8px; min-height:0; display:flex; flex-direction:column;";
-      card.innerHTML = `
+    const card = document.createElement("div");
+    card.className = "online_order_card";
+    card.onclick = () => openOrderDetails(order.id, "all");
+    card.style.cssText =
+      "padding:12px; gap:8px; min-height:0; display:flex; flex-direction:column;";
+    card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div style="display:flex; align-items:center; gap:8px;">
             ${badgeHtml}
@@ -2506,26 +2825,40 @@ function renderAllOrders() {
         <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(201,168,76,0.3); padding-top:8px; margin-top:2px;">
           <span style="font-size:15px; font-weight:800; color:var(--color-primary);">${totalAmount} ج.م</span>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
-            ${order.customer_phone ? `<span style="font-size:12px; color:var(--color-text);">${order.customer_phone}</span>` : ''}
-            ${(order.order_type === 'delivery' && order.delivery_person_name) ? `<span style="font-size:11px; color:var(--color-primary); font-weight:bold;">المندوب: ${order.delivery_person_name}</span>` : ''}
+            ${order.customer_phone ? `<span style="font-size:12px; color:var(--color-text);">${order.customer_phone}</span>` : ""}
+            ${order.order_type === "delivery" && order.delivery_person_name ? `<span style="font-size:11px; color:var(--color-primary); font-weight:bold;">المندوب: ${order.delivery_person_name}</span>` : ""}
             <span style="font-size:11px; color:var(--color-subtext); text-align:right; max-width:200px;">
-              ${(typeof order.address === 'object' && order.address !== null) 
-                 ? order.address.address 
-                 : (order.customer_address || order.address || order.customer_notes || "---")}
+              ${
+                typeof order.address === "object" && order.address !== null
+                  ? order.address.address
+                  : order.customer_address ||
+                    order.address ||
+                    order.customer_notes ||
+                    "---"
+              }
             </span>
           </div>
         </div>
         ${itemsHtml}
-        ${actionsHtml ? `
+        ${
+          actionsHtml
+            ? `
           <div style="margin-top:auto; padding-top:8px; display:flex; justify-content:flex-end; border-top:1px solid rgba(255,255,255,0.05)">
             ${actionsHtml}
           </div>
-        ` : ''}
+        `
+            : ""
+        }
       `;
-      grid.appendChild(card);
+    grid.appendChild(card);
   });
 
-  const pagination = renderPagination(allOrdersTotal, allOrdersCurrentPage, ordersPageSize, 'changeAllOrdersPage');
+  const pagination = renderPagination(
+    allOrdersTotal,
+    allOrdersCurrentPage,
+    ordersPageSize,
+    "changeAllOrdersPage",
+  );
   if (pagination) grid.appendChild(pagination);
 }
 
@@ -2535,13 +2868,17 @@ function renderPagination(totalItems, currentPage, pageSize, onPageChangeName) {
 
   const container = document.createElement("div");
   container.className = "pagination-container";
-  container.style.cssText = "grid-column:1/-1; display:flex; justify-content:center; align-items:center; margin-top:20px; padding:10px; gap:8px;";
+  container.style.cssText =
+    "grid-column:1/-1; display:flex; justify-content:center; align-items:center; margin-top:20px; padding:10px; gap:8px;";
 
   const btnPrev = document.createElement("button");
   btnPrev.textContent = "السابق";
-  btnPrev.disabled = (currentPage === 1);
-  btnPrev.style.cssText = `padding:6px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:white; cursor:${currentPage === 1 ? 'default' : 'pointer'}; opacity:${currentPage === 1 ? '0.3' : '1'}; font-family:Cairo,sans-serif; font-size:12px;`;
-  btnPrev.onclick = (e) => { e.stopPropagation(); window[onPageChangeName](currentPage - 1); };
+  btnPrev.disabled = currentPage === 1;
+  btnPrev.style.cssText = `padding:6px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:white; cursor:${currentPage === 1 ? "default" : "pointer"}; opacity:${currentPage === 1 ? "0.3" : "1"}; font-family:Cairo,sans-serif; font-size:12px;`;
+  btnPrev.onclick = (e) => {
+    e.stopPropagation();
+    window[onPageChangeName](currentPage - 1);
+  };
   container.appendChild(btnPrev);
 
   // Show page numbers
@@ -2552,17 +2889,23 @@ function renderPagination(totalItems, currentPage, pageSize, onPageChangeName) {
   for (let i = startPage; i <= endPage; i++) {
     const pBtn = document.createElement("button");
     pBtn.textContent = i;
-    const isActive = (i === currentPage);
-    pBtn.style.cssText = `min-width:32px; height:32px; border-radius:6px; border:none; background:${isActive ? 'var(--color-primary)' : 'rgba(255,255,255,0.08)'}; color:${isActive ? '#000' : '#fff'}; cursor:pointer; font-weight:bold; font-family:Cairo,sans-serif; font-size:12px;`;
-    pBtn.onclick = (e) => { e.stopPropagation(); window[onPageChangeName](i); };
+    const isActive = i === currentPage;
+    pBtn.style.cssText = `min-width:32px; height:32px; border-radius:6px; border:none; background:${isActive ? "var(--color-primary)" : "rgba(255,255,255,0.08)"}; color:${isActive ? "#000" : "#fff"}; cursor:pointer; font-weight:bold; font-family:Cairo,sans-serif; font-size:12px;`;
+    pBtn.onclick = (e) => {
+      e.stopPropagation();
+      window[onPageChangeName](i);
+    };
     container.appendChild(pBtn);
   }
 
   const btnNext = document.createElement("button");
   btnNext.textContent = "التالي";
-  btnNext.disabled = (currentPage === totalPages);
-  btnNext.style.cssText = `padding:6px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:white; cursor:${currentPage === totalPages ? 'default' : 'pointer'}; opacity:${currentPage === totalPages ? '0.3' : '1'}; font-family:Cairo,sans-serif; font-size:12px;`;
-  btnNext.onclick = (e) => { e.stopPropagation(); window[onPageChangeName](currentPage + 1); };
+  btnNext.disabled = currentPage === totalPages;
+  btnNext.style.cssText = `padding:6px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:white; cursor:${currentPage === totalPages ? "default" : "pointer"}; opacity:${currentPage === totalPages ? "0.3" : "1"}; font-family:Cairo,sans-serif; font-size:12px;`;
+  btnNext.onclick = (e) => {
+    e.stopPropagation();
+    window[onPageChangeName](currentPage + 1);
+  };
   container.appendChild(btnNext);
 
   return container;
@@ -2579,35 +2922,39 @@ function changeAllOrdersPage(newPage) {
 // Expose to window for the onclick strings if any
 window.changeOnlinePage = changeOnlinePage;
 window.changeAllOrdersPage = changeAllOrdersPage;
-    
+
 function printOrderFromList(orderId) {
-  const order = allOrdersList.find(o => o.id === orderId);
+  const order = allOrdersList.find((o) => o.id === orderId);
   if (!order) {
     showToast("لا يمكن العثور على الطلب", "error");
     return;
   }
 
-  const cartMapped = (order.items || []).map(item => {
-    let prod = products.find(p => p.id === item.product_id);
+  const cartMapped = (order.items || []).map((item) => {
+    let prod = products.find((p) => p.id === item.product_id);
     let variantName = "";
     if (prod && prod.variants) {
-       let v = prod.variants.find(v => parseFloat(v.price) === parseFloat(item.unit_price));
-       if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
+      let v = prod.variants.find(
+        (v) => parseFloat(v.price) === parseFloat(item.unit_price),
+      );
+      if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
     }
-    let name = prod ? prod.product_name + variantName : `صنف #${item.product_id}`;
+    let name = prod
+      ? variantName + prod.product_name
+      : ` صنف #${item.product_id}`;
     return {
       qty: item.quantity,
       item: {
         name: name,
-        price: parseFloat(item.unit_price)
-      }
+        price: parseFloat(item.unit_price),
+      },
     };
   });
 
   // نمرر كائن الطلب بالكامل لضمان استخدام بيانات السيرفر (order_number, created_at, creator_name)
   const printData = {
     ...order,
-    cart: cartMapped
+    cart: cartMapped,
   };
 
   if (typeof printReceipt === "function") {
@@ -2620,44 +2967,52 @@ function printOrderFromList(orderId) {
 }
 
 async function changeOrderStatus(orderId, status) {
-  const statusLabels = { 'completed': 'مكتمل', 'delivered': 'تم التوصيل', 'cancelled': 'ملغي', 'confirmed': 'مؤكد' };
-  const confirmed = await showCustomActionConfirm(`هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`);
+  const statusLabels = {
+    completed: "مكتمل",
+    delivered: "تم التوصيل",
+    cancelled: "ملغي",
+    confirmed: "مؤكد",
+  };
+  const confirmed = await showCustomActionConfirm(
+    `هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`,
+  );
   if (!confirmed) return;
-  
+
   try {
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         order_status: status,
         delivery_person_id: null,
-        internal_notes: null
-      })
+        internal_notes: null,
+      }),
     });
-    
+
     if (res.ok) {
       // Update in-memory lists immediately
       const updateInList = (list) => {
-        const idx = list.findIndex(o => String(o.id) === String(orderId));
+        const idx = list.findIndex((o) => String(o.id) === String(orderId));
         if (idx !== -1) {
           list[idx] = { ...list[idx], order_status: status };
         }
       };
       updateInList(allOrdersList);
-      if (typeof onlineOrdersList !== 'undefined') updateInList(onlineOrdersList);
-      
+      if (typeof onlineOrdersList !== "undefined")
+        updateInList(onlineOrdersList);
+
       showToast("تم تحديث حالة الطلب", "success");
       renderAllOrders();
       renderOnlineOrders();
       updateOnlineStats();
       refreshNewOrdersBadge();
     } else {
-      const err = await res.json().catch(()=>({}));
+      const err = await res.json().catch(() => ({}));
       console.error("Change status error details:", err);
       let errMsg = "خطأ غير معروف";
       if (typeof err.detail === "string") {
-         errMsg = err.detail;
+        errMsg = err.detail;
       } else if (Array.isArray(err.detail)) {
-         errMsg = err.detail.map(e => e.msg).join(', ');
+        errMsg = err.detail.map((e) => e.msg).join(", ");
       }
       showToast("فشل تحديث الحالة", "error");
       showErrorModal("الخادم رفض العملية بسبب:<br><br>" + errMsg);
@@ -2736,7 +3091,7 @@ function showCustomActionConfirm(message) {
 // ===================================================
 async function logout() {
   const token = localStorage.getItem("token");
-  const headers = token ? { "Authorization": "Bearer " + token } : {};
+  const headers = token ? { Authorization: "Bearer " + token } : {};
 
   try {
     // محاوله إبلاغ السيرفر بتسجيل الخروج لإبطال التوكن
@@ -2744,8 +3099,8 @@ async function logout() {
       method: "POST",
       headers: {
         ...headers,
-        "Content-Type": "application/json"
-      }
+        "Content-Type": "application/json",
+      },
     });
   } catch (err) {
     console.warn("Logout API error:", err);
@@ -2767,25 +3122,28 @@ async function logout() {
 //  Order Details Modal
 // ===================================================
 function openOrderDetails(orderId, source) {
-  const list = (source === 'online') ? onlineOrdersList : allOrdersList;
-  const order = list.find(o => o.id === orderId);
+  const list = source === "online" ? onlineOrdersList : allOrdersList;
+  const order = list.find((o) => o.id === orderId);
   if (!order) return;
 
   const typeLabels = {
-    'delivery': 'دليفري',
-    'takeaway': 'تيك أواي',
-    'dine_in': 'صالة',
-    'hall': 'صالة'
+    delivery: "دليفري",
+    takeaway: "تيك أواي",
+    dine_in: "صالة",
+    hall: "صالة",
   };
 
   const statusMap = {
-    "new": { label: "جديد", cls: "badge_new" },
-    "completed": { label: "مكتمل", cls: "badge_ready" },
-    "cancelled": { label: "ملغي", cls: "badge_canceled" },
-    "confirmed": { label: "مؤكد", cls: "badge_ready" },
-    "delivered": { label: "تم التوصيل", cls: "badge_ready" }
+    new: { label: "جديد", cls: "badge_new" },
+    completed: { label: "مكتمل", cls: "badge_ready" },
+    cancelled: { label: "ملغي", cls: "badge_canceled" },
+    confirmed: { label: "مؤكد", cls: "badge_ready" },
+    delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
-  const statusObj = statusMap[order.order_status] || { label: order.order_status, cls: "" };
+  const statusObj = statusMap[order.order_status] || {
+    label: order.order_status,
+    cls: "",
+  };
 
   const overlay = document.createElement("div");
   overlay.id = "order_detail_overlay";
@@ -2797,17 +3155,24 @@ function openOrderDetails(orderId, source) {
   overlay.style.alignItems = "center";
   overlay.style.justifyContent = "center";
   overlay.style.zIndex = "10000";
-  
-  let itemsHtml = (order.items || []).map(item => {
-    let prod = products.find(p => p.id === item.product_id);
-    let variantName = "";
-    if (prod && prod.variants) {
-       let v = prod.variants.find(v => parseFloat(v.price) === parseFloat(item.unit_price));
-       if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
-    }
-    let name = prod ? prod.product_name + variantName : `صنف #${item.product_id}`;
-    let subtotal = (parseFloat(item.unit_price) * parseInt(item.quantity)).toFixed(2);
-    return `
+
+  let itemsHtml = (order.items || [])
+    .map((item) => {
+      let prod = products.find((p) => p.id === item.product_id);
+      let variantName = "";
+      if (prod && prod.variants) {
+        let v = prod.variants.find(
+          (v) => parseFloat(v.price) === parseFloat(item.unit_price),
+        );
+        if (v && v.name !== prod.product_name) variantName = v.name + " - ";
+      }
+      let name = prod
+        ? variantName + prod.product_name
+        : ` صنف #${item.product_id}`;
+      let subtotal = (
+        parseFloat(item.unit_price) * parseInt(item.quantity)
+      ).toFixed(2);
+      return `
       <tr>
         <td>${name}</td>
         <td>${item.quantity}</td>
@@ -2815,14 +3180,19 @@ function openOrderDetails(orderId, source) {
         <td>${subtotal} ج.م</td>
       </tr>
     `;
-  }).join('');
+    })
+    .join("");
 
   const deliveryFee = parseFloat(order.delivery_fee || 0);
   const itemsTotal = parseFloat(order.total_amount || 0) - deliveryFee;
 
   // قسم تخصيص الدليفري — يظهر فقط لطلبات الأونلاين نوع delivery
-  const isOnlineDelivery = (source === 'online') && (order.order_type === 'delivery') && (order.order_status !== 'cancelled');
-  const deliveryAssignSection = isOnlineDelivery ? `
+  const isOnlineDelivery =
+    source === "online" &&
+    order.order_type === "delivery" &&
+    order.order_status !== "cancelled";
+  const deliveryAssignSection = isOnlineDelivery
+    ? `
     <div id="od_delivery_section" style="
       margin:20px 0 4px; background:rgba(201,168,76,0.06);
       border:1px solid rgba(201,168,76,0.25); border-radius:12px; padding:16px;
@@ -2837,7 +3207,8 @@ function openOrderDetails(orderId, source) {
         <p style="color:var(--color-subtext);font-size:13px;text-align:center;">جاري تحميل المناديب...</p>
       </div>
     </div>
-  ` : '';
+  `
+    : "";
 
   overlay.innerHTML = `
     <div style="background:var(--color-bg); border:1px solid var(--color-primary); border-radius:16px; width:680px; max-width:95vw; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.5); position:relative; overflow:hidden;">
@@ -2852,11 +3223,11 @@ function openOrderDetails(orderId, source) {
         <div class="order_detail_info_grid">
           <div class="info_group">
             <h4>العميل</h4>
-            <p>${order.customer_name || 'عميل نقدي'}</p>
+            <p>${order.customer_name || "عميل نقدي"}</p>
           </div>
           <div class="info_group">
             <h4>الهاتف</h4>
-            <p>${order.customer_phone || '---'}</p>
+            <p>${order.customer_phone || "---"}</p>
           </div>
           <div class="info_group">
             <h4>نوع الطلب</h4>
@@ -2864,20 +3235,33 @@ function openOrderDetails(orderId, source) {
           </div>
           <div class="info_group">
             <h4>العنوان</h4>
-            <p>${(typeof order.address === 'object' && order.address !== null) 
-                 ? order.address.address 
-                 : (order.customer_address || order.address || order.customer_notes || '---')}</p>
+            <p>${
+              typeof order.address === "object" && order.address !== null
+                ? order.address.address
+                : order.customer_address ||
+                  order.address ||
+                  order.customer_notes ||
+                  "---"
+            }</p>
           </div>
-          ${order.delivery_person_name ? `
+          ${
+            order.delivery_person_name
+              ? `
           <div class="info_group">
             <h4 style="color:var(--color-primary)">المندوب المخصص</h4>
             <p style="font-weight:bold; color:var(--color-primary)">${order.delivery_person_name}</p>
-          </div>` : ''}
-          ${order.customer_notes ? `
+          </div>`
+              : ""
+          }
+          ${
+            order.customer_notes
+              ? `
           <div class="info_group" style="grid-column: 1 / -1;">
             <h4>ملاحظات</h4>
             <p>${order.customer_notes}</p>
-          </div>` : ''}
+          </div>`
+              : ""
+          }
         </div>
 
         ${deliveryAssignSection}
@@ -2915,13 +3299,21 @@ function openOrderDetails(orderId, source) {
 
         <div style="margin-top:24px; display:flex; flex-direction:column; gap:12px;">
           <div style="display:flex; justify-content:center; gap:12px;">
-            ${order.order_status === 'new' ? `
+            ${
+              order.order_status === "new"
+                ? `
               <button id="od_accept_btn" onclick="acceptOrderFromModal(${order.id}, '${source}')" style="background:var(--color-primary); color:#000; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; cursor:pointer; font-family:Cairo,sans-serif; font-size:12px;"> قبول الطلب</button>
-            ` : ''}
+            `
+                : ""
+            }
             
-            ${order.order_status !== 'cancelled' ? `
+            ${
+              order.order_status !== "cancelled"
+                ? `
               <button onclick="document.getElementById('order_detail_overlay').remove(); if('${source}'==='online') printOrderFromOnline(${order.id}); else printOrderFromList(${order.id});" style="background:#5c5c5c; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-weight:bold; cursor:pointer; font-family:Cairo,sans-serif; font-size:13px;">🖨 طباعة</button>
-            ` : ''}
+            `
+                : ""
+            }
             
             <button onclick="document.getElementById('order_detail_overlay').remove()" style="background:rgba(255,255,255,0.08); color:var(--color-subtext); border:1px solid rgba(255,255,255,0.1); padding:10px 24px; border-radius:8px; font-weight:bold; cursor:pointer; font-family:Cairo,sans-serif; font-size:13px;">إغلاق</button>
           </div>
@@ -2931,7 +3323,9 @@ function openOrderDetails(orderId, source) {
   `;
 
   document.body.appendChild(overlay);
-  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.onclick = (e) => {
+    if (e.target === overlay) overlay.remove();
+  };
 
   // إذا كان طلب أونلاين دليفري → حمّل قائمة المناديب
   if (isOnlineDelivery) {
@@ -2961,13 +3355,15 @@ async function acceptOrderFromModal(orderId, source) {
   try {
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ order_status: "confirmed" })
+      body: JSON.stringify({ order_status: "confirmed" }),
     });
 
     if (!res.ok) throw new Error("فشل تحديث الحالة");
 
     // ✅ تحديث الـ badge داخل المودال
-    const statusBadge = document.querySelector("#order_detail_overlay .order_status");
+    const statusBadge = document.querySelector(
+      "#order_detail_overlay .order_status",
+    );
     if (statusBadge) {
       statusBadge.textContent = "مؤكد";
       statusBadge.className = "order_status badge_ready";
@@ -2990,16 +3386,16 @@ async function acceptOrderFromModal(orderId, source) {
 
     // ✅ Update local memory state so re-renders use fresh data
     const updateInList = (list) => {
-      const idx = list.findIndex(o => String(o.id) === String(orderId));
+      const idx = list.findIndex((o) => String(o.id) === String(orderId));
       if (idx !== -1) {
         list[idx] = { ...list[idx], order_status: "confirmed" };
       }
     };
     updateInList(onlineOrdersList);
-    if (typeof allOrdersList !== 'undefined') updateInList(allOrdersList);
+    if (typeof allOrdersList !== "undefined") updateInList(allOrdersList);
 
     // تحديث القائمة في الخلفية
-    if (source === 'online') {
+    if (source === "online") {
       updateOnlineStats();
       renderOnlineOrders();
     } else {
@@ -3007,7 +3403,6 @@ async function acceptOrderFromModal(orderId, source) {
     }
 
     showToast("تم قبول الطلب بنجاح ✓", "success");
-
   } catch (err) {
     console.error(err);
     btn.disabled = false;
@@ -3036,7 +3431,9 @@ async function loadDeliveryRidersForModal(order) {
       const res = await apiFetch("/user/users/delivery", { suppress401: true });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const users = await res.json();
-      riders = Array.isArray(users) ? users.filter(u => u.role === "delivery" && u.is_active) : [];
+      riders = Array.isArray(users)
+        ? users.filter((u) => u.role === "delivery" && u.is_active)
+        : [];
       _deliveryRidersCache = riders;
     }
     renderRidersInModal(body, order, riders);
@@ -3050,7 +3447,7 @@ function renderRidersInModal(body, order, riders) {
   if (order.delivery_person_id) {
     const riderName = order.delivery_person_name || "تم التخصيص";
     const fee = parseFloat(order.delivery_fee || 0);
-    
+
     body.innerHTML = `
       <div style="display:flex; align-items:center; gap:10px; padding:12px;
         background:rgba(29,92,43,0.15); border:1px solid rgba(35,128,56,0.3); border-radius:10px;">
@@ -3083,7 +3480,9 @@ function renderRidersInModal(body, order, riders) {
   body.innerHTML = `
     <p style="color:var(--color-subtext);font-size:12px;margin-bottom:10px;">اختر المندوب:</p>
     <div style="display:flex; flex-wrap:wrap; gap:8px;">
-      ${riders.map(r => `
+      ${riders
+        .map(
+          (r) => `
         <button
           onclick="showFeeSelectorInModal(${r.id}, '${(r.full_name || r.username).replace(/'/g, "\\'")}', ${orderId})"
           style="background:rgba(201,168,76,0.1); border:1px solid rgba(201,168,76,0.3); color:var(--color-text);
@@ -3092,7 +3491,9 @@ function renderRidersInModal(body, order, riders) {
           onmouseover="this.style.background='rgba(201,168,76,0.25)'"
           onmouseout="this.style.background='rgba(201,168,76,0.1)'"
         >${r.full_name || r.username}</button>
-      `).join('')}
+      `,
+        )
+        .join("")}
     </div>
   `;
 }
@@ -3101,7 +3502,10 @@ function showFeeSelectorInModal(riderId, riderName, orderId) {
   const body = document.getElementById("od_delivery_body");
   if (!body) return;
 
-  const fees = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80,85, 90, 95, 100]; // أمثلة لرسوم التوصيل، يمكن تعديلها حسب الحاجة
+  const fees = [
+    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    100,
+  ]; // أمثلة لرسوم التوصيل، يمكن تعديلها حسب الحاجة
 
   body.innerHTML = `
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
@@ -3115,20 +3519,25 @@ function showFeeSelectorInModal(riderId, riderName, orderId) {
     </div>
     <p style="color:var(--color-subtext);font-size:12px;margin-bottom:8px;">اختر رسوم التوصيل:</p>
     <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px;">
-      ${fees.map(fee => `
+      ${fees
+        .map(
+          (fee) => `
         <button
           onclick="assignDeliveryToOnlineOrder(${orderId}, ${riderId}, '${riderName}', ${fee})"
           class="delivery_fee_btn"
           style="font-size:13px; padding:8px 4px;"
         >${fee} ج.م</button>
-      `).join('')}
+      `,
+        )
+        .join("")}
     </div>
   `;
 }
 
 async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
   const body = document.getElementById("od_delivery_body");
-  if (body) body.innerHTML = `<p style="color:var(--color-subtext);font-size:13px;text-align:center;">جاري الحفظ...</p>`;
+  if (body)
+    body.innerHTML = `<p style="color:var(--color-subtext);font-size:13px;text-align:center;">جاري الحفظ...</p>`;
 
   try {
     const res = await apiFetch(`/orders/${orderId}`, {
@@ -3136,45 +3545,48 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
       body: JSON.stringify({
         order_status: "confirmed",
         delivery_person_id: riderId,
-        delivery_fee: parseFloat(fee)
-      })
+        delivery_fee: parseFloat(fee),
+      }),
     });
 
     if (!res.ok) throw new Error("فشل التحديث");
 
     // تحديث الأرقام في السامري داخل المودال
-    const feeEl      = document.getElementById("od_delivery_fee");
+    const feeEl = document.getElementById("od_delivery_fee");
     const itemsTotEl = document.getElementById("od_items_total");
-    const grandEl    = document.getElementById("od_grand_total");
+    const grandEl = document.getElementById("od_grand_total");
 
     const itemsAmt = parseFloat(itemsTotEl ? itemsTotEl.textContent : 0) || 0;
-    if (feeEl)   feeEl.textContent   = fee.toFixed(2) + " ج.م";
+    if (feeEl) feeEl.textContent = fee.toFixed(2) + " ج.م";
     if (grandEl) grandEl.textContent = (itemsAmt + fee).toFixed(2) + " ج.م";
 
     // ✅ Update local memory state so re-renders/re-opens use fresh data
     const updateInList = (list) => {
-      const idx = list.findIndex(o => String(o.id) === String(orderId));
+      const idx = list.findIndex((o) => String(o.id) === String(orderId));
       if (idx !== -1) {
-        list[idx] = { 
-          ...list[idx], 
-          order_status: "confirmed", 
+        list[idx] = {
+          ...list[idx],
+          order_status: "confirmed",
           delivery_person_id: riderId,
           delivery_person_name: riderName,
-          delivery_fee: fee
+          delivery_fee: fee,
         };
       }
     };
     updateInList(onlineOrdersList);
-    if (typeof allOrdersList !== 'undefined') updateInList(allOrdersList);
+    if (typeof allOrdersList !== "undefined") updateInList(allOrdersList);
 
     // ✅ Update modal header badge to confirmed
-    const statusBadge = document.querySelector("#order_detail_overlay .order_status");
+    const statusBadge = document.querySelector(
+      "#order_detail_overlay .order_status",
+    );
     if (statusBadge) {
       statusBadge.textContent = "مؤكد";
       statusBadge.className = "order_status badge_ready";
     }
 
-    if (body) body.innerHTML = `
+    if (body)
+      body.innerHTML = `
       <div style="display:flex; align-items:center; gap:10px; padding:10px;
         background:rgba(29,92,43,0.2); border:1px solid rgba(35,128,56,0.4); border-radius:8px;">
         <svg width="18" height="18" fill="none" stroke="#3d9e6b" stroke-width="2.5" viewBox="0 0 24 24">
@@ -3193,10 +3605,10 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
     updateOnlineStats();
     renderOnlineOrders();
     showToast(`تم تخصيص ${riderName} برسوم ${fee} ج.م`, "success");
-
   } catch (err) {
     console.error(err);
-    if (body) body.innerHTML = `<p style="color:#e40411;font-size:13px;text-align:center;">حدث خطأ أثناء الحفظ. حاول مرة أخرى.</p>`;
+    if (body)
+      body.innerHTML = `<p style="color:#e40411;font-size:13px;text-align:center;">حدث خطأ أثناء الحفظ. حاول مرة أخرى.</p>`;
     showToast("حدث خطأ أثناء تخصيص الدليفري", "error");
   }
 }
@@ -3208,20 +3620,20 @@ let editModalState = {
   originalOrder: null,
   cart: [],
   activeCatId: null,
-  sourceList: '',
+  sourceList: "",
   orderType: null,
   selectedDelivery: null,
   selectedDeliveryFee: null,
   selectedDineInFee: null,
-  customerName: '',
-  customerPhone: '',
-  customerAddress: ''
+  customerName: "",
+  customerPhone: "",
+  customerAddress: "",
 };
 
 function openEditOrderModal(orderId, sourceList) {
-  const list = (sourceList === 'online') ? onlineOrdersList : allOrdersList;
-  const order = list.find(o => o.id === orderId);
-  
+  const list = sourceList === "online" ? onlineOrdersList : allOrdersList;
+  const order = list.find((o) => o.id === orderId);
+
   if (!order) {
     showToast("لا يمكن العثور على الطلب!", "error");
     return;
@@ -3230,19 +3642,22 @@ function openEditOrderModal(orderId, sourceList) {
   // إغلاق تفاصيل الطلب العادية إن كانت مفتوحة
   const detailOverlay = document.getElementById("order_detail_overlay");
   if (detailOverlay) detailOverlay.remove();
-  
+
   editModalState.originalOrder = order;
   editModalState.activeCatId = categories.length > 0 ? categories[0].id : null;
   editModalState.sourceList = sourceList;
-  
+
   // Initialize order type and fees for the "mini cashier"
-  editModalState.orderType = (order.order_type === 'hall') ? 'dine_in' : order.order_type;
-  editModalState.selectedDelivery = order.delivery_person_id ? { id: order.delivery_person_id, name: order.delivery_person_name } : null;
-  
-  if (editModalState.orderType === 'delivery') {
+  editModalState.orderType =
+    order.order_type === "hall" ? "dine_in" : order.order_type;
+  editModalState.selectedDelivery = order.delivery_person_id
+    ? { id: order.delivery_person_id, name: order.delivery_person_name }
+    : null;
+
+  if (editModalState.orderType === "delivery") {
     editModalState.selectedDeliveryFee = parseFloat(order.delivery_fee) || 0;
     editModalState.selectedDineInFee = null;
-  } else if (editModalState.orderType === 'dine_in') {
+  } else if (editModalState.orderType === "dine_in") {
     editModalState.selectedDineInFee = parseFloat(order.delivery_fee) || 0;
     editModalState.selectedDeliveryFee = null;
     editModalState.selectedDelivery = null;
@@ -3253,29 +3668,36 @@ function openEditOrderModal(orderId, sourceList) {
   }
 
   // Initialize customer info for editing
-  editModalState.customerName = order.customer_name || '';
-  editModalState.customerPhone = order.customer_phone || '';
-  editModalState.customerAddress = (typeof order.address === 'object' && order.address !== null) ? order.address.address : (order.customer_address || order.address || '');
+  editModalState.customerName = order.customer_name || "";
+  editModalState.customerPhone = order.customer_phone || "";
+  editModalState.customerAddress =
+    typeof order.address === "object" && order.address !== null
+      ? order.address.address
+      : order.customer_address || order.address || "";
 
-  editModalState.cart = (order.items || []).map(item => {
-    let prod = products.find(p => p.id === item.product_id);
+  editModalState.cart = (order.items || []).map((item) => {
+    let prod = products.find((p) => p.id === item.product_id);
     let name = prod ? prod.product_name : `صنف #${item.product_id}`;
     let hasVariant = false;
     if (prod && prod.variants) {
-       let v = prod.variants.find(v => parseFloat(v.price) === parseFloat(item.unit_price));
-       if (v) {
-         name = prod.product_name + " - " + v.name;
-         hasVariant = true;
-       }
+      let v = prod.variants.find(
+        (v) => parseFloat(v.price) === parseFloat(item.unit_price),
+      );
+      if (v) {
+        name = prod.product_name + " - " + v.name;
+        hasVariant = true;
+      }
     }
     return {
       qty: parseInt(item.quantity) || 1,
       item: {
-        id: hasVariant ? item.product_id + "_" + Date.now() + Math.random() : item.product_id, // we might need variant ID strictly later if applicable, but currently variants are matched by price
+        id: hasVariant
+          ? item.product_id + "_" + Date.now() + Math.random()
+          : item.product_id, // we might need variant ID strictly later if applicable, but currently variants are matched by price
         originalProductId: item.product_id,
         name: name,
-        price: parseFloat(item.unit_price)
-      }
+        price: parseFloat(item.unit_price),
+      },
     };
   });
 
@@ -3322,14 +3744,14 @@ function renderEditOrderModal() {
           
           <div style="flex:1; overflow-y:auto; padding:0 0 10px 0;">
             <!-- Mini Customer Info Card (Matching Cashier Style) -->
-            <div id="edit_modal_customer_form" style="padding: 0 16px; margin-bottom: 12px; display: ${editModalState.orderType ? 'block' : 'none'};">
+            <div id="edit_modal_customer_form" style="padding: 0 16px; margin-bottom: 12px; display: ${editModalState.orderType ? "block" : "none"};">
                <div class="delivery_customer_card" style="margin-top: 0; box-shadow: none; border: 1px solid rgba(201,168,76,0.2);">
                   <div class="dcf_title" id="edit_modal_dcf_title">
                      <div style="display:flex; align-items:center; gap:6px;">
                         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                         </svg>
-                        <span>${editModalState.orderType === 'delivery' ? 'تعديل بيانات عميل الديليفري' : 'تعديل بيانات العميل (اختياري)'}</span>
+                        <span>${editModalState.orderType === "delivery" ? "تعديل بيانات عميل الديليفري" : "تعديل بيانات العميل (اختياري)"}</span>
                      </div>
                      <button class="dcf_close_btn" onclick="clearOrderTypeInEditModal()" title="إغلاق وإلغاء نوع الطلب">✕</button>
                   </div>
@@ -3397,7 +3819,7 @@ function renderEditModalOrderTypeButtons() {
   if (!container) return;
   container.innerHTML = "";
 
-  ORDER_TYPES.forEach(t => {
+  ORDER_TYPES.forEach((t) => {
     const btn = document.createElement("button");
     const isActive = editModalState.orderType === t.key;
     btn.className = "order_type_btn" + (isActive ? " active" : "");
@@ -3419,7 +3841,11 @@ function renderEditModalOrderTypeBadge() {
 
   badge.style.display = "flex";
 
-  if (editModalState.orderType === "delivery" && editModalState.selectedDelivery && editModalState.selectedDeliveryFee !== null) {
+  if (
+    editModalState.orderType === "delivery" &&
+    editModalState.selectedDelivery &&
+    editModalState.selectedDeliveryFee !== null
+  ) {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">${editModalState.selectedDelivery.name}</span>
@@ -3436,7 +3862,7 @@ function renderEditModalOrderTypeBadge() {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">صالة</span>
-      ${editModalState.selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${editModalState.selectedDineInFee} ج.م</span>` : ''}
+      ${editModalState.selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${editModalState.selectedDineInFee} ج.م</span>` : ""}
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   } else if (editModalState.orderType === "delivery") {
@@ -3453,7 +3879,7 @@ function clearOrderTypeInEditModal() {
   editModalState.selectedDeliveryFee = null;
   editModalState.selectedDineInFee = null;
   editModalState.orderType = null;
-  
+
   const customerForm = document.getElementById("edit_modal_customer_form");
   if (customerForm) customerForm.style.display = "none";
 
@@ -3468,12 +3894,12 @@ function selectOrderTypeInEditModal(type) {
     customerForm.style.display = "block";
     const title = document.getElementById("edit_modal_dcf_title");
     if (title) {
-       title.innerHTML = `
+      title.innerHTML = `
          <div style="display:flex; align-items:center; gap:6px;">
            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
            </svg>
-           <span>${type === 'delivery' ? 'تعديل بيانات عميل الديليفري' : 'تعديل بيانات العميل (اختياري)'}</span>
+           <span>${type === "delivery" ? "تعديل بيانات عميل الديليفري" : "تعديل بيانات العميل (اختياري)"}</span>
          </div>
          <button class="dcf_close_btn" onclick="hideEditModalCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
        `;
@@ -3518,14 +3944,17 @@ async function showDeliveryModalInEditModal() {
       const res = await apiFetch("/user/users/delivery", { suppress401: true });
       if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
       const users = await res.json();
-      riders = Array.isArray(users) ? users.filter(u => u.role === "delivery" && u.is_active) : [];
+      riders = Array.isArray(users)
+        ? users.filter((u) => u.role === "delivery" && u.is_active)
+        : [];
       _deliveryRidersCache = riders;
     }
     renderDeliveryNamesInEditModal(riders);
   } catch (err) {
     console.error("خطأ في جلب الدليفري:", err);
     const list = document.getElementById("edit_modal_delivery_names_list");
-    if (list) list.innerHTML = `<p style="color:#e40411;text-align:center;font-size:12px;padding:10px">فشل تحميل المناديب</p>`;
+    if (list)
+      list.innerHTML = `<p style="color:#e40411;text-align:center;font-size:12px;padding:10px">فشل تحميل المناديب</p>`;
   }
 }
 
@@ -3539,11 +3968,15 @@ function renderDeliveryNamesInEditModal(riders) {
   }
 
   list.innerHTML = "";
-  riders.forEach(r => {
+  riders.forEach((r) => {
     const btn = document.createElement("button");
     btn.className = "delivery_name_btn";
     btn.textContent = r.full_name || r.username;
-    btn.onclick = () => showDeliveryFeeSelectorInEditModal({ id: r.id, name: r.full_name || r.username });
+    btn.onclick = () =>
+      showDeliveryFeeSelectorInEditModal({
+        id: r.id,
+        name: r.full_name || r.username,
+      });
     list.appendChild(btn);
   });
 }
@@ -3552,7 +3985,10 @@ function showDeliveryFeeSelectorInEditModal(rider) {
   const list = document.getElementById("edit_modal_delivery_names_list");
   if (!list) return;
 
-  const fees = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+  const fees = [
+    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    100,
+  ];
 
   list.innerHTML = `
     <button onclick="showDeliveryModalInEditModal()" style="
@@ -3565,9 +4001,10 @@ function showDeliveryFeeSelectorInEditModal(rider) {
   `;
 
   const grid = document.createElement("div");
-  grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:8px;";
+  grid.style.cssText =
+    "display:grid;grid-template-columns:repeat(4,1fr);gap:8px;";
 
-  fees.forEach(fee => {
+  fees.forEach((fee) => {
     const btn = document.createElement("button");
     btn.className = "delivery_fee_btn";
     btn.textContent = `${fee} ج.م`;
@@ -3590,7 +4027,10 @@ function showDineInFeeSelectorInEditModal() {
   const container = document.getElementById("edit_modal_sub_container");
   if (!container) return;
 
-  const fees = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+  const fees = [
+    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    100,
+  ];
 
   container.style.display = "flex";
   container.innerHTML = `
@@ -3602,9 +4042,13 @@ function showDineInFeeSelectorInEditModal() {
       <div class="delivery_modal_body">
         <p style="color:var(--color-subtext);font-size:13px;text-align:center;margin-bottom:16px">اختر قيمة رسوم الخدمة</p>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-          ${fees.map(fee => `
+          ${fees
+            .map(
+              (fee) => `
             <button class="delivery_fee_btn" onclick="selectDineInFeeInEditModal(${fee})">${fee} ج.م</button>
-          `).join('')}
+          `,
+            )
+            .join("")}
           <button class="delivery_fee_btn" onclick="selectDineInFeeInEditModal(0)" style="background:rgba(255,255,255,0.05);color:var(--color-subtext)">بدون</button>
         </div>
       </div>
@@ -3647,9 +4091,10 @@ function renderEditModalCategories() {
   if (!container) return;
   container.innerHTML = "";
 
-  categories.forEach(cat => {
+  categories.forEach((cat) => {
     const btn = document.createElement("button");
-    btn.className = "tab_btn" + (cat.id === editModalState.activeCatId ? " active" : "");
+    btn.className =
+      "tab_btn" + (cat.id === editModalState.activeCatId ? " active" : "");
     btn.textContent = cat.cat_name;
     btn.onclick = () => {
       editModalState.activeCatId = cat.id;
@@ -3665,19 +4110,25 @@ function renderEditModalItems() {
   if (!grid) return;
   grid.innerHTML = "";
 
-  const catProducts = products.filter(p => p.cat_id === editModalState.activeCatId && p.is_available);
+  const catProducts = products.filter(
+    (p) => p.cat_id === editModalState.activeCatId && p.is_available,
+  );
   if (catProducts.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);grid-column:1/-1;text-align:center;padding:30px">لا توجد أصناف في هذا التصنيف</p>`;
     return;
   }
 
-  catProducts.forEach(product => {
+  catProducts.forEach((product) => {
     const variants = product.variants || [];
     const price = product.price || (variants[0] ? variants[0].price : 0);
-    const priceLabel = variants.length > 1 ? `بدءاً من ${price} ج.م` : `${price} ج.م`;
+    const priceLabel =
+      variants.length > 1 ? `بدءاً من ${price} ج.م` : `${price} ج.م`;
 
-    const description = product.description || product.desc || product.product_desc || "";
-    const descriptionHtml = description ? `<p style="font-size: 11px; color: var(--color-subtext); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; margin:0">${description}</p>` : "";
+    const description =
+      product.description || product.desc || product.product_desc || "";
+    const descriptionHtml = description
+      ? `<p style="font-size: 11px; color: var(--color-subtext); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; margin:0">${description}</p>`
+      : "";
 
     const card = document.createElement("div");
     card.className = "item_card";
@@ -3693,10 +4144,16 @@ function renderEditModalItems() {
 
 // --------------------------- Edit Modal Cart ---------------------------
 function addEditModalCartItem(itemInfo) {
-  let existing = editModalState.cart.find(c => String(c.item.id) === String(itemInfo.id));
+  let existing = editModalState.cart.find(
+    (c) => String(c.item.id) === String(itemInfo.id),
+  );
   if (!existing && itemInfo.originalProductId) {
-      // fallback matching by price & name if ID format differs between local added vs loaded
-      existing = editModalState.cart.find(c => c.item.originalProductId === itemInfo.originalProductId && c.item.price === itemInfo.price);
+    // fallback matching by price & name if ID format differs between local added vs loaded
+    existing = editModalState.cart.find(
+      (c) =>
+        c.item.originalProductId === itemInfo.originalProductId &&
+        c.item.price === itemInfo.price,
+    );
   }
 
   if (existing) {
@@ -3772,11 +4229,20 @@ function updateEditModalGrandTotal() {
   const totalEl = document.getElementById("edit_modal_items_total");
   if (!totalEl) return;
 
-  const itemsTotal = editModalState.cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
+  const itemsTotal = editModalState.cart.reduce(
+    (sum, c) => sum + c.item.price * c.qty,
+    0,
+  );
   let fee = 0;
-  if (editModalState.orderType === "delivery" && editModalState.selectedDeliveryFee !== null) {
+  if (
+    editModalState.orderType === "delivery" &&
+    editModalState.selectedDeliveryFee !== null
+  ) {
     fee = editModalState.selectedDeliveryFee;
-  } else if (editModalState.orderType === "dine_in" && editModalState.selectedDineInFee !== null) {
+  } else if (
+    editModalState.orderType === "dine_in" &&
+    editModalState.selectedDineInFee !== null
+  ) {
     fee = editModalState.selectedDineInFee;
   }
 
@@ -3792,7 +4258,12 @@ function removeFromEditModalCart(idx) {
 function handleEditModalProductClick(product, defaultPrice) {
   const variants = product.variants || [];
   if (variants.length <= 1) {
-    addEditModalCartItem({ originalProductId: product.id, id: product.id, name: product.product_name, price: defaultPrice });
+    addEditModalCartItem({
+      originalProductId: product.id,
+      id: product.id,
+      name: product.product_name,
+      price: defaultPrice,
+    });
     return;
   }
 
@@ -3812,12 +4283,17 @@ function handleEditModalProductClick(product, defaultPrice) {
     <p style="color:var(--color-subtext);font-size:13px;text-align:center;margin:0">اختر الحجم (تعديل)</p>
   `;
 
-  variants.forEach(v => {
+  variants.forEach((v) => {
     const btn = document.createElement("button");
     btn.style.cssText = `background:var(--color-primary-light);border:1px solid var(--color-primary-border);border-radius:10px;padding:10px 16px;color:var(--color-text);font-family:Cairo,sans-serif;font-size:14px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:center;`;
-    btn.innerHTML = `<span>${v.name}</span><span style="color:var(--color-primary)">${parseFloat(v.price)} ج.م</span>`;
+    btn.innerHTML = ` <span>${v.name}</span><span style="color:var(--color-primary)">${parseFloat(v.price)} ج.م</span>`;
     btn.onclick = () => {
-      addEditModalCartItem({ originalProductId: product.id, id: `${product.id}_${v.id}`, name: `${product.product_name} - ${v.name}`, price: parseFloat(v.price) });
+      addEditModalCartItem({
+        originalProductId: product.id,
+        id:
+          `${product.id}_${v.id}, name: ${v.name}` - `${product.product_name}`,
+        price: parseFloat(v.price),
+      });
       overlay.remove();
     };
     box.appendChild(btn);
@@ -3839,7 +4315,9 @@ async function updateEditOrderConfirm() {
     return;
   }
 
-  const confirmed = await showCustomActionConfirm("هل أنت متأكد من حفظ التعديلات على هذا الطلب؟");
+  const confirmed = await showCustomActionConfirm(
+    "هل أنت متأكد من حفظ التعديلات على هذا الطلب؟",
+  );
   if (!confirmed) return;
 
   showGlobalLoader(true);
@@ -3848,21 +4326,24 @@ async function updateEditOrderConfirm() {
     const orig = editModalState.originalOrder;
 
     // تجهيز الأصناف الجديدة (نفس منطق الكاشير الأساسي للتعامل مع الـ variants)
-    const newItems = editModalState.cart.map(c => {
+    const newItems = editModalState.cart.map((c) => {
       let prodId = c.item.originalProductId || c.item.id;
-      if (typeof prodId === 'string' && prodId.includes('_')) {
-        prodId = parseInt(prodId.split('_')[0], 10);
+      if (typeof prodId === "string" && prodId.includes("_")) {
+        prodId = parseInt(prodId.split("_")[0], 10);
       } else {
         prodId = parseInt(prodId, 10);
       }
       return {
         product_id: prodId,
         quantity: c.qty,
-        unit_price: c.item.price
+        unit_price: c.item.price,
       };
     });
 
-    const mappedOrderType = editModalState.orderType === "dine_in" ? "hall" : editModalState.orderType;
+    const mappedOrderType =
+      editModalState.orderType === "dine_in"
+        ? "hall"
+        : editModalState.orderType;
 
     // تجهيز حمولة البيانات (Payload) للـ PATCH
     const payload = {
@@ -3876,15 +4357,22 @@ async function updateEditOrderConfirm() {
       items: newItems,
       address_id: orig.address_id,
       customer_address: editModalState.customerAddress,
-      delivery_person_id: editModalState.selectedDelivery ? editModalState.selectedDelivery.id : null,
-      delivery_fee: (editModalState.orderType === "delivery" ? editModalState.selectedDeliveryFee : (editModalState.orderType === "dine_in" ? editModalState.selectedDineInFee : 0)),
-      offer_code: orig.offer_code || null
+      delivery_person_id: editModalState.selectedDelivery
+        ? editModalState.selectedDelivery.id
+        : null,
+      delivery_fee:
+        editModalState.orderType === "delivery"
+          ? editModalState.selectedDeliveryFee
+          : editModalState.orderType === "dine_in"
+            ? editModalState.selectedDineInFee
+            : 0,
+      offer_code: orig.offer_code || null,
     };
 
     // إرسال طلب التحديث (PATCH)
     const res = await apiFetch(`/orders/${orig.id}`, {
       method: "PATCH",
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
@@ -3901,9 +4389,18 @@ async function updateEditOrderConfirm() {
     if (modal) modal.remove();
 
     // Prepare fully populated local order object
-    const itemsTotal = newItems.reduce((sum, item) => sum + (parseFloat(item.unit_price) * parseInt(item.quantity)), 0);
-    const deliveryFee = (editModalState.orderType === "delivery" ? editModalState.selectedDeliveryFee : (editModalState.orderType === "dine_in" ? editModalState.selectedDineInFee : 0)) || 0;
-    
+    const itemsTotal = newItems.reduce(
+      (sum, item) =>
+        sum + parseFloat(item.unit_price) * parseInt(item.quantity),
+      0,
+    );
+    const deliveryFee =
+      (editModalState.orderType === "delivery"
+        ? editModalState.selectedDeliveryFee
+        : editModalState.orderType === "dine_in"
+          ? editModalState.selectedDineInFee
+          : 0) || 0;
+
     const updatedLocalOrder = {
       ...orig,
       ...updatedOrder,
@@ -3913,20 +4410,24 @@ async function updateEditOrderConfirm() {
       customer_name: editModalState.customerName,
       customer_phone: editModalState.customerPhone,
       customer_address: editModalState.customerAddress,
-      delivery_person_id: editModalState.selectedDelivery ? editModalState.selectedDelivery.id : null,
-      delivery_person_name: editModalState.selectedDelivery ? editModalState.selectedDelivery.name : null,
-      total_amount: itemsTotal + deliveryFee
+      delivery_person_id: editModalState.selectedDelivery
+        ? editModalState.selectedDelivery.id
+        : null,
+      delivery_person_name: editModalState.selectedDelivery
+        ? editModalState.selectedDelivery.name
+        : null,
+      total_amount: itemsTotal + deliveryFee,
     };
 
     // تحديث القائمة المحلية فوراً لضمان ظهور التعديلات في الكارد (Card)
-    if (editModalState.sourceList === 'online') {
-      const idx = onlineOrdersList.findIndex(o => o.id === orig.id);
+    if (editModalState.sourceList === "online") {
+      const idx = onlineOrdersList.findIndex((o) => o.id === orig.id);
       if (idx !== -1) {
         onlineOrdersList[idx] = updatedLocalOrder;
         renderOnlineOrders();
       }
     } else {
-      const idx = allOrdersList.findIndex(o => o.id === orig.id);
+      const idx = allOrdersList.findIndex((o) => o.id === orig.id);
       if (idx !== -1) {
         allOrdersList[idx] = updatedLocalOrder;
         renderAllOrders();
@@ -3935,27 +4436,31 @@ async function updateEditOrderConfirm() {
 
     // طباعة الفاتورة المعدلة
     if (typeof printReceipt === "function") {
-      const cartMapped = (updatedLocalOrder.items || []).map(item => {
-        let prod = products.find(p => p.id === item.product_id);
+      const cartMapped = (updatedLocalOrder.items || []).map((item) => {
+        let prod = products.find((p) => p.id === item.product_id);
         let variantName = "";
         if (prod && prod.variants) {
-           let v = prod.variants.find(v => parseFloat(v.price) === parseFloat(item.unit_price));
-           if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
+          let v = prod.variants.find(
+            (v) => parseFloat(v.price) === parseFloat(item.unit_price),
+          );
+          if (v && v.name !== prod.product_name) variantName = v.name + " - ";
         }
-        let name = prod ? prod.product_name + variantName : `صنف #${item.product_id}`;
+        let name = prod
+          ? variantName + prod.product_name
+          : ` صنف #${item.product_id}`;
         return {
           qty: item.quantity,
           item: {
             name: name,
-            price: parseFloat(item.unit_price)
-          }
+            price: parseFloat(item.unit_price),
+          },
         };
       });
 
       const printData = {
         ...updatedLocalOrder,
         cart: cartMapped,
-        itemsTotal: itemsTotal
+        itemsTotal: itemsTotal,
       };
 
       printReceipt(printData);
@@ -3967,4 +4472,3 @@ async function updateEditOrderConfirm() {
     showGlobalLoader(false);
   }
 }
-
