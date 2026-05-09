@@ -26,7 +26,7 @@ function printReceipt(orderData) {
   
   let rawAddr = orderData.customerAddress || orderData.customer_address || orderData.address || '';
   let printAddrText = (typeof rawAddr === 'object' && rawAddr !== null) ? (rawAddr.address || rawAddr.name || '') : rawAddr;
-  const isDoublePrint = (orderData.orderType === 'delivery' || orderData.order_type === 'delivery' || orderData.orderType === 'takeaway' || orderData.order_type === 'takeaway');
+  const isDoublePrint = false; // (orderData.orderType === 'delivery' || orderData.order_type === 'delivery' || orderData.orderType === 'takeaway' || orderData.order_type === 'takeaway');
 
   const receiptContent = `
       <div class="receipt-header">

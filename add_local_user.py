@@ -41,8 +41,8 @@ def add_user():
         else:
             print(f"Adding user {username}...")
             cursor.execute("""
-                INSERT INTO users (username, full_name, role, phone, hashed_password, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                INSERT INTO users (username, full_name, role, phone, hashed_password, is_active, is_deleted, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?)
             """, (username, full_name, role, phone, hashed_password, now, now))
         
         conn.commit()

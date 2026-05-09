@@ -241,7 +241,7 @@ function showVariantPicker(product) {
     btn.onclick = () => {
       addToCart({
         id: `${product.id}_${v.id}`,
-        name: `${v.name} - ${product.product_name}`,
+        name: `${product.product_name} (${v.name})`,
         price: parseFloat(v.price),
       });
       overlay.remove();
@@ -605,7 +605,7 @@ function showConfirmModal(orderData) {
               variantName = " (" + v.name + ")";
           }
           let name = prod
-            ? variantName + prod.product_name
+            ? prod.product_name + variantName
             : `صنف #${item.product_id}`;
 
           return {
