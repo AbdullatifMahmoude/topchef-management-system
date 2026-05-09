@@ -1,0 +1,65 @@
+# ========================
+# Build & Distribution
+# ========================
+build/dist/
+build/build_temp/
+*.spec.bak
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+*.whl
+
+# ========================
+# Virtual Environment
+# ========================
+env/
+venv/
+.venv/
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+*.env.local
+
+# ========================
+# IDE & Editor
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vs/
+
+# ========================
+# OS Files
+# ========================
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ========================
+# Logs & Data (Runtime)
+# ========================
+*.log
+*.db
+logs/
+desktop/logs/
+desktop/data/
+
+# ========================
+# Temporary & Cache
+# ========================
+*.tmp
+*.bak
+.cache/
+dedent_launcher.py

@@ -2938,3 +2938,73 @@ SyntaxError: '(' was never closed
 {"timestamp": "2026-05-08 05:24:15", "level": "INFO", "name": "root", "message": "SYNC MODE: switched to REAL-TIME (WebSocket)"}
 {"timestamp": "2026-05-08 05:24:15", "level": "INFO", "name": "root", "message": "WebSocket state transition: connecting -> connected"}
 {"timestamp": "2026-05-08 05:24:15", "level": "INFO", "name": "root", "message": "Desktop bridge connected to cloud ping_interval=30s ping_timeout=20s"}
+[2026-05-09 02:17:59] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-09 02:17:59] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-09 02:17:59] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-09 02:17:59] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-09 02:17:59] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-09 02:18:00] INFO     topchef_desktop – 🚀 Sync: Desktop lifespan wrapper started.
+[2026-05-09 02:18:00] INFO     topchef_desktop – 🚀 Sync: Entering original app lifespan...
+[2026-05-09 02:18:00] INFO     topchef_desktop – 🚀 Sync: Original lifespan entered successfully. Starting background tasks...
+[2026-05-09 02:18:00] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-09 02:18:00] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-09 02:18:01] INFO     topchef_desktop – Tray icon started
+[2026-05-09 02:18:01] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-09 02:18:01] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-09 02:18:10] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-09 02:18:20] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔄 Sync: Worker woke up (trigger set).
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:26] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-09 02:18:26] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:26] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:26] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:26] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:27] INFO     topchef_desktop – Cloud reconciliation applied 22 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 5, 'offers': 0, 'app_settings': 1, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 16, 'order_items': 0, 'order_status_history': 0}
+[2026-05-09 02:18:27] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:27] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:27] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:27] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:27] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:18:27] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:03] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:05] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:05] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:10] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:24] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:24] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:24] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:24] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:25] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:41] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:41] INFO     topchef_desktop – 🔄 Sync: Worker woke up (trigger set).
+[2026-05-09 02:19:42] INFO     topchef_desktop – 📤 Outbox: Found 1 pending events. Syncing...
+[2026-05-09 02:19:42] INFO     topchef_desktop – Outbox: Cloud response: {'accepted': 1, 'rejected': 0, 'errors': []}
+[2026-05-09 02:19:42] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-09 02:19:42] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-09 02:19:43] INFO     topchef_desktop – Cloud reconciliation applied 5 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 5, 'offers': 0, 'app_settings': 0, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 0, 'order_items': 0, 'order_status_history': 0}
+[2026-05-09 02:19:43] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:43] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:43] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:43] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:19:43] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:21:42] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=False)...
+[2026-05-09 02:21:43] INFO     topchef_desktop – Cloud reconciliation applied 5 rows: {'users': 0, 'categories': 0, 'products': 0, 'variants': 5, 'offers': 0, 'app_settings': 0, 'customers': 0, 'customer_addresses': 0, 'comments': 0, 'orders': 0, 'order_items': 0, 'order_status_history': 0}
+[2026-05-09 02:21:44] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:21:44] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:21:44] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:21:44] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-09 02:21:44] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.

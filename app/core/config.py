@@ -83,9 +83,19 @@ class Settings(BaseSettings):
     }
 
 
+def _resolve_env_file() -> str:
+    """Find .env next to the EXE in frozen mode, or in project root in dev."""
+    import sys
+    if getattr(sys, "frozen", False):
+        candidate = Path(sys.executable).parent / ".env"
+        if candidate.exists():
+            return str(candidate)
+    return ".env"
+
+
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    return Settings(_env_file=_resolve_env_file())
 
 
 settings = get_settings()

@@ -211,10 +211,6 @@ def main():
                 if seconds_since_failure < _sync_backoff_seconds:
                     continue
             
-            # If we just got the token and haven't synced yet, force a pull
-            if last_master_data_sync_at is None:
-                force_master_pull = True
-            
             # Lazy initialize the sync lock in the correct loop
             global _sync_lock
             if _sync_lock is None:
@@ -311,12 +307,7 @@ def main():
                                 )
                                 force_master_pull = True
 
-                        # 2. Pull cloud authoritative data into the local database.
                         now_mon = time.monotonic()
-                        # If we have no last sync time, always pull.
-                        if not last_master_data_sync_at:
-                            force_master_pull = True
-                            
                         should_pull = force_master_pull or (last_master_data_sync_at and (now_mon - last_pull_at_mon > 120))
                         
                         if should_pull:
@@ -344,8 +335,8 @@ def main():
                                 last_pull_at_mon = now_mon - 90 
                                 force_master_pull = False
 
-                        # 3. Periodic Heartbeat
-                        if time.monotonic() - last_heartbeat_at >= 60:
+                        # 3. Periodic Heartbeat (only if we have auth)
+                        if _auth_header_cache and time.monotonic() - last_heartbeat_at >= 60:
                             heartbeat_payload = {
                                 "device_id": device_id,
                                 "version": settings.VERSION,

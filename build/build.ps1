@@ -57,6 +57,15 @@ Write-Host "[3/4] Copying runtime files ..." -ForegroundColor Yellow
 # settings.json
 Copy-Item (Join-Path $ProjectRoot "desktop\settings.json") $DistDir -Force
 
+# .env (required for cloud SECRET_KEY so sync authentication works)
+$EnvFile = Join-Path $ProjectRoot ".env"
+if (Test-Path $EnvFile) {
+    Copy-Item $EnvFile $DistDir -Force
+    Write-Host "      * .env copied (cloud auth enabled)" -ForegroundColor Green
+} else {
+    Write-Host "      ! WARNING: No .env file found - cloud sync will use fallback key" -ForegroundColor Yellow
+}
+
 # version.txt
 Copy-Item (Join-Path $ProjectRoot "desktop\version.txt") $DistDir -Force
 
