@@ -1,6 +1,7 @@
 // print.js - ملف مسؤول عن طباعة فاتورة الكاشير بحجم 80 ملي -الطباعة
 function printReceipt(orderData) {
-  const orderNumber = orderData.orderNumber || orderData.order_number || orderData.id || "---";
+  const fullOrderNumber = orderData.orderNumber || orderData.order_number || orderData.id || "---";
+  const orderNumber = String(fullOrderNumber).includes('-') ? String(fullOrderNumber).split('-').pop() : fullOrderNumber;
   let cashierName = orderData.creator_name || orderData.cashierName || "---";
   const orderDate = orderData.created_at || orderData.order_date;
   
@@ -30,19 +31,24 @@ function printReceipt(orderData) {
 
   const receiptContent = `
       <div class="receipt-header">
-        <div class="header-row" style="position:relative; justify-content:center; min-height:50px; align-items:center;">
-          <!-- QR on Right -->
-          <div style="position:absolute; right:0; top:50%; transform:translateY(-50%);">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://topcheifmenu.vercel.app/" alt="QR" style="width:45px; height:45px;" />
-          </div>
-          
-          <!-- Order Number in Center -->
-          <h1 class="order-number" style="font-size:26px; font-weight:900; border:1px solid #000; padding:2px 8px; border-radius:4px;">#${orderNumber}</h1>
-          
-          <!-- Date/Time on Left -->
-          <div style="position:absolute; left:0; top:50%; transform:translateY(-50%); text-align:left; font-size:10px; font-weight:bold; line-height:1.2;">
+        <div class="header-row" style="display:flex; justify-content:space-between; align-items:center; min-height:70px; border-bottom:1px dashed #000; padding-bottom:5px;">
+          <!-- Left: Date/Time -->
+          <div style="text-align:right; font-size:11px; font-weight:900; line-height:1.3; flex:1;">
             <div>${formattedDate}</div>
             <div>${formattedTime}</div>
+          </div>
+          
+          <!-- Middle: Order Number -->
+          <div style="flex:2; text-align:center;">
+            <h1 class="order-number" style="display:inline-block; font-size:18px; font-weight:900; border:2px solid #000; padding:3px 6px; border-radius:5px; margin:0 5px;">
+              #${orderNumber}
+            </h1>
+          </div>
+          
+          <!-- Right: QR Code -->
+          <div style="flex:1; text-align:left;">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://top-chef-resturant.vercel.app/" 
+                 alt="QR" style="width:55px; height:55px; display:block; margin-left:auto;" />
           </div>
         </div>
         
@@ -153,7 +159,7 @@ function printReceipt(orderData) {
           justify-content: space-between;
           align-items: center;
         }
-        .order-number { font-size: 22px; font-weight: 900; }
+        .order-number { font-size: 18px; font-weight: 900; }
         .info-line {
           display: flex;
           justify-content: space-between;
