@@ -9,7 +9,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
-def add_user():
+def add_user(): 
     db_path = "build/dist/TopChef/data/topchef_local.db"
     if not os.path.exists(db_path):
         print(f"Error: {db_path} not found.")

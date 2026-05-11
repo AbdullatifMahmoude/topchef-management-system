@@ -3021,3 +3021,125 @@ SyntaxError: '(' was never closed
 [2026-05-09 20:02:56] INFO     topchef_desktop – Tray icon started
 [2026-05-09 20:02:56] INFO     topchef_desktop – Launching desktop window via pywebview.
 [2026-05-09 20:02:56] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-10 21:51:50] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-10 21:51:50] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-10 21:51:50] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-10 21:51:50] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-10 21:51:50] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-10 21:51:51] INFO     topchef_desktop – 🚀 Sync: Desktop lifespan wrapper started.
+[2026-05-10 21:51:51] INFO     topchef_desktop – 🚀 Sync: Entering original app lifespan...
+[2026-05-10 21:51:51] INFO     topchef_desktop – 🚀 Sync: Original lifespan entered successfully. Starting background tasks...
+[2026-05-10 21:51:51] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-10 21:51:51] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-10 21:51:52] INFO     topchef_desktop – Tray icon started
+[2026-05-10 21:51:52] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-10 21:51:52] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-10 21:51:53] INFO     topchef_desktop – Zoom injected at 100%
+[2026-05-10 21:52:01] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-10 21:52:11] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-10 21:52:20] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-10 21:52:20] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-10 21:52:20] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-10 21:52:20] INFO     topchef_desktop – Zoom injected at 100%
+[2026-05-10 21:52:20] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-10 21:52:20] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-10 21:52:20] INFO     topchef_desktop – 🔄 Sync: Worker woke up (trigger set).
+[2026-05-10 21:52:21] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:21] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:22] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:22] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:23] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:24] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:25] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:26] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:27] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:27] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:28] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:28] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:29] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:30] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:31] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:31] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:32] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:33] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:52:34] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-10 21:52:34] ERROR    topchef_desktop – Desktop background sync loop failed: (sqlite3.OperationalError) no such column: categories.updated_at
+[SQL: SELECT categories.id AS categories_id, categories.cat_name AS categories_cat_name, categories.is_active AS categories_is_active, categories.is_deleted AS categories_is_deleted, categories.updated_at AS categories_updated_at, categories.created_at AS categories_created_at 
+FROM categories 
+WHERE categories.id = ?]
+[parameters: (1,)]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[2026-05-10 21:53:23] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-10 21:53:23] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-10 21:53:23] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-10 21:53:23] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-10 21:53:23] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-10 21:53:25] INFO     topchef_desktop – 🚀 Sync: Desktop lifespan wrapper started.
+[2026-05-10 21:53:25] INFO     topchef_desktop – 🚀 Sync: Entering original app lifespan...
+[2026-05-10 21:53:25] INFO     topchef_desktop – 🚀 Sync: Original lifespan entered successfully. Starting background tasks...
+[2026-05-10 21:53:25] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-10 21:53:25] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-10 21:53:26] INFO     topchef_desktop – Tray icon started
+[2026-05-10 21:53:26] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-10 21:53:26] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-10 21:58:32] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-10 21:58:32] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-10 21:58:32] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-10 21:58:32] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-10 21:58:32] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-10 21:58:33] INFO     topchef_desktop – 🚀 Sync: Desktop lifespan wrapper started.
+[2026-05-10 21:58:33] INFO     topchef_desktop – 🚀 Sync: Entering original app lifespan...
+[2026-05-10 21:58:33] INFO     topchef_desktop – 🚀 Sync: Original lifespan entered successfully. Starting background tasks...
+[2026-05-10 21:58:33] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-10 21:58:33] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-10 21:58:34] INFO     topchef_desktop – Tray icon started
+[2026-05-10 21:58:34] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-10 21:58:34] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-10 21:58:35] INFO     topchef_desktop – Zoom injected successfully at 80%
+[2026-05-10 21:58:35] INFO     topchef_desktop – Zoom injected successfully at 80%
+[2026-05-10 21:58:46] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...

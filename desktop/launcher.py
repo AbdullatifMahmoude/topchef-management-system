@@ -69,6 +69,37 @@ class JSAPI:
             log.error(f"Native silent print failed: {e}")
             return False
 
+    def zoom_in(self):
+        """Increase zoom by 10%."""
+        level = min(config.get("zoom_level", 100) + 10, 200)
+        config.set("zoom_level", level)
+        config.save()
+        return level
+
+    def zoom_out(self):
+        """Decrease zoom by 10%."""
+        level = max(config.get("zoom_level", 100) - 10, 50)
+        config.set("zoom_level", level)
+        config.save()
+        return level
+
+    def zoom_reset(self):
+        """Reset zoom to 100%."""
+        config.set("zoom_level", 100)
+        config.save()
+        return 100
+
+    def set_zoom(self, level: int):
+        """Set zoom to a specific level (50-200)."""
+        level = max(50, min(200, int(level)))
+        config.set("zoom_level", level)
+        config.save()
+        return level
+
+    def get_zoom(self):
+        """Get current zoom level."""
+        return config.get("zoom_level", 100)
+
 CURRENT_VERSION = "1.0.0"
 
 async def check_for_updates():
@@ -602,15 +633,80 @@ def main():
             width=1280, height=800,
             on_top=True,  # Temporarily on top to ensure visibility after splash
         )
-        
-        def _on_shown():
-            """Bring window to foreground then disable always-on-top."""
-            import time
-            time.sleep(0.5)
+
+        def _inject_zoom():
+            """Inject zoom JS with multiple targets and retry logic."""
             try:
-                window.on_top = False  # Allow normal window behavior after showing
+                saved_zoom = config.get("zoom_level", 100)
+                zoom_js = """
+                (function() {
+                    console.log("Applying zoom: __ZOOM__%");
+                    var apply = function(level) {
+                        level = Math.max(50, Math.min(200, level));
+                        var val = level + '%';
+                        document.documentElement.style.zoom = val;
+                        if (document.body) document.body.style.zoom = val;
+                        
+                        if (window.pywebview && window.pywebview.api) {
+                            window.pywebview.api.set_zoom(level);
+                        }
+                        return level;
+                    };
+
+                    // Initial apply
+                    apply(__ZOOM__);
+
+                    if (window.__zoomInitialized) return;
+                    window.__zoomInitialized = true;
+
+                    document.addEventListener('keydown', function(e) {
+                        if (!e.ctrlKey) return;
+                        var current = parseInt(document.documentElement.style.zoom || '100');
+                        if (e.key === '+' || e.key === '=' || e.code === 'Equal') {
+                            e.preventDefault();
+                            apply(current + 10);
+                        } else if (e.key === '-' || e.code === 'Minus') {
+                            e.preventDefault();
+                            apply(current - 10);
+                        } else if (e.key === '0' || e.code === 'Digit0') {
+                            e.preventDefault();
+                            apply(100);
+                        }
+                    });
+
+                    document.addEventListener('wheel', function(e) {
+                        if (!e.ctrlKey) return;
+                        e.preventDefault();
+                        var current = parseInt(document.documentElement.style.zoom || '100');
+                        var delta = e.deltaY < 0 ? 10 : -10;
+                        apply(current + delta);
+                    }, {passive: false});
+                })();
+                """.replace("__ZOOM__", str(saved_zoom))
+                window.evaluate_js(zoom_js)
+                log.info("Zoom injected successfully at %d%%", saved_zoom)
+                return True
+            except Exception as e:
+                log.warning("Zoom injection failed: %s", e)
+                return False
+
+        # Register event
+        window.events.loaded += _inject_zoom
+
+        def _on_shown():
+            """Bring window to foreground, disable always-on-top, and force zoom injection."""
+            import time
+            time.sleep(1.0) # Wait a bit longer for WebView to be ready
+            try:
+                window.on_top = False
             except Exception:
                 pass
+            
+            # Aggressive retry for zoom injection
+            for i in range(5):
+                if _inject_zoom():
+                    break
+                time.sleep(1.0)
 
         log.info("Starting pywebview event loop.")
         webview.start(gui="edgechromium", func=_on_shown)

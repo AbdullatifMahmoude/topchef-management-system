@@ -16,5 +16,6 @@
     "log_max_bytes": 5242880,
     "log_backup_count": 5,
     "desktop_api_token": "",
-    "device_id": "a19dd88377a1"
+    "device_id": "a19dd88377a1",
+    "zoom_level": 100
 }

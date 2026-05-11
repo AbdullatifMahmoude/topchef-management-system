@@ -51,7 +51,7 @@ class Product(Base):
     is_available = Column(Boolean, default=True, nullable=False)
     is_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    update_at = Column(DateTime, default=datetime.utcnow,
+    updated_at = Column(DateTime, default=datetime.utcnow,
                        onupdate=datetime.utcnow, nullable=False)
 
     category = relationship("Category", back_populates="products")
