@@ -14,7 +14,9 @@ aiosqlite
 python-jose[cryptography]
 passlib
 bcrypt==4.0.1
-
+arabic_reshaper
+python-bidi
+qrcode
 # ── Desktop‑specific ─────────────────────────
 pywebview>=5.0           # Native window (WebView2 on Windows)
 pystray>=0.19            # System tray icon

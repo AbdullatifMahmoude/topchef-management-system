@@ -602,10 +602,10 @@ function showConfirmModal(orderData) {
               (v) => parseFloat(v.price) === parseFloat(item.unit_price),
             );
             if (v && v.name !== prod.product_name)
-              variantName = " (" + v.name + ")";
+              variantName = v.name + " - ";
           }
           let name = prod
-            ? prod.product_name + variantName
+            ? variantName + prod.product_name
             : `صنف #${item.product_id}`;
 
           return {
@@ -2649,7 +2649,7 @@ function printOrderFromOnline(orderId) {
       let v = prod.variants.find(
         (v) => parseFloat(v.price) === parseFloat(item.unit_price),
       );
-      if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
+      if (v && v.name !== prod.product_name) variantName = v.name + " - ";
     }
     let name = prod
       ? variantName + prod.product_name
@@ -2937,7 +2937,7 @@ function printOrderFromList(orderId) {
       let v = prod.variants.find(
         (v) => parseFloat(v.price) === parseFloat(item.unit_price),
       );
-      if (v && v.name !== prod.product_name) variantName = " (" + v.name + ")";
+      if (v && v.name !== prod.product_name) variantName = v.name + " - ";
     }
     let name = prod
       ? variantName + prod.product_name

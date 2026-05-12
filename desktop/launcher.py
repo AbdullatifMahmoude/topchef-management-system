@@ -60,11 +60,11 @@ from desktop.printer import thermal_printer
 
 class JSAPI:
     """The bridge between JavaScript and Python."""
-    def print_silent(self, html_content: str):
+    def print_silent(self, html_content: str, order_data: dict = None):
         """Queue exact frontend receipt HTML for silent printing."""
         log.info("Silent print requested from frontend.")
         try:
-            return thermal_printer.print_html(html_content, document_name="frontend-receipt")
+            return thermal_printer.print_html(html_content, document_name="frontend-receipt", order_data=order_data)
         except Exception as e:
             log.error(f"Native silent print failed: {e}")
             return False

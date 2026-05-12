@@ -27,7 +27,7 @@ def setup_logging():
     # Desktop File Logging (Cloud/Production Only)
     # In Desktop mode, we let the desktop launcher handle file logging to avoid locks
     if os.environ.get("RUNTIME_MODE") == "desktop":
-        logger.info("🖥️ Logging: Using shared desktop stream (file logging handled by launcher)")
+        logger.info("[DESKTOP] Logging: Using shared desktop stream (file logging handled by launcher)")
     else:
         try:
             from pathlib import Path

@@ -20,6 +20,13 @@ function printReceipt(orderData) {
     }
   }
 
+  // Desktop prints through native Python only; QR is generated offline in printer.py.
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.print_silent) {
+    console.log("Desktop runtime detected. Sending order data to native print bridge...");
+    window.pywebview.api.print_silent("", orderData);
+    return;
+  }
+
   const iframe = document.createElement('iframe');
   iframe.style.display = 'none';
   document.body.appendChild(iframe);
@@ -207,20 +214,12 @@ function printReceipt(orderData) {
   doc.write(html);
   doc.close();
   
-  // Use Desktop Bridge for Silent Printing if available
-  if (window.pywebview && window.pywebview.api && window.pywebview.api.print_silent) {
-    console.log("Desktop runtime detected. Sending to silent print bridge...");
-    window.pywebview.api.print_silent(html);
-    // Cleanup the iframe immediately since we don't need it for printing
-    setTimeout(() => { if (iframe.parentElement) document.body.removeChild(iframe); }, 100);
-  } else {
-    // Fallback for browser/web runtime
-    setTimeout(() => {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-      setTimeout(() => { if (iframe.parentElement) document.body.removeChild(iframe); }, 1000);
-    }, 500);
-  }
+  // Fallback for browser/web runtime
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => { if (iframe.parentElement) document.body.removeChild(iframe); }, 1000);
+  }, 500);
 }
 
 function getOrderTypeLabel(type) {

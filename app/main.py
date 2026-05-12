@@ -41,10 +41,10 @@ async def lifespan(app: FastAPI):
         yield
         return
 
-    logger.info(f"🚀 Initializing application [PID: {pid}] [Mode: {settings.RUNTIME_MODE}]")
+    logger.info(f"[STARTUP] Initializing application [PID: {pid}] [Mode: {settings.RUNTIME_MODE}]")
     
     if settings.RUNTIME_MODE == "desktop":
-        logger.info("🖥️ Desktop Mode: Verifying local DB schema...")
+        logger.info("[DESKTOP] Desktop Mode: Verifying local DB schema...")
         async with engine.begin() as conn:
             # 1. Create any missing tables
             await conn.run_sync(Base.metadata.create_all)
@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
                 except Exception as e:
                     logger.warning(f"Could not self-heal table {table}: {e}")
                     
-        logger.info("🖥️ Desktop Mode: Local DB schema verified.")
+        logger.info("[DESKTOP] Desktop Mode: Local DB schema verified.")
 
 
     # Cloud/General Self-Healing (Postgres Only)
@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI):
                         WHERE conrelid = 'products'::regclass
                     """))
                     constraints = [r[0] for r in res.all()]
-                    logger.info(f"🔎 Current constraints on 'products': {constraints}")
+                    logger.info(f"[INFO] Current constraints on 'products': {constraints}")
                 except Exception as e_disc:
                     logger.warning(f"Could not list constraints: {e_disc}")
 
@@ -112,47 +112,47 @@ async def lifespan(app: FastAPI):
                     await conn.execute(text("ALTER TABLE products DROP CONSTRAINT IF EXISTS uq_product_name_cat_id CASCADE"))
                     await conn.execute(text("ALTER TABLE products ADD CONSTRAINT uq_product_name_cat_id UNIQUE (product_name, cat_id)"))
                     
-                    logger.info("🛡️ Cloud DB hardening successful: Product constraints updated.")
+                    logger.info("[SECURITY] Cloud DB hardening successful: Product constraints updated.")
                 except Exception as inner_e:
-                    logger.error(f"❌ Failed to apply product constraint fix: {inner_e}")
+                    logger.error(f"[ERROR] Failed to apply product constraint fix: {inner_e}")
                     
         except Exception as e:
             logger.warning(f"Self-healing database update skipped or failed: {e}")
 
     # 2. Infrastructure & Cache (Cloud Only)
     if settings.RUNTIME_MODE != "desktop":
-        logger.info("📡 Connecting to Redis/Infrastructure...")
+        logger.info("[NETWORK] Connecting to Redis/Infrastructure...")
         if not redis_client.is_available:
             await redis_client.connect()
-        logger.info("📡 Infrastructure connected.")
+        logger.info("[NETWORK] Infrastructure connected.")
     else:
-        logger.info("🖥️ Desktop Mode: Skipping external Redis connection.")
+        logger.info("[DESKTOP] Desktop Mode: Skipping external Redis connection.")
         # Ensure the client is initialized with InMemoryCache for desktop
         await redis_client.connect()
 
     # 3. Shared Services (WebSockets & Broadcasters)
     if APP_ROLE in ("api", "all"):
-        logger.info("📡 Starting API Broadcaster...")
+        logger.info("[NETWORK] Starting API Broadcaster...")
         await order_events_manager.start()
-        logger.info(f"📡 API Broadcaster started [PID: {pid}]")
+        logger.info(f"[NETWORK] API Broadcaster started [PID: {pid}]")
 
     # 4. Global Worker (Cloud Only)
     if settings.RUNTIME_MODE != "desktop" and APP_ROLE in ("worker", "all"):
-        logger.info("👷 Starting Global Workers...")
+        logger.info("[WORKER] Starting Global Workers...")
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()
         await global_leader_manager.start()
-        logger.info(f"👷 Global Worker active [PID: {pid}]")
+        logger.info(f"[WORKER] Global Worker active [PID: {pid}]")
     elif settings.RUNTIME_MODE == "desktop":
-        logger.info("🖥️ Desktop Mode: Global Workers/Leader Election disabled.")
+        logger.info("[DESKTOP] Desktop Mode: Global Workers/Leader Election disabled.")
     
-    logger.info(f"✅ Application startup complete [PID: {pid}] [Role: {APP_ROLE}]")
+    logger.info(f"[SUCCESS] Application startup complete [PID: {pid}] [Role: {APP_ROLE}]")
     _startup_executed = True
     
     yield
     
     # --- SHUTDOWN ---
-    logger.info(f"🛑 Shutting down application [PID: {pid}]")
+    logger.info(f"[SHUTDOWN] Shutting down application [PID: {pid}]")
     if settings.RUNTIME_MODE != "desktop" and APP_ROLE in ("worker", "all"):
         await global_leader_manager.stop()
     if APP_ROLE in ("api", "all"):
