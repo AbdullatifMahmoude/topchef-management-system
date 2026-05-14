@@ -32,8 +32,8 @@ function printReceipt(orderData) {
   document.body.appendChild(iframe);
   const doc = iframe.contentWindow.document;
   
-  let rawAddr = orderData.customerAddress || orderData.customer_address || orderData.address || '';
-  let printAddrText = (typeof rawAddr === 'object' && rawAddr !== null) ? (rawAddr.address || rawAddr.name || '') : rawAddr;
+  let rawAddr = orderData.customerAddress || orderData.customer_address || orderData.address || orderData.customer_notes || '';
+  let printAddrText = (typeof rawAddr === 'object' && rawAddr !== null) ? (rawAddr.address || rawAddr.address_line || rawAddr.full_address || rawAddr.street || rawAddr.name || '') : rawAddr;
   const isDoublePrint = false; // (orderData.orderType === 'delivery' || orderData.order_type === 'delivery' || orderData.orderType === 'takeaway' || orderData.order_type === 'takeaway');
 
   const receiptContent = `
@@ -179,7 +179,7 @@ function printReceipt(orderData) {
         .items { width: 100%; border-collapse: collapse; margin-top: 5px; }
         .items th { border-bottom: 1px solid #000; font-size: 10px; padding: 2px; }
         .items td { border-bottom: 1px solid #eee; padding: 4px 2px; font-size: 11px; font-weight: bold; }
-        .items .item-name { text-align: right; width: 50%; }
+        .items .item-name { text-align: right; width: 50%; white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; }
         .items .qty { text-align: center; width: 10%; }
         .items .price { text-align: center; width: 20%; }
         .items .total { text-align: left; width: 20%; }

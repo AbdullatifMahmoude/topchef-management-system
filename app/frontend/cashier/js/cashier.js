@@ -78,6 +78,24 @@ let deliveryCustomerInfo = {
 };
 let _phoneSearchTimeout = null;
 
+function normalizePhoneDigits(phone) {
+  return String(phone || "").replace(/\D/g, "").slice(0, 11);
+}
+
+function isValidEgyptianPhone(phone) {
+  return /^\d{11}$/.test(normalizePhoneDigits(phone));
+}
+
+
+function getOrderAddressText(order) {
+  if (!order) return "";
+  const raw = order.customer_address || order.address || order.customer_notes || "";
+  if (raw && typeof raw === "object") {
+    return raw.address || raw.address_line || raw.full_address || raw.street || raw.name || "";
+  }
+  return raw || "";
+}
+
 // ===================================================
 //  Init
 // ===================================================
@@ -374,9 +392,17 @@ function confirmOrder() {
     return;
   }
 
+  const phoneDigits = normalizePhoneDigits(deliveryCustomerInfo.phone);
+  deliveryCustomerInfo.phone = phoneDigits;
+
   // التحقق من بيانات العميل في حالة الديليفري
-  if (orderType === "delivery" && !deliveryCustomerInfo.phone) {
+  if (orderType === "delivery" && !phoneDigits) {
     showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
+    return;
+  }
+
+  if (phoneDigits && !isValidEgyptianPhone(phoneDigits)) {
+    showToast("رقم التليفون يجب أن يكون 11 رقم", "error");
     return;
   }
 
@@ -1314,7 +1340,7 @@ function renderDeliveryCustomerForm() {
           <input type="tel" id="dcf_phone" class="dcf_input"
             placeholder="01xxxxxxxxx" maxlength="11"
             value="${deliveryCustomerInfo.phone}"
-            oninput="handlePhoneInput(this.value)" />
+            oninput="this.value = normalizePhoneDigits(this.value); handlePhoneInput(this.value)" />
           <span class="dcf_status" id="dcf_phone_status"></span>
         </div>
       </div>
@@ -1350,7 +1376,7 @@ function hideDeliveryCustomerForm() {
 }
 
 function handlePhoneInput(phone) {
-  deliveryCustomerInfo.phone = phone;
+  deliveryCustomerInfo.phone = normalizePhoneDigits(phone);
   deliveryCustomerInfo.name = "";
   deliveryCustomerInfo.customerId = null;
   deliveryCustomerInfo.addresses = [];
@@ -1372,7 +1398,7 @@ function handlePhoneInput(phone) {
   clearTimeout(_phoneSearchTimeout);
   const status = document.getElementById("dcf_phone_status");
 
-  const digits = phone.replace(/\D/g, "");
+  const digits = normalizePhoneDigits(phone);
   if (digits.length >= 11) {
     if (status)
       status.innerHTML =
@@ -2663,7 +2689,11 @@ function printOrderFromOnline(orderId) {
     };
   });
 
-  const printData = { ...order, cart: cartMapped };
+  const printData = {
+    ...order,
+    cart: cartMapped,
+    customerAddress: getOrderAddressText(order),
+  };
   if (typeof printReceipt === "function") {
     printReceipt(printData);
   }
@@ -2955,6 +2985,7 @@ function printOrderFromList(orderId) {
   const printData = {
     ...order,
     cart: cartMapped,
+    customerAddress: getOrderAddressText(order),
   };
 
   if (typeof printReceipt === "function") {
@@ -3669,11 +3700,11 @@ function openEditOrderModal(orderId, sourceList) {
 
   // Initialize customer info for editing
   editModalState.customerName = order.customer_name || "";
-  editModalState.customerPhone = order.customer_phone || "";
+  editModalState.customerPhone = normalizePhoneDigits(order.customer_phone || "");
   editModalState.customerAddress =
     typeof order.address === "object" && order.address !== null
       ? order.address.address
-      : order.customer_address || order.address || "";
+      : getOrderAddressText(order);
 
   editModalState.cart = (order.items || []).map((item) => {
     let prod = products.find((p) => p.id === item.product_id);
@@ -3759,7 +3790,7 @@ function renderEditOrderModal() {
                      <span class="dcf_label">📞 رقم التليفون</span>
                      <input type="tel" class="dcf_input" placeholder="01xxxxxxxxx" maxlength="11" 
                         value="${editModalState.customerPhone}" 
-                        oninput="editModalState.customerPhone = this.value" />
+                        oninput="editModalState.customerPhone = normalizePhoneDigits(this.value); this.value = editModalState.customerPhone" />
                   </div>
                   <div class="dcf_field">
                      <span class="dcf_label">👤 الاسم</span>
@@ -4310,6 +4341,18 @@ function handleEditModalProductClick(product, defaultPrice) {
 
 // --------------------------- Edit Modal API Save Call ---------------------------
 async function updateEditOrderConfirm() {
+  editModalState.customerPhone = normalizePhoneDigits(editModalState.customerPhone);
+
+  if (editModalState.customerPhone && !isValidEgyptianPhone(editModalState.customerPhone)) {
+    showToast("رقم التليفون يجب أن يكون 11 رقم", "error");
+    return;
+  }
+
+  if (editModalState.orderType === "delivery" && !editModalState.customerPhone) {
+    showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
+    return;
+  }
+
   if (editModalState.cart.length === 0) {
     showToast("الفاتورة فارغة، لا يمكن حفظ طلب فارغ!", "error");
     return;

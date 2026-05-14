@@ -159,7 +159,14 @@ class PrinterManager:
 
     def _address_to_text(self, raw_address: Any) -> str:
         if isinstance(raw_address, dict):
-            return str(raw_address.get("address") or raw_address.get("name") or "")
+            return str(
+                raw_address.get("address")
+                or raw_address.get("address_line")
+                or raw_address.get("full_address")
+                or raw_address.get("street")
+                or raw_address.get("name")
+                or ""
+            )
         return str(raw_address or "")
 
     def _items(self, order: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -219,9 +226,11 @@ class PrinterManager:
         def u(value: int | float) -> int:
             return int(round(value * scale))
 
-        height = u(640 + (len(items) * 58))
+        # Allocate enough vertical room for wrapped product names and addresses;
+        # the image is cropped to the actual drawn height before printing.
+        height = u(900 + (len(items) * 190))
         if self._has_customer_info(order):
-            height += u(210)
+            height += u(300)
         image = Image.new("RGB", (width, height), "white")
         draw = ImageDraw.Draw(image)
         y = margin
@@ -249,17 +258,46 @@ class PrinterManager:
             else:
                 draw.line((margin, y_pos, content_right, y_pos), fill=fill, width=scale)
 
-        def fit_text(text: Any, font, max_width: int) -> str:
-            shaped = rtl(text)
-            if draw.textlength(shaped, font=font) <= max_width:
-                return shaped
-            raw = str(text)
-            while len(raw) > 3:
-                raw = raw[:-1]
-                shaped = rtl(raw + "...")
-                if draw.textlength(shaped, font=font) <= max_width:
-                    return shaped
-            return "..."
+        def wrap_text(text: Any, font, max_width: int) -> list[str]:
+            raw = str(text or "")
+            if not raw:
+                return [rtl("")]
+
+            words = raw.split()
+            if not words:
+                words = list(raw)
+
+            lines: list[str] = []
+            current = ""
+
+            def append_fitted_chunk(chunk: str):
+                piece = ""
+                for char in chunk:
+                    candidate = piece + char
+                    if piece and draw.textlength(rtl(candidate), font=font) > max_width:
+                        lines.append(rtl(piece))
+                        piece = char
+                    else:
+                        piece = candidate
+                if piece:
+                    lines.append(rtl(piece))
+
+            for word in words:
+                candidate = f"{current} {word}".strip()
+                if draw.textlength(rtl(candidate), font=font) <= max_width:
+                    current = candidate
+                    continue
+                if current:
+                    lines.append(rtl(current))
+                    current = ""
+                if draw.textlength(rtl(word), font=font) <= max_width:
+                    current = word
+                else:
+                    append_fitted_chunk(word)
+
+            if current:
+                lines.append(rtl(current))
+            return lines or [rtl(raw)]
 
         full_order_number = self._value(order, "orderNumber", "order_number", "id", default="---")
         order_number = str(full_order_number).split("-")[-1] if "-" in str(full_order_number) else str(full_order_number)
@@ -337,11 +375,20 @@ class PrinterManager:
             name = item_data.get("name") or item_data.get("product_name") or "---"
             total = qty * price
 
-            draw_right(f"{qty:g}", y, fonts["item"], qty_x)
-            draw.text((item_right, y), fit_text(name, fonts["item"], u(235)), fill="black", font=fonts["item"], anchor="ra")
-            draw_text(f"{price:.0f}x", price_x, y, fonts["item"], "ma")
-            draw_text(f"{total:.0f}", total_x, y, fonts["item"], "ma")
-            y += u(44)
+            name_lines = wrap_text(name, fonts["item"], u(235))
+            row_start_y = y
+            draw_right(f"{qty:g}", row_start_y, fonts["item"], qty_x)
+            for line_index, line_text in enumerate(name_lines):
+                draw.text(
+                    (item_right, row_start_y + (line_index * u(34))),
+                    line_text,
+                    fill="black",
+                    font=fonts["item"],
+                    anchor="ra",
+                )
+            draw_text(f"{price:.0f}x", price_x, row_start_y, fonts["item"], "ma")
+            draw_text(f"{total:.0f}", total_x, row_start_y, fonts["item"], "ma")
+            y += max(u(44), len(name_lines) * u(34) + u(10))
             draw.line((margin, y, content_right, y), fill="#eeeeee", width=scale)
             y += u(12)
 
@@ -394,13 +441,17 @@ class PrinterManager:
         return bool(
             self._value(order, "customerName", "customer_name", default="")
             or self._value(order, "customerPhone", "customer_phone", default="")
-            or self._address_to_text(self._value(order, "customerAddress", "customer_address", "address", default=""))
+            or self._address_to_text(
+                self._value(order, "customerAddress", "customer_address", "address", "customer_notes", default="")
+            )
         )
 
     def _draw_customer_info(self, order, image, draw, fonts, y: int, scale: int = 1) -> int:
         customer_name = self._value(order, "customerName", "customer_name", default="")
         customer_phone = self._value(order, "customerPhone", "customer_phone", default="")
-        address = self._address_to_text(self._value(order, "customerAddress", "customer_address", "address", default=""))
+        address = self._address_to_text(
+            self._value(order, "customerAddress", "customer_address", "address", "customer_notes", default="")
+        )
         if not any([customer_name, customer_phone, address]):
             return y
 
