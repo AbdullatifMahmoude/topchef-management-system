@@ -31,6 +31,7 @@ import threading
 import socket
 import asyncio
 import webbrowser
+import faulthandler
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
@@ -54,7 +55,7 @@ def _is_already_running() -> bool:
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 os.environ["RUNTIME_MODE"] = "desktop"
 
-from desktop.config import config
+from desktop.config import config, DATA_DIR
 from desktop.logger import desktop_logger as log
 from desktop.printer import thermal_printer
 
@@ -612,18 +613,48 @@ def main():
         log.info("Shutdown initiated...")
         os._exit(0)
 
-    tray_icon.set_callbacks(
-        on_show=lambda: None, # Handled by webview
-        on_quit=_quit,
-        on_sync=lambda: None,
-        on_test_print=thermal_printer.test_print
-    )
-    tray_icon.start()
+    tray_started = threading.Event()
+
+    def _start_tray_once():
+        if tray_started.is_set():
+            return
+        tray_started.set()
+        tray_icon.set_callbacks(
+            on_show=lambda: None, # Handled by webview
+            on_quit=_quit,
+            on_sync=lambda: None,
+            on_test_print=thermal_printer.test_print
+        )
+        tray_icon.start()
 
     # 4. UI Window (PyWebView)
     try:
         log.info("Launching desktop window via pywebview.")
+        webview_ready = threading.Event()
+        watchdog_started_at = time.time()
+
+        def _webview_watchdog():
+            if webview_ready.wait(20):
+                return
+            log.error(
+                "PyWebView did not report a loaded window within %.1fs; opening browser fallback at %s",
+                time.time() - watchdog_started_at,
+                app_url,
+            )
+            try:
+                faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
+            except Exception:
+                pass
+            try:
+                webbrowser.open(app_url)
+                log.info("Browser fallback opened while native WebView is unresponsive.")
+            except Exception as browser_error:
+                log.error("Browser fallback failed: %s", browser_error)
+
+        threading.Thread(target=_webview_watchdog, daemon=True, name="webview-watchdog").start()
+
         import webview
+        log.info("PyWebView imported successfully.")
         splash.close()
         api = JSAPI()
         window = webview.create_window(
@@ -631,8 +662,10 @@ def main():
             app_url,
             js_api=api,
             width=1280, height=800,
-            on_top=True,  # Temporarily on top to ensure visibility after splash
+            background_color="#0f0f0f",
+            focus=True,
         )
+        log.info("PyWebView window object created.")
 
         def _inject_zoom():
             """Inject zoom JS with multiple targets and retry logic."""
@@ -685,22 +718,23 @@ def main():
                 """.replace("__ZOOM__", str(saved_zoom))
                 window.evaluate_js(zoom_js)
                 log.info("Zoom injected successfully at %d%%", saved_zoom)
+                webview_ready.set()
                 return True
             except Exception as e:
                 log.warning("Zoom injection failed: %s", e)
                 return False
 
+        def _on_loaded():
+            webview_ready.set()
+            _inject_zoom()
+
         # Register event
-        window.events.loaded += _inject_zoom
+        window.events.loaded += _on_loaded
 
         def _on_shown():
             """Bring window to foreground, disable always-on-top, and force zoom injection."""
             import time
-            time.sleep(1.0) # Wait a bit longer for WebView to be ready
-            try:
-                window.on_top = False
-            except Exception:
-                pass
+            _start_tray_once()
             
             # Aggressive retry for zoom injection
             for i in range(5):
@@ -709,7 +743,12 @@ def main():
                 time.sleep(1.0)
 
         log.info("Starting pywebview event loop.")
-        webview.start(gui="edgechromium", func=_on_shown)
+        webview.start(
+            gui="edgechromium",
+            func=_on_shown,
+            private_mode=False,
+            storage_path=str(DATA_DIR / "webview_profile"),
+        )
     except Exception as e:
         log.error(f"UI Failed: {e}")
         try:

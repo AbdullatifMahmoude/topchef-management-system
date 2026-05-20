@@ -10,9 +10,19 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 def add_user(): 
-    db_path = "build/dist/TopChef/data/topchef_local.db"
-    if not os.path.exists(db_path):
-        print(f"Error: {db_path} not found.")
+    db_paths = [
+        "desktop/data/topchef_local.db",
+        "build/dist/TopChef/data/topchef_local.db"
+    ]
+    
+    db_path = None
+    for path in db_paths:
+        if os.path.exists(path):
+            db_path = path
+            break
+            
+    if not db_path:
+        print("Error: topchef_local.db not found in either desktop/data/ or build/dist/TopChef/data/")
         return
 
     username = "Abdullatif"
