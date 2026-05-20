@@ -12,7 +12,7 @@
 #define MyAppURL       "https://topchef-system.fastapicloud.dev"
 
 ; Path to PyInstaller output (relative to this .iss file)
-#define DistDir        "..\dist\TopChef"
+#define DistDir        "..\build\dist\TopChef"
 
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}}
@@ -27,7 +27,7 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=output
 OutputBaseFilename=TopChefSetup_{#MyAppVersion}
-SetupIconFile={#DistDir}\desktop\assets\icon.ico
+SetupIconFile={#DistDir}\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

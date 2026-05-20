@@ -24,15 +24,39 @@ def _get_base_dir() -> Path:
 BASE_DIR = _get_base_dir()
 DATA_DIR = BASE_DIR / "data"
 LOGS_DIR = BASE_DIR / "logs"
-ASSETS_DIR = BASE_DIR / "assets"
 DB_PATH = DATA_DIR / "topchef_local.db"
 SETTINGS_PATH = BASE_DIR / "settings.json"
 VERSION_PATH = BASE_DIR / "version.txt"
 
+
+def _resolve_assets_dir() -> Path:
+    """Find bundled desktop assets across dev and PyInstaller layouts."""
+    candidates = [
+        BASE_DIR / "assets",
+        BASE_DIR / "desktop" / "assets",
+    ]
+
+    pyinstaller_temp = getattr(sys, "_MEIPASS", None)
+    if pyinstaller_temp:
+        meipass = Path(pyinstaller_temp)
+        candidates.extend([
+            meipass / "assets",
+            meipass / "desktop" / "assets",
+        ])
+
+    for candidate in candidates:
+        if (candidate / "icon.png").exists() or (candidate / "icon.ico").exists():
+            return candidate
+    return candidates[0]
+
+
+ASSETS_DIR = _resolve_assets_dir()
+
 # Ensure directories exist
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
-ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+if not getattr(sys, "frozen", False):
+    ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 _DEFAULTS = {
     "server_url": "https://topchef-system.fastapicloud.dev",

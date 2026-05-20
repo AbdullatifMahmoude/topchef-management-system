@@ -71,7 +71,7 @@ Copy-Item (Join-Path $ProjectRoot "desktop\version.txt") $DistDir -Force
 
 # assets folder
 $AssetsSource = Join-Path $ProjectRoot "desktop\assets"
-$AssetsDest   = Join-Path $DistDir "desktop\assets"
+$AssetsDest   = Join-Path $DistDir "assets"
 if (-not (Test-Path $AssetsDest)) { New-Item -ItemType Directory -Path $AssetsDest -Force | Out-Null }
 if (Test-Path $AssetsSource) {
     Copy-Item "$AssetsSource\*" $AssetsDest -Recurse -Force -ErrorAction SilentlyContinue
