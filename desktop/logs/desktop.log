@@ -3557,3 +3557,62 @@ WHERE categories.id = ?]
 [2026-05-15 01:16:48] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
 [2026-05-15 01:16:58] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
 [2026-05-15 01:17:08] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-15 01:30:24] INFO     topchef_desktop – Starting Top Chef Enterprise POS [v1.0.0]...
+[2026-05-15 01:30:24] INFO     topchef_desktop – Splash: Initialising Tkinter...
+[2026-05-15 01:30:24] INFO     topchef_desktop – Splash: Creating canvas...
+[2026-05-15 01:30:24] INFO     topchef_desktop – Splash: Logo loaded successfully.
+[2026-05-15 01:30:24] INFO     topchef_desktop – Splash: Entering mainloop.
+[2026-05-15 01:30:26] INFO     topchef_desktop – 🚀 Sync: Desktop lifespan wrapper started.
+[2026-05-15 01:30:26] INFO     topchef_desktop – 🚀 Sync: Entering original app lifespan...
+[2026-05-15 01:30:26] INFO     topchef_desktop – 🚀 Sync: Original lifespan entered successfully. Starting background tasks...
+[2026-05-15 01:30:26] INFO     topchef_desktop – ⚙️ Sync: Background worker task started.
+[2026-05-15 01:30:26] INFO     topchef_desktop – ⚙️ Sync: Entering main loop...
+[2026-05-15 01:30:26] INFO     topchef_desktop – Tray icon started
+[2026-05-15 01:30:26] INFO     topchef_desktop – Launching desktop window via pywebview.
+[2026-05-15 01:30:26] INFO     topchef_desktop – Starting pywebview event loop.
+[2026-05-15 01:30:29] INFO     topchef_desktop – Zoom injected successfully at 100%
+[2026-05-15 01:30:29] INFO     topchef_desktop – Zoom injected successfully at 100%
+[2026-05-15 01:30:36] INFO     topchef_desktop – Outbox: Waiting for user activity to capture Auth header...
+[2026-05-15 01:30:45] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:45] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:45] INFO     topchef_desktop – 🔄 Sync: Worker woke up (trigger set).
+[2026-05-15 01:30:45] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:45] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:45] INFO     topchef_desktop – Zoom injected successfully at 100%
+[2026-05-15 01:30:45] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-15 01:30:45] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:45] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:46] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:48] INFO     topchef_desktop – Cloud reconciliation applied 14 rows: {'users': 0, 'categories': 0, 'products': 2, 'variants': 7, 'offers': 0, 'app_settings': 1, 'customers': 2, 'customer_addresses': 2, 'comments': 0, 'orders': 0, 'order_items': 0, 'order_status_history': 0}
+[2026-05-15 01:30:49] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:49] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:49] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:49] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:30:49] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:02] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:03] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:04] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:06] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:08] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:22] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:23] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:48] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:49] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:50] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:31:50] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:32:02] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:32:05] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:32:10] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:32:14] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:32:14] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:32:14] INFO     topchef_desktop – Silent print requested from frontend.
+[2026-05-15 01:32:15] INFO     topchef_desktop – Native Python GDI print successful to XP-80
+[2026-05-15 01:32:15] INFO     topchef_desktop – 🔄 Sync: Worker woke up (trigger set).
+[2026-05-15 01:32:15] INFO     topchef_desktop – 📤 Outbox: Found 1 pending events. Syncing...
+[2026-05-15 01:32:16] INFO     topchef_desktop – Outbox: Cloud response: {'accepted': 1, 'rejected': 0, 'errors': []}
+[2026-05-15 01:32:16] INFO     topchef_desktop – 📤 Outbox: Successfully synced 1 events to cloud.
+[2026-05-15 01:32:16] INFO     topchef_desktop – 📥 Sync: Pulling master data from cloud (forced=True)...
+[2026-05-15 01:32:16] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:32:16] INFO     topchef_desktop – 🔑 Auth: Captured credentials from request.
+[2026-05-15 01:32:18] INFO     topchef_desktop – Silent print requested from frontend.
+[2026-05-15 01:32:18] INFO     topchef_desktop – Native Python GDI print successful to XP-80
