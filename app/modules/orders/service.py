@@ -50,6 +50,10 @@ class OrderService:
                 status=OutboxEventStatus.PENDING
             )
             self.db.add(outbox_record)
+            
+            # Wake up the background sync loop immediately if in desktop mode
+            from app.core.events import get_outbox_sync_trigger
+            get_outbox_sync_trigger().set()
 
     async def _validate_order_items(self, items: List[schemas.OrderItemCreate]):
         """Validate products exist and are available."""
@@ -97,15 +101,33 @@ class OrderService:
                     existing_cust = await customer_service.get_customer_by_phone(order_data.customer_phone)
                     order_data.customer_id = existing_cust.id
                 except NotFoundError:
-                    new_cust = await customer_service.create_customer(CustomerCreate(
-                        name=order_data.customer_name,
-                        phone_number=order_data.customer_phone
-                    ))
-                    order_data.customer_id = new_cust.id
+                    # Phone not found — create new customer
+                    try:
+                        new_cust = await customer_service.create_customer(CustomerCreate(
+                            name=order_data.customer_name,
+                            phone_number=order_data.customer_phone
+                        ))
+                        order_data.customer_id = new_cust.id
+                    except (ValidationError, Exception):
+                        # Race condition: phone was created between lookup and create
+                        # Fall back to lookup again
+                        fallback = await customer_service.get_customer_by_phone(order_data.customer_phone)
+                        order_data.customer_id = fallback.id
                 
                 if getattr(order_data, 'customer_address', None):
-                    new_addr = await customer_service.add_address(order_data.customer_id, CustomerAddressCreate(address=order_data.customer_address))
-                    order_data.address_id = new_addr.id
+                    # Check if customer already has this exact address
+                    existing_customer = await customer_service.repository.get_by_id(order_data.customer_id)
+                    existing_match = None
+                    if existing_customer and existing_customer.addresses:
+                        existing_match = next(
+                            (a for a in existing_customer.addresses if a.address == order_data.customer_address),
+                            None
+                        )
+                    if existing_match:
+                        order_data.address_id = existing_match.id
+                    else:
+                        new_addr = await customer_service.add_address(order_data.customer_id, CustomerAddressCreate(address=order_data.customer_address))
+                        order_data.address_id = new_addr.id
             
             # 1. Prepare Pricing Request
             pricing_items = [
@@ -179,9 +201,9 @@ class OrderService:
             self._record_outbox_event("ORDER_CREATED", payload_data)
             
             # 8. Trigger Sync and Notify
-            from app.core.events import outbox_sync_trigger
-            outbox_sync_trigger.set()
-            order_events_manager.emit({
+            from app.core.events import get_outbox_sync_trigger
+            get_outbox_sync_trigger().set()
+            await order_events_manager.emit({
                 "type": "NEW_ORDER",
                 "event": "order.created",
                 "data": payload_data
@@ -227,9 +249,9 @@ class OrderService:
             payload_data = completed_schema.model_dump(mode='json')
             self._record_outbox_event("ORDER_UPDATED", payload_data)
         
-        from app.core.events import outbox_sync_trigger
-        outbox_sync_trigger.set()
-        order_events_manager.emit({
+        from app.core.events import get_outbox_sync_trigger
+        get_outbox_sync_trigger().set()
+        await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
             "data": payload_data
@@ -304,11 +326,14 @@ class OrderService:
         completed_schema = schemas.OrderResponse.model_validate(completed_order)
         payload_data = completed_schema.model_dump(mode='json')
         self._record_outbox_event("ORDER_UPDATED", payload_data)
-        from app.core.events import outbox_sync_trigger
-        outbox_sync_trigger.set()
-        order_events_manager.emit({
+        from app.core.events import get_outbox_sync_trigger
+        get_outbox_sync_trigger().set()
+        await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
             "data": payload_data
         })
         return completed_order
+
+    async def get_today_stats(self) -> dict:
+        return await self.repository.get_today_stats()

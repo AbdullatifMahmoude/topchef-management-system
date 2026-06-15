@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, Integer, String, Text, DateTime, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Index, Boolean
 from app.core.database import Base
 
 
@@ -10,6 +10,8 @@ class Comment(Base):
     full_name = Column(String(100), nullable=False, index=True)
     stars = Column(Integer, nullable=False)  # 1-5
     comment_text = Column(Text, nullable=False)
+    is_deleted = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     created_at = Column(
         DateTime, 
         default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None),

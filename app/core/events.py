@@ -5,7 +5,7 @@ import json
 import random
 import time
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -59,7 +59,24 @@ class EventBus:
 
 
 event_bus = EventBus()
-outbox_sync_trigger = asyncio.Event()
+_pending_sync_trigger: bool = False
+
+def get_outbox_sync_trigger():
+    """Returns an object with .set() for backward compatibility."""
+    class _DummyTrigger:
+        def set(self):
+            global _pending_sync_trigger
+            _pending_sync_trigger = True
+            
+        def clear(self):
+            global _pending_sync_trigger
+            _pending_sync_trigger = False
+            
+        def is_set(self):
+            global _pending_sync_trigger
+            return _pending_sync_trigger
+            
+    return _DummyTrigger()
 
 
 class OrderEventsManager:
@@ -77,6 +94,7 @@ class OrderEventsManager:
         self._remote_bridge_ws: Any | None = None
         self._remote_bridge_connect_lock = asyncio.Lock()
         self._lock = asyncio.Lock()
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def start(self) -> None:
         if settings.RUNTIME_MODE == "desktop":
@@ -195,61 +213,73 @@ class OrderEventsManager:
         for channel in channels:
             await self.broadcast(message, channel)
 
-    def emit(self, message: dict[str, Any], channel: str = "default"):
-        asyncio.create_task(self._emit(message, channel))
+    async def emit(self, message: dict[str, Any], channel: str = "default"):
+        await self._emit(message, channel)
 
     async def _emit(self, message: dict[str, Any], channel: str = "default") -> None:
+        # 1. Immediate local broadcast (fastest, hits local clients)
+        if channel == "default":
+            await self.broadcast_all(message)
+        else:
+            await self.broadcast(message, channel)
+            
+        # 2. Publish to Redis for other workers (echo will be deduplicated by clients)
         redis_channel = f"{self.CHANNEL_PREFIX}:{channel}"
         if redis_client.backend_name == "redis" and redis_client.redis is not None:
             try:
                 await redis_client.redis.publish(redis_channel, json.dumps(message))
-                return
             except Exception as exc:
-                logger.warning("Redis publish failed for channel '%s', falling back to local broadcast: %s", channel, exc)
-        if channel == "default":
-            await self.broadcast_all(message)
-            return
-        await self.broadcast(message, channel)
+                logger.warning("Redis publish failed for channel '%s': %s", channel, exc)
 
     async def _redis_listener(self) -> None:
         if redis_client.redis is None:
             return
-        pubsub = redis_client.redis.pubsub()
-        await pubsub.psubscribe(f"{self.CHANNEL_PREFIX}:*")
-        try:
-            while True:
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                if not message:
-                    await asyncio.sleep(0.05)
-                    continue
+            
+        while True:
+            pubsub = redis_client.redis.pubsub()
+            try:
+                await pubsub.psubscribe(f"{self.CHANNEL_PREFIX}:*")
+                while True:
+                    try:
+                        message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                    except TimeoutError:
+                        continue
+                        
+                    if not message:
+                        await asyncio.sleep(0.05)
+                        continue
 
-                raw_channel = message.get("channel")
-                if isinstance(raw_channel, bytes):
-                    raw_channel = raw_channel.decode("utf-8")
+                    raw_channel = message.get("channel")
+                    if isinstance(raw_channel, bytes):
+                        raw_channel = raw_channel.decode("utf-8")
 
-                channel = raw_channel.replace(f"{self.CHANNEL_PREFIX}:", "")
+                    channel = raw_channel.replace(f"{self.CHANNEL_PREFIX}:", "")
 
-                data = message.get("data")
-                if isinstance(data, bytes):
-                    data = data.decode("utf-8")
+                    data = message.get("data")
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8")
+                    try:
+                        payload = json.loads(data)
+                    except Exception as exc:
+                        logger.warning("Failed to decode pub/sub event: %s", exc)
+                        continue
+                        
+                    if channel == "default":
+                        await self.broadcast_all(payload)
+                    else:
+                        await self.broadcast(payload, channel)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error("Order events Redis listener failed: %s. Reconnecting in 5s...", exc)
+                await asyncio.sleep(5)
+            finally:
+                with contextlib.suppress(Exception):
+                    await pubsub.punsubscribe(f"{self.CHANNEL_PREFIX}:*")
                 try:
-                    payload = json.loads(data)
-                except Exception as exc:
-                    logger.warning("Failed to decode pub/sub event: %s", exc)
-                    continue
-                if channel == "default":
-                    await self.broadcast_all(payload)
-                else:
-                    await self.broadcast(payload, channel)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            logger.error("Order events Redis listener failed: %s", exc)
-        finally:
-            with contextlib.suppress(Exception):
-                await pubsub.punsubscribe(f"{self.CHANNEL_PREFIX}:*")
-            with contextlib.suppress(Exception):
-                await pubsub.close()
+                    await pubsub.close()
+                except Exception as close_exc:
+                    logger.debug("pubsub.close() failed: %s", close_exc)
 
     async def _desktop_remote_listener_loop(self) -> None:
         import websockets
@@ -316,8 +346,11 @@ class OrderEventsManager:
                 raise
             except Exception as exc:
                 alive_for = 0.0
-                if ws is not None:
+                if ws is not None and connection_started_at > 0:
                     alive_for = max(0.0, time.monotonic() - connection_started_at)
+                    if alive_for >= self.DESKTOP_STABLE_AFTER_SECONDS:
+                        backoff_seconds = 1.0
+                        attempt = 0
                 await sync_manager.report_ws_state(
                     WebSocketConnectionState.RECONNECTING,
                     reason=f"{type(exc).__name__}: {exc}",
@@ -411,13 +444,20 @@ class OrderEventsManager:
                 logger.debug("Desktop bridge received heartbeat ack")
                 continue
 
-            event_name = payload.get("event")
+            event_name = payload.get("event") or payload.get("type")
             if event_name not in {
                 OrderEvents.CREATED.value,
                 OrderEvents.UPDATED.value,
                 OrderEvents.STATUS_CHANGED.value,
+                "SETTING_UPDATED",
+                "NEW_ORDER",
+                "ORDER_UPDATED",
+                "CUSTOMER_CREATED",
+                "ADDRESS_CREATED",
             }:
-                continue
+                # Also check top-level type
+                if payload.get("type") not in {"SETTING_UPDATED", "NEW_ORDER", "ORDER_UPDATED", "ORDER_SNAPSHOT", "CUSTOMER_CREATED", "ADDRESS_CREATED"}:
+                    continue
 
             event_data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
             event_id = (
@@ -427,6 +467,44 @@ class OrderEventsManager:
             if event_id and sync_manager.is_duplicate(str(event_id)):
                 logger.debug("Desktop bridge ignored duplicate event id=%s", event_id)
                 continue
+
+            # 3. ID Remapping for Desktop consistency
+            # If we receive an order event from the cloud, try to find if we have it locally
+            # by order_number + date. if so, remap the ID to the local one so the frontend
+            # doesn't send cloud IDs to the local API (which causes 404).
+            if event_name in {OrderEvents.CREATED.value, OrderEvents.UPDATED.value, OrderEvents.STATUS_CHANGED.value, "NEW_ORDER", "ORDER_UPDATED"}:
+                order_num = event_data.get("order_number")
+                order_date = event_data.get("order_date")
+                if order_num and order_date:
+                    from app.core.database import AsyncSessionLocal
+                    from sqlalchemy import select
+                    from app.modules.orders.models import Order
+                    
+                    try:
+                        from datetime import date
+                        parsed_date = order_date
+                        if isinstance(order_date, str):
+                            parsed_date = date.fromisoformat(order_date[:10])
+                            
+                        async with AsyncSessionLocal() as session:
+                            stmt = select(Order.id).where(Order.order_number == order_num, Order.order_date == parsed_date)
+                            local_id = await session.scalar(stmt)
+                            if local_id:
+                                payload["data"]["id"] = local_id
+                                # Also update top-level ID if it exists
+                                if "id" in payload:
+                                    payload["id"] = local_id
+                    except Exception as e:
+                        logger.warning("Failed to remap cloud order ID for event: %s", e)
+
+            # 4. Trigger Sync Pull for order/customer events to ensure local DB is up to date with cloud truth
+            if event_name in {
+                OrderEvents.CREATED.value, "NEW_ORDER", 
+                OrderEvents.UPDATED.value, "ORDER_UPDATED",
+                OrderEvents.STATUS_CHANGED.value,
+                "CUSTOMER_CREATED", "ADDRESS_CREATED",
+            }:
+                get_outbox_sync_trigger().set()
 
             await self.broadcast_all(payload)
 

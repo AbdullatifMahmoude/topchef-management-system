@@ -48,6 +48,7 @@ _DEFAULTS = {
     "printer_auto_cut": True,
     "language": "ar",
     "theme": "dark",
+    "zoom_level": 100,
     "log_level": "INFO",
     "log_max_bytes": 5_242_880,
     "log_backup_count": 5,

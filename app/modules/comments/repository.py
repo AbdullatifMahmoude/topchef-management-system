@@ -22,7 +22,10 @@ class CommentRepository:
 
     async def get_by_id(self, comment_id: int) -> Optional[models.Comment]:
         """Get a comment by ID."""
-        query = select(models.Comment).where(models.Comment.id == comment_id)
+        query = select(models.Comment).where(
+            models.Comment.id == comment_id,
+            models.Comment.is_deleted == False
+        )
         result = await self.db.execute(query)
         return result.scalars().first()
 
@@ -32,10 +35,10 @@ class CommentRepository:
         page_size: int = 50
     ) -> Tuple[int, List[models.Comment]]:
         """Get paginated comments, ordered by newest first."""
-        query = select(models.Comment).order_by(desc(models.Comment.created_at))
+        query = select(models.Comment).where(models.Comment.is_deleted == False).order_by(desc(models.Comment.created_at))
         
         # Count total
-        count_query = select(func.count()).select_from(models.Comment)
+        count_query = select(func.count()).select_from(models.Comment).where(models.Comment.is_deleted == False)
         total = await self.db.scalar(count_query) or 0
         
         # Paginate
@@ -47,6 +50,6 @@ class CommentRepository:
 
     async def get_average_rating(self) -> Optional[float]:
         """Get average rating of all comments."""
-        query = select(func.avg(models.Comment.stars))
+        query = select(func.avg(models.Comment.stars)).where(models.Comment.is_deleted == False)
         result = await self.db.scalar(query)
         return float(result) if result else None

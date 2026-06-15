@@ -8,7 +8,10 @@ class SettingsRepository:
 
     async def get_setting(self, key: str) -> models.AppSetting:
         result = await self.db.execute(
-            select(models.AppSetting).where(models.AppSetting.key == key)
+            select(models.AppSetting).where(
+                models.AppSetting.key == key,
+                models.AppSetting.is_deleted == False
+            )
         )
         return result.scalar_one_or_none()
 

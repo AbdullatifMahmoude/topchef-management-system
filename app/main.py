@@ -30,26 +30,52 @@ from app.core.leader import global_leader_manager
 APP_ROLE = os.getenv("APP_ROLE", "all").lower()
 _startup_executed = False
 
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _startup_executed
-    
-    # --- STARTUP ---
     pid = os.getpid()
-    
     if _startup_executed:
-        logger.warning(f"⚠️ Startup already executed for PID {pid}. Skipping duplicate call.")
         yield
         return
 
-    logger.info(f"🚀 Initializing application [PID: {pid}] [Mode: {settings.RUNTIME_MODE}]")
-    logger.info("🚀 APP STARTUP INITIATED - Running self-healing logic...")
+    logger.info(f"[STARTUP] Initializing application [PID: {pid}] [Mode: {settings.RUNTIME_MODE}]")
     
-    # 1. Database & Role Initialization
     if settings.RUNTIME_MODE == "desktop":
+        logger.info("[DESKTOP] Desktop Mode: Verifying local DB schema...")
         async with engine.begin() as conn:
+            # 1. Create any missing tables
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("🖥️ Desktop Mode: Local DB tables verified.")
+            
+            # 2. Self-heal missing columns (SQLite doesn't support 'IF NOT EXISTS' in ALTER TABLE easily)
+            tables_to_fix = [
+                "categories", "products", "variants", "users", "customers", 
+                "customer_addresses", "offers", "comments", "orders", 
+                "order_items", "order_status_history", "app_settings"
+            ]
+            
+            for table in tables_to_fix:
+                try:
+                    # Check existing columns
+                    res = await conn.execute(text(f"PRAGMA table_info({table})"))
+                    existing_cols = [r[1] for r in res.all()]
+                    
+                    if "is_deleted" not in existing_cols:
+                        logger.info(f"Adding 'is_deleted' to {table}...")
+                        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN is_deleted BOOLEAN DEFAULT 0 NOT NULL"))
+                    
+                    if "updated_at" not in existing_cols:
+                        # Only certain tables need updated_at for sync
+                        if table in ["categories", "products", "variants", "customers", "customer_addresses", "offers", "comments", "app_settings", "order_items", "order_status_history"]:
+                            logger.info(f"Adding 'updated_at' to {table}...")
+                            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+                except Exception as e:
+                    logger.warning(f"Could not self-heal table {table}: {e}")
+                    
+        logger.info("[DESKTOP] Desktop Mode: Local DB schema verified.")
+
 
     # Cloud/General Self-Healing (Postgres Only)
     if settings.RUNTIME_MODE != "desktop":
@@ -72,7 +98,7 @@ async def lifespan(app: FastAPI):
                         WHERE conrelid = 'products'::regclass
                     """))
                     constraints = [r[0] for r in res.all()]
-                    logger.info(f"🔎 Current constraints on 'products': {constraints}")
+                    logger.info(f"[INFO] Current constraints on 'products': {constraints}")
                 except Exception as e_disc:
                     logger.warning(f"Could not list constraints: {e_disc}")
 
@@ -86,75 +112,85 @@ async def lifespan(app: FastAPI):
                     await conn.execute(text("ALTER TABLE products DROP CONSTRAINT IF EXISTS uq_product_name_cat_id CASCADE"))
                     await conn.execute(text("ALTER TABLE products ADD CONSTRAINT uq_product_name_cat_id UNIQUE (product_name, cat_id)"))
                     
-                    logger.info("🛡️ Cloud DB hardening successful: Product constraints updated.")
+                    logger.info("[SECURITY] Cloud DB hardening successful: Product constraints updated.")
                 except Exception as inner_e:
-                    logger.error(f"❌ Failed to apply product constraint fix: {inner_e}")
-
-                # D. Fix Order Status Enum types (Self-Healing)
-                try:
-                    # Fix order_status_history table if it uses the old 'order_status' type
-                    # We cast to text first, upper-case it, and then cast to the 'orderstatus' enum
-                    await conn.execute(text("""
-                        DO $$ 
-                        BEGIN 
-                            IF EXISTS (
-                                SELECT 1 FROM information_schema.columns 
-                                WHERE table_name = 'order_status_history' 
-                                AND column_name = 'status' 
-                                AND udt_name = 'order_status'
-                            ) THEN
-                                ALTER TABLE order_status_history 
-                                ALTER COLUMN status TYPE orderstatus 
-                                USING upper(status::text)::orderstatus;
-                            END IF;
-                        END $$;
-                    """))
-                    logger.info("✅ Database Self-Healing: order_status_history enum type corrected.")
-                except Exception as e_history:
-                    logger.warning(f"⚠️ Could not fix order_status_history enum: {e_history}")
-                    
+                    logger.error(f"[ERROR] Failed to apply product constraint fix: {inner_e}")
                     
         except Exception as e:
             logger.warning(f"Self-healing database update skipped or failed: {e}")
-    
-    # 2. Shared Services (WebSockets & Broadcasters)
-    # Every API instance needs its own listener to notify its connected clients.
-    if APP_ROLE in ("api", "all"):
-        await order_events_manager.start()
-        logger.info(f"📡 API Broadcaster started [PID: {pid}]")
 
-    # 3. Global Worker (Leader Election for Singletons)
-    # Only one instance handles these globally.
-    if APP_ROLE in ("worker", "all"):
+    # 2. Infrastructure & Cache (Cloud Only)
+    if settings.RUNTIME_MODE != "desktop":
+        logger.info("[NETWORK] Connecting to Redis/Infrastructure...")
         if not redis_client.is_available:
             await redis_client.connect()
-            
-        # Initialize Global Task Registry
+        logger.info("[NETWORK] Infrastructure connected.")
+    else:
+        logger.info("[DESKTOP] Desktop Mode: Skipping external Redis connection.")
+        # Ensure the client is initialized with InMemoryCache for desktop
+        await redis_client.connect()
+
+    # 3. Shared Services (WebSockets & Broadcasters)
+    if APP_ROLE in ("api", "all"):
+        logger.info("[NETWORK] Starting API Broadcaster...")
+        await order_events_manager.start()
+        logger.info(f"[NETWORK] API Broadcaster started [PID: {pid}]")
+
+    # 4. Global Worker (Cloud Only)
+    if settings.RUNTIME_MODE != "desktop" and APP_ROLE in ("worker", "all"):
+        logger.info("[WORKER] Starting Global Workers...")
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()
-        
         await global_leader_manager.start()
-        logger.info(f"👷 Global Worker active [PID: {pid}]")
+        logger.info(f"[WORKER] Global Worker active [PID: {pid}]")
+    elif settings.RUNTIME_MODE == "desktop":
+        logger.info("[DESKTOP] Desktop Mode: Global Workers/Leader Election disabled.")
     
-    logger.info(f"✅ Application startup complete [PID: {pid}] [Role: {APP_ROLE}]")
+    logger.info(f"[SUCCESS] Application startup complete [PID: {pid}] [Role: {APP_ROLE}]")
     _startup_executed = True
     
     yield
     
     # --- SHUTDOWN ---
-    logger.info(f"🛑 Shutting down application [PID: {pid}]")
-    if APP_ROLE in ("worker", "all"):
+    logger.info(f"[SHUTDOWN] Shutting down application [PID: {pid}]")
+    if settings.RUNTIME_MODE != "desktop" and APP_ROLE in ("worker", "all"):
         await global_leader_manager.stop()
     if APP_ROLE in ("api", "all"):
         await order_events_manager.stop()
-    await redis_client.disconnect()
+    if settings.RUNTIME_MODE != "desktop":
+        await redis_client.disconnect()
+
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    lifespan=lifespan
+    lifespan=lifespan,
 )
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for the application.
+    Used by the desktop launcher to verify server readiness.
+    """
+    try:
+        redis_stats = redis_client.get_stats()
+        return {
+            "status": "healthy",
+            "mode": settings.RUNTIME_MODE,
+            "redis": {
+                "status": redis_client.status_label,
+                "stats": redis_stats,
+            },
+            "database": "connected",
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "detail": str(e)}
+        )
 
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(AuthMiddleware)
@@ -185,19 +221,15 @@ def root():
     return {"message": "Welcome to RMS API"}
 
 
-@app.get("/health")
-async def health_check():
-    redis_stats = redis_client.get_stats()
-
-    return {
-        "status": "healthy",
-        "redis": {
-            "status": redis_client.status_label,
-            "stats": redis_stats,
-        },
-        "database": "connected",
-    }
+# Redundant health check removed (consolidated above)
 
 
+# Mount frontend last to avoid route shadowing
 if os.path.exists(frontend_path):
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+    # Check if index.html exists to avoid mounting empty directories
+    if os.path.exists(os.path.join(frontend_path, "index.html")):
+        app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+    else:
+        logger.warning(f"Frontend path {frontend_path} exists but index.html is missing.")
+else:
+    logger.warning(f"Frontend path {frontend_path} not found. UI will not be served locally.")

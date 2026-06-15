@@ -1,6 +1,7 @@
 import enum
 from datetime import date, datetime, timezone, timedelta
 
+from typing import Optional
 from sqlalchemy import (
     Column,
     Integer,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     Date,
     UniqueConstraint,
     Sequence,
+    Boolean,
 )
 from app.core.enums import OrderStatus, OrderType, OrderSource
 from sqlalchemy.orm import relationship
@@ -62,6 +64,7 @@ class Order(Base):
     
     customer_notes = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)
+    is_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None))
 
@@ -86,6 +89,12 @@ class Order(Base):
         if self.delivery_person:
             return self.delivery_person.full_name or self.delivery_person.username
         return "Unknown"
+
+    @property
+    def customer_address(self) -> Optional[str]:
+        if self.address:
+            return self.address.address
+        return None
 
     __table_args__ = (
         UniqueConstraint('idempotency_key', 'order_date', name='uq_idempotency_per_day'),
@@ -118,6 +127,8 @@ class OrderItem(Base):
     quantity = Column(Integer, default=1, nullable=False)
     unit_price = Column(Numeric(10,2), nullable=False)
     total_price = Column(Numeric(10,2), nullable=False)
+    is_deleted = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None))
 
     order = relationship("Order", back_populates="items")
 
@@ -130,6 +141,8 @@ class OrderStatusHistory(Base):
     status = Column(DbEnum(OrderStatus, name="orderstatus"), nullable=False)
     changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    is_deleted = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None))
 
     order = relationship("Order", backref="status_history")
 
