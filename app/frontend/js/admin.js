@@ -49,6 +49,65 @@ function showPage(pageId) {
 // ============================================
 document.addEventListener("DOMContentLoaded", function () {
 
+  // --- تفعيل القائمة الجانبية في مقاس التابلت ---
+  const sidebar = document.querySelector(".sidemenu");
+  const toggleBtn = document.getElementById("sidebar_toggle_btn");
+  const overlay = document.getElementById("sidemenu_overlay");
+
+  if (sidebar && toggleBtn && overlay) {
+    const tabletQuery = window.matchMedia("(max-width: 1280px)");
+
+    const closeSidebar = () => {
+      sidebar.classList.remove("open");
+      overlay.classList.remove("active");
+      toggleBtn.setAttribute("aria-expanded", "false");
+    };
+
+    const openSidebar = () => {
+      if (!tabletQuery.matches) return;
+      sidebar.classList.add("open");
+      overlay.classList.add("active");
+      toggleBtn.setAttribute("aria-expanded", "true");
+    };
+
+    const toggleSidebar = () => {
+      if (sidebar.classList.contains("open")) {
+        closeSidebar();
+      } else {
+        openSidebar();
+      }
+    };
+
+    toggleBtn.setAttribute("aria-controls", "admin_sidemenu");
+    toggleBtn.setAttribute("aria-expanded", "false");
+    sidebar.id = sidebar.id || "admin_sidemenu";
+
+    toggleBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleSidebar();
+    });
+
+    overlay.addEventListener("click", closeSidebar);
+
+    sidebar.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", closeSidebar);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeSidebar();
+    });
+
+    const handleTabletChange = () => {
+      if (!tabletQuery.matches) closeSidebar();
+    };
+
+    if (typeof tabletQuery.addEventListener === "function") {
+      tabletQuery.addEventListener("change", handleTabletChange);
+    } else if (typeof tabletQuery.addListener === "function") {
+      tabletQuery.addListener(handleTabletChange);
+    }
+  }
+
   // --- أزرار السايد منيو ---
   document.querySelectorAll(".side_btn[data-page]").forEach((btn) => {
     btn.addEventListener("click", function () {
@@ -72,18 +131,6 @@ document.addEventListener("DOMContentLoaded", function () {
     itemExit.addEventListener("click", () => (itemModal.style.display = "none"));
     window.addEventListener("click", (e) => { if (e.target === itemModal) itemModal.style.display = "none"; });
   }
-
-  // // --- موديل التصنيفات ---
-  // const categoryModal = document.querySelector(".category_modal");
-  // const addCategoryBtn = document.querySelector(".add_category_btn");
-  // const categoryExit = document.querySelector(".category_exit");
-
-  // if (categoryModal) categoryModal.style.display = "none";
-  // if (addCategoryBtn && categoryModal && categoryExit) {
-  //   addCategoryBtn.addEventListener("click", () => (categoryModal.style.display = "flex"));
-  //   categoryExit.addEventListener("click", () => (categoryModal.style.display = "none"));
-  //   window.addEventListener("click", (e) => { if (e.target === categoryModal) categoryModal.style.display = "none"; });
-  // }
 
   // --- موديل الدليفري --- ✅ مصلح: بنبحث جوا الـ modal مش في كل الصفحة
   const deliveryModal = document.querySelector(".delivery_modal");

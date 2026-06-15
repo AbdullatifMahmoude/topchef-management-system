@@ -1128,3 +1128,419 @@ nav {
   font-size: 14px;
   color: var(--color-text);
 }
+
+/* ============================================
+   Tablet Responsiveness (width <= 1024px)
+   ============================================ */
+@media (max-width: 1024px) {
+  body {
+    min-width: 0;
+  }
+
+  /* Navbar */
+  nav {
+    padding: 8px 16px;
+    gap: 12px;
+  }
+  .nav_logo img {
+    width: 40px;
+    height: 40px;
+  }
+  .nav_logo h1 {
+    font-size: 16px;
+  }
+  #ws_status_badge {
+    font-size: 9px !important;
+    gap: 4px !important;
+  }
+  .nav_tabs {
+    gap: 6px;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    max-width: none;
+    min-width: 0;
+  }
+  .nav_tabs::-webkit-scrollbar {
+    height: 3px;
+  }
+  .nav_tabs::-webkit-scrollbar-thumb {
+    background: var(--color-primary);
+  }
+  .nav_tab {
+    padding: 6px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  nav > div:last-child {
+    gap: 8px !important;
+    flex-shrink: 0;
+  }
+  nav > div:last-child span {
+    font-size: 12px !important;
+  }
+  nav > div:last-child button {
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+    border-radius: 6px !important;
+  }
+  #sound_toggle_btn {
+    padding: 6px !important;
+  }
+  #sound_toggle_btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* Main POS Layout */
+  .main_layout {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 34vw);
+    gap: 12px;
+    padding: 12px 16px;
+    height: calc(100vh - 62px);
+    min-width: 0;
+  }
+
+  /* Right POS Section */
+  .right_section {
+    gap: 16px;
+    min-width: 0;
+  }
+  .category_tabs {
+    gap: 6px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .category_tabs::-webkit-scrollbar {
+    height: 3px;
+  }
+  .tab_btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .items_grid {
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 8px;
+    padding: 4px;
+    min-height: 0;
+  }
+  .item_card {
+    padding: 10px 8px;
+    gap: 6px;
+    border-radius: 8px;
+  }
+  .item_card h1 {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .item_card h2 {
+    font-size: 11px;
+  }
+
+  /* Left POS Cart Section */
+  .total_header {
+    padding: 10px 12px;
+  }
+  .total_container {
+    min-width: 0;
+  }
+  .total_header h1 {
+    font-size: 16px;
+  }
+  .total_cards {
+    padding: 8px;
+    gap: 8px;
+  }
+  .total_card {
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+  .card_info h1 {
+    font-size: 12px;
+  }
+  .card_info h2 {
+    font-size: 11px;
+  }
+  .qty_controls {
+    gap: 6px;
+  }
+  .btn_qty {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
+  .qty_num {
+    font-size: 12px;
+    min-width: 14px;
+  }
+  .btn_delete {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+  }
+  .btn_delete svg {
+    width: 12px;
+    height: 12px;
+  }
+  #delivery_customer_form {
+    padding: 8px 10px;
+  }
+  .delivery_customer_card {
+    gap: 6px;
+  }
+  .dcf_input, .dcf_select {
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+  .total_footer {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .order_type_btn {
+    height: 40px;
+    font-size: 11px;
+    border-radius: 8px;
+    gap: 2px;
+  }
+  .total_sum h1 {
+    font-size: 13px;
+  }
+  .total_sum h2 {
+    font-size: 15px;
+  }
+  .footer_btns {
+    gap: 8px;
+  }
+  .btn_confirm, .btn_cancel {
+    height: 36px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+
+  /* Online & All Orders Layouts */
+  #online_orders_layout, #all_orders_layout, #riders_layout {
+    padding: 12px 16px !important;
+    height: calc(100vh - 62px) !important;
+  }
+  .online_stats {
+    gap: 12px;
+  }
+  .stat_box {
+    padding: 12px;
+    border-radius: 8px;
+  }
+  .stat_box h2 {
+    font-size: 20px;
+    margin-bottom: 2px;
+  }
+  .stat_box p {
+    font-size: 13px;
+  }
+  .online_actions_row {
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .filters_group {
+    order: 2;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .filter_btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .online_search_wrapper {
+    order: 1;
+    max-width: none;
+    width: 100%;
+    margin: 0;
+  }
+  .online_search_input {
+    padding: 10px 16px 10px 40px;
+    font-size: 13px;
+  }
+  .toggle_orders_wrapper {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .toggle_orders_btn {
+    padding: 6px 12px 6px 36px;
+    font-size: 12px;
+  }
+  .toggle_orders_btn .toggle_circle {
+    width: 20px;
+    height: 20px;
+    left: 4px;
+  }
+  .online_orders_grid, #all_orders_grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    padding: 4px;
+  }
+  .online_order_card {
+    padding: 14px;
+    gap: 12px;
+    border-radius: 8px;
+  }
+  .order_id {
+    font-size: 16px;
+  }
+  .order_status {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  .card_details {
+    gap: 8px;
+  }
+  .detail_row {
+    gap: 8px;
+  }
+  .detail_row span {
+    font-size: 13px;
+  }
+  .detail_row svg {
+    width: 16px;
+    height: 16px;
+  }
+  
+  /* Delivery Riders Performance Table */
+  #riders_layout h2 {
+    font-size: 18px !important;
+  }
+  #riders_layout table th, #riders_layout table td {
+    padding: 10px 8px !important;
+    font-size: 12px !important;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 900px) {
+  nav {
+    padding: 8px 12px;
+  }
+
+  .nav_logo {
+    gap: 8px;
+  }
+
+  .nav_logo h1 {
+    font-size: 14px;
+  }
+
+  .main_layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .items_grid {
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  }
+
+  .total_card {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .card_controls {
+    gap: 6px;
+  }
+
+  .order_type_btns {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 768px) {
+  body {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .nav_logo {
+    flex: 1 1 auto;
+  }
+
+  .nav_tabs {
+    order: 3;
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+
+  nav > div:last-child {
+    margin-inline-start: auto;
+  }
+
+  .main_layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: calc(100vh - 108px);
+    overflow: visible;
+  }
+
+  .right_section {
+    overflow: visible;
+  }
+
+  .items_grid {
+    max-height: 48vh;
+    overflow-y: auto;
+  }
+
+  .total_container {
+    min-height: 360px;
+    max-height: none;
+  }
+
+  .total_cards {
+    max-height: 34vh;
+  }
+
+  #online_orders_layout,
+  #all_orders_layout,
+  #riders_layout {
+    height: auto !important;
+    min-height: calc(100vh - 108px) !important;
+    overflow-y: visible !important;
+  }
+
+  .online_stats {
+    grid-template-columns: 1fr;
+  }
+
+  .toggle_orders_wrapper {
+    flex-wrap: wrap;
+  }
+
+  .toggle_orders_wrapper .filter_btn {
+    margin-right: 0 !important;
+  }
+
+  .online_orders_grid,
+  #all_orders_grid {
+    grid-template-columns: 1fr;
+  }
+}
+

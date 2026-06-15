@@ -6,10 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin - توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260506-devices" />
+  <link rel="stylesheet" href="css/admin.css?v=20260615-tablet-mobile-sidebar" />
 </head>
 
 <body>
+  <div class="sidemenu_overlay" id="sidemenu_overlay"></div>
+  <button class="sidebar_toggle_btn" id="sidebar_toggle_btn" title="القائمة">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </button>
   <div class="layout">
     <!-- ===== السايد منيو الثابت ===== -->
     <div class="sidemenu">
@@ -770,7 +778,7 @@
     <script src="js/chart.js"></script>
     <script src="js/sync_monitoring.js?v=20260506-devices"></script>
     <script src="js/orders_dashboard.js"></script>
-    <script src="js/admin.js"></script>
+    <script src="js/admin.js?v=20260615-tablet-mobile-sidebar"></script>
     <script>
       // ===== عرض اسم المستخدم =====
       (function () {
