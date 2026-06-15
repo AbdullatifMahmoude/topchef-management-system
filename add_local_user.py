@@ -11,7 +11,6 @@ def get_password_hash(password: str) -> str:
 
 def add_user(): 
     db_paths = [
-        "desktop/data/topchef_local.db",
         "build/dist/TopChef/data/topchef_local.db"
     ]
     

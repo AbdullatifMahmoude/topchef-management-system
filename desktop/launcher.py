@@ -15,7 +15,7 @@ from pathlib import Path
 if getattr(sys, 'frozen', False):
     try:
         _base = Path(sys.executable).parent
-        _logs_dir = _base / "desktop" / "logs"
+        _logs_dir = _base / "logs"
         _logs_dir.mkdir(parents=True, exist_ok=True)
         _err_log = open(_logs_dir / "desktop_errors.log", "a", encoding="utf-8")
         sys.stdout = _err_log
@@ -30,7 +30,6 @@ import time
 import threading
 import socket
 import asyncio
-import webbrowser
 import faulthandler
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -637,19 +636,13 @@ def main():
             if webview_ready.wait(20):
                 return
             log.error(
-                "PyWebView did not report a loaded window within %.1fs; opening browser fallback at %s",
+                "PyWebView did not report a loaded window within %.1fs. Native desktop window may be unresponsive.",
                 time.time() - watchdog_started_at,
-                app_url,
             )
             try:
                 faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
             except Exception:
                 pass
-            try:
-                webbrowser.open(app_url)
-                log.info("Browser fallback opened while native WebView is unresponsive.")
-            except Exception as browser_error:
-                log.error("Browser fallback failed: %s", browser_error)
 
         threading.Thread(target=_webview_watchdog, daemon=True, name="webview-watchdog").start()
 
@@ -751,11 +744,6 @@ def main():
         )
     except Exception as e:
         log.error(f"UI Failed: {e}")
-        try:
-            webbrowser.open(app_url)
-            log.info("Fell back to default browser at %s", app_url)
-        except Exception as browser_error:
-            log.error("Browser fallback failed: %s", browser_error)
         _quit()
 
 if __name__ == "__main__":

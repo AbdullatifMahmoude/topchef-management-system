@@ -114,9 +114,12 @@ class TrayIcon:
         icon_path = ASSETS_DIR / "icon.png"
         if icon_path.exists():
             try:
-                return Image.open(icon_path)
-            except Exception:
-                pass
+                log.info("Loading tray icon from %s", icon_path)
+                return Image.open(icon_path).convert("RGBA")
+            except Exception as exc:
+                log.warning("Failed to load tray icon from %s: %s", icon_path, exc)
+        else:
+            log.warning("Tray icon asset not found at %s; using generated fallback", icon_path)
         return _create_default_icon()
 
 
