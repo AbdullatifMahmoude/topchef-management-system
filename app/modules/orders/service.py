@@ -76,6 +76,25 @@ class OrderService:
                 raise ValidationError(f"'{product.product_name}' is currently unavailable")
 
     async def create_order(self, order_data: schemas.OrderCreate, current_user_id: Optional[int] = None) -> models.Order:
+        import asyncio as _asyncio
+        from sqlalchemy.exc import OperationalError as _OperationalError
+        from app.core.logging import logger as _logger
+
+        _max_retries = 3
+        for _attempt in range(_max_retries):
+            try:
+                return await self._create_order_inner(order_data, current_user_id)
+            except _OperationalError as exc:
+                if "database is locked" in str(exc).lower() and _attempt < _max_retries - 1:
+                    _logger.warning(
+                        "Database locked during order creation (attempt %d/%d). Retrying in %.1fs...",
+                        _attempt + 1, _max_retries, 0.5 * (_attempt + 1),
+                    )
+                    await _asyncio.sleep(0.5 * (_attempt + 1))
+                else:
+                    raise
+
+    async def _create_order_inner(self, order_data: schemas.OrderCreate, current_user_id: Optional[int] = None) -> models.Order:
         async with self._transaction_scope():
             # Check if online orders are enabled
             if order_data.source == models.OrderSource.ONLINE:

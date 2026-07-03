@@ -231,7 +231,8 @@ def main():
                 pass
             
             loop_counter += 1
-            if not _auth_header_cache:
+            if not _auth_header_cache or not cloud_client.is_authenticated():
+                _auth_header_cache = None
                 if loop_counter % 10 == 0:
                     log.info("Outbox: Waiting for user activity to capture Auth header...")
                 continue
@@ -384,8 +385,8 @@ def main():
                                 "version": settings.VERSION,
                                 "os": platform.system()
                             }
-                            if await cloud_client.post("/desktop-updates/sync/heartbeat", heartbeat_payload):
-                                last_heartbeat_at = time.monotonic()
+                            await cloud_client.post("/desktop-updates/sync/heartbeat", heartbeat_payload)
+                            last_heartbeat_at = time.monotonic()
 
                         # 4. Global Counter Reset
                         if loop_counter >= 1200: # Reset every ~20 mins
@@ -669,25 +670,36 @@ def main():
                     console.log("Applying zoom: __ZOOM__%");
                     var apply = function(level) {
                         level = Math.max(50, Math.min(200, level));
+                        if (isNaN(level)) level = 100;
                         var val = level + '%';
-                        document.documentElement.style.zoom = val;
-                        if (document.body) document.body.style.zoom = val;
+                        if (document.documentElement && document.documentElement.style) {
+                            document.documentElement.style.zoom = val;
+                        }
+                        if (document.body && document.body.style) {
+                            document.body.style.zoom = val;
+                        }
                         
                         if (window.pywebview && window.pywebview.api) {
-                            window.pywebview.api.set_zoom(level);
+                            try { window.pywebview.api.set_zoom(level); } catch(err) {}
                         }
                         return level;
                     };
 
-                    // Initial apply
-                    apply(__ZOOM__);
+                    // Initial apply (deferred to ensure DOM is ready)
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', function() { apply(__ZOOM__); });
+                    } else {
+                        apply(__ZOOM__);
+                    }
 
                     if (window.__zoomInitialized) return;
                     window.__zoomInitialized = true;
 
                     document.addEventListener('keydown', function(e) {
                         if (!e.ctrlKey) return;
-                        var current = parseInt(document.documentElement.style.zoom || '100');
+                        var raw = document.documentElement ? document.documentElement.style.zoom : '100';
+                        var current = parseInt(raw || '100', 10);
+                        if (isNaN(current)) current = 100;
                         if (e.key === '+' || e.key === '=' || e.code === 'Equal') {
                             e.preventDefault();
                             apply(current + 10);
@@ -703,7 +715,9 @@ def main():
                     document.addEventListener('wheel', function(e) {
                         if (!e.ctrlKey) return;
                         e.preventDefault();
-                        var current = parseInt(document.documentElement.style.zoom || '100');
+                        var raw = document.documentElement ? document.documentElement.style.zoom : '100';
+                        var current = parseInt(raw || '100', 10);
+                        if (isNaN(current)) current = 100;
                         var delta = e.deltaY < 0 ? 10 : -10;
                         apply(current + delta);
                     }, {passive: false});

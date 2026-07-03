@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import declarative_base
+from sqlalchemy import event
 
 from app.core.config import settings
 
@@ -83,7 +84,7 @@ engine_kwargs = {
 }
 
 if _is_sqlite_url(settings.DATABASE_URL):
-    engine_kwargs["connect_args"] = {"check_same_thread": False}
+    engine_kwargs["connect_args"] = {"check_same_thread": False, "timeout": 15}
 else:
     engine_kwargs.update(
         {
@@ -96,6 +97,15 @@ else:
 
 
 engine: AsyncEngine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
+
+if _is_sqlite_url(settings.DATABASE_URL):
+    @event.listens_for(engine.sync_engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
     engine,
@@ -122,5 +132,13 @@ async def get_db() -> AsyncSession:
 def get_sync_engine():
     sync_url = _to_sync_database_url(settings.DATABASE_URL)
     if sync_url.startswith("sqlite:///"):
-        return create_engine(sync_url, connect_args={"check_same_thread": False})
+        sync_engine = create_engine(sync_url, connect_args={"check_same_thread": False, "timeout": 15})
+        @event.listens_for(sync_engine, "connect")
+        def set_sqlite_pragma_sync(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.close()
+        return sync_engine
     return create_engine(sync_url, connect_args={"sslmode": "require"})

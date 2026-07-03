@@ -2893,8 +2893,7 @@ function renderAllOrders() {
 }
 
 function renderPagination(totalItems, currentPage, pageSize, onPageChangeName) {
-  const totalPages = Math.ceil(totalItems / pageSize);
-  if (totalPages <= 1) return null;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   const container = document.createElement("div");
   container.className = "pagination-container";

@@ -502,30 +502,78 @@ class PrinterManager:
     def _print_native_gdi(self, image: Image.Image, printer_name: str, document_name: str) -> bool:
         hdc = None
         try:
+            available_printers = self.get_printers()
+            if printer_name not in available_printers:
+                log.error("Pre-flight check failed: Printer '%s' not found in system registered printers.", printer_name)
+                self._alert_ui(f"Cashier printer '{printer_name}' not found on this machine. Check printer name in Settings.")
+                return False
+
             hdc = win32ui.CreateDC()
             hdc.CreatePrinterDC(printer_name)
             printable_width = hdc.GetDeviceCaps(110)
             printable_height = hdc.GetDeviceCaps(111)
 
-            hdc.StartDoc(document_name)
-            hdc.StartPage()
+            success = False
+            for attempt in range(2):
+                try:
+                    hdc.StartDoc(document_name)
+                    success = True
+                    break
+                except Exception as e:
+                    if attempt == 0:
+                        log.warning("StartDoc failed on %s (attempt %d). Retrying in 0.5s...", printer_name, attempt + 1)
+                        time.sleep(0.5)
+                    else:
+                        raise e
 
-            dib = ImageWin.Dib(image)
-            scaled_height = int(image.size[1] * (printable_width / image.size[0]))
-            dib.draw(hdc.GetHandleOutput(), (0, 0, printable_width, min(scaled_height, printable_height)))
+            if success:
+                hdc.StartPage()
 
-            hdc.EndPage()
-            hdc.EndDoc()
-            log.info("Native Python GDI print successful to %s", printer_name)
-            return True
+                dib = ImageWin.Dib(image)
+                scaled_height = int(image.size[1] * (printable_width / image.size[0]))
+                dib.draw(hdc.GetHandleOutput(), (0, 0, printable_width, min(scaled_height, printable_height)))
+
+                hdc.EndPage()
+                hdc.EndDoc()
+                log.info("Native Python GDI print successful to %s", printer_name)
+                return True
+            return False
         except Exception as exc:
-            log.error("Native Python GDI print failed on %s: %s", printer_name, exc)
+            printer_status = "Unknown"
+            try:
+                handle = win32print.OpenPrinter(printer_name)
+                info = win32print.GetPrinter(handle, 2)
+                status = info.get("Status", 0)
+                win32print.ClosePrinter(handle)
+                printer_status = f"Status Code: {status}"
+            except Exception:
+                pass
+            
+            log.error("Native Python GDI print failed on %s: %s | Printer Status: %s", printer_name, exc, printer_status)
+            self._alert_ui(f"Print failed on '{printer_name}'. Check printer connection and paper.")
             try:
                 if hdc:
                     hdc.AbortDoc()
             except Exception:
                 pass
             return False
+
+    def _alert_ui(self, message: str) -> None:
+        try:
+            import webview
+            if webview.windows:
+                # Escape quotes in message to prevent JS injection errors
+                safe_msg = message.replace("'", "\\'").replace('"', '\\"')
+                js_code = f"""
+                if (window.showToast) {{
+                    window.showToast('{safe_msg}', 'error');
+                }} else {{
+                    alert('{safe_msg}');
+                }}
+                """
+                webview.windows[0].evaluate_js(js_code)
+        except Exception as e:
+            log.warning("Failed to send UI alert: %s", e)
 
     def _printer_worker(self) -> None:
         while True:
