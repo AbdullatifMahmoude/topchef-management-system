@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from decimal import Decimal
-from app.core.enums import OrderType, OrderSource
+from app.core.enums import OrderType, OrderSource, DiscountType
 
 class PricingItem(BaseModel):
     product_id: int
@@ -16,6 +16,8 @@ class PricingRequest(BaseModel):
     offer_code: Optional[str] = None
     customer_phone: Optional[str] = None
     cashier_id: Optional[int] = None
+    manual_discount_type: Optional[DiscountType] = None
+    manual_discount_value: Optional[Decimal] = None
 
 class PricingResult(BaseModel):
     subtotal: Decimal

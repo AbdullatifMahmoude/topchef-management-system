@@ -134,6 +134,26 @@
         <!-- فورم بيانات عميل الديليفري -->
         <div id="delivery_customer_form" style="display:none"></div>
 
+        <!-- Discount Section -->
+        <!-- Discount Section -->
+        <div id="discount_form" style="border-top: 1px solid rgba(201, 168, 76, 0.3); padding: 12px 14px; flex-shrink: 0; margin-bottom: 8px;">
+          <div class="dcf_title" style="margin-bottom: 8px;">
+            <i class="fa-solid fa-tags"></i>
+            <span>خصم إضافي</span>
+          </div>
+          <div class="delivery_customer_card">
+            <div style="display:flex; gap:8px;">
+              <select id="discount_type" class="dcf_select" style="flex:1;" onchange="updatePricingPreview()">
+                <option value="">بدون خصم</option>
+                <option value="fixed">مبلغ ثابت</option>
+                <option value="percentage">نسبة مئوية (%)</option>
+              </select>
+              <input type="number" id="discount_value" class="dcf_input" style="flex:1;" placeholder="القيمة" min="0" step="0.01" oninput="updatePricingPreview()">
+            </div>
+            <input type="text" id="discount_reason" class="dcf_input" placeholder="سبب الخصم (اختياري)">
+          </div>
+        </div>
+
         <div class="total_footer">
           <!-- Badge نوع الطلب -->
           <div

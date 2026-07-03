@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore
 from app.core.events import order_events_manager
+from app.core.enums import OrderStatus, OrderSource
 
 
 class OrderService:
@@ -176,7 +177,9 @@ class OrderService:
                 delivery_fee=order_data.delivery_fee,
                 offer_code=order_data.offer_code,
                 customer_phone=order_data.customer_phone,
-                cashier_id=current_user_id if order_data.source == models.OrderSource.CASHIER else None
+                cashier_id=current_user_id if order_data.source == models.OrderSource.CASHIER else None,
+                manual_discount_type=getattr(order_data, 'manual_discount_type', None),
+                manual_discount_value=getattr(order_data, 'manual_discount_value', None)
             )
             
             # 2. Get Pricing Calculation
@@ -184,7 +187,7 @@ class OrderService:
             
             # 3. Create Order Object
             next_number = await self.repository.get_next_order_number()
-            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date'})
+            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason'})
             order = models.Order(**order_dict)
             
             # 4. Fill calculated financials and metadata
@@ -200,6 +203,9 @@ class OrderService:
             
             order.subtotal = pricing_res.subtotal
             order.discount_amount = pricing_res.discount_amount
+            order.discount_type = getattr(order_data, 'manual_discount_type', None)
+            order.discount_value = getattr(order_data, 'manual_discount_value', None)
+            order.discount_reason = getattr(order_data, 'discount_reason', None)
             order.delivery_fee = pricing_res.delivery_fee
             order.total_amount = pricing_res.total_amount
             
@@ -255,18 +261,20 @@ class OrderService:
         status: Optional[str] = None,
         order_type: Optional[str] = None,
         page: int = 1,
-        page_size: int = 50
+        page_size: int = 50,
+        cashier_id: Optional[int] = None
     ) -> Tuple[int, List[models.Order]]:
         return await self.repository.list_orders_paginated(
             source=source,
             status=status,
             order_type=order_type,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            cashier_id=cashier_id
         )
 
-    async def list_orders(self, **kwargs) -> List[models.Order]:
-        return await self.repository.list_orders(**kwargs)
+    async def list_orders(self, cashier_id: Optional[int] = None, **kwargs) -> List[models.Order]:
+        return await self.repository.list_orders(cashier_id=cashier_id, **kwargs)
 
     async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: Optional[int] = None) -> models.Order:
         async with self._transaction_scope():
@@ -274,6 +282,11 @@ class OrderService:
             if update_data.order_status and order.order_status != update_data.order_status:
                 if not order.can_transition_to(update_data.order_status):
                     raise ValidationError(f"Invalid status transition from {order.order_status} to {update_data.order_status}")
+                
+                # If an online order is confirmed by a cashier, assign it to them
+                if update_data.order_status == OrderStatus.CONFIRMED and order.order_source == OrderSource.ONLINE:
+                    if not order.created_by_user_id and current_user_id:
+                        order.created_by_user_id = current_user_id
             
             updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
             await self.db.flush()
@@ -307,6 +320,19 @@ class OrderService:
                     try:
                         existing_cust = await customer_service.get_customer_by_phone(target_phone)
                         update_data.customer_id = existing_cust.id
+                        
+                        # Update local customer name if different, and push sync event
+                        if existing_cust.name != target_name:
+                            existing_cust.name = target_name
+                            self.db.add(existing_cust)
+                            
+                            customer_service._record_outbox_event("CUSTOMER_CREATED", {
+                                "id": existing_cust.id,
+                                "name": existing_cust.name,
+                                "phone_number": existing_cust.phone_number,
+                                "created_at": existing_cust.created_at.isoformat() if existing_cust.created_at else None,
+                            })
+                            
                     except NotFoundError:
                         new_cust = await customer_service.create_customer(CustomerCreate(
                             name=target_name,
@@ -314,8 +340,19 @@ class OrderService:
                         ))
                         update_data.customer_id = new_cust.id
                     if getattr(update_data, 'customer_address', None):
-                        new_addr = await customer_service.add_address(update_data.customer_id, CustomerAddressCreate(address=update_data.customer_address))
-                        update_data.address_id = new_addr.id
+                        # Check if customer already has this exact address
+                        existing_customer = await customer_service.repository.get_by_id(update_data.customer_id)
+                        existing_match = None
+                        if existing_customer and existing_customer.addresses:
+                            existing_match = next(
+                                (a for a in existing_customer.addresses if a.address == update_data.customer_address),
+                                None
+                            )
+                        if existing_match:
+                            update_data.address_id = existing_match.id
+                        else:
+                            new_addr = await customer_service.add_address(update_data.customer_id, CustomerAddressCreate(address=update_data.customer_address))
+                            update_data.address_id = new_addr.id
 
             needs_reprice = False
             if update_data.delivery_fee is not None and update_data.delivery_fee != order.delivery_fee:
@@ -327,6 +364,11 @@ class OrderService:
             if update_data.items is not None:
                 needs_reprice = True
             
+            # Check if discount fields are provided in the update (even if None, to clear them)
+            provided_fields = update_data.model_fields_set
+            if 'manual_discount_type' in provided_fields or 'manual_discount_value' in provided_fields:
+                needs_reprice = True
+            
             if needs_reprice:
                 if update_data.items is not None:
                     await self._validate_order_items(update_data.items)
@@ -334,9 +376,15 @@ class OrderService:
                 else:
                     pricing_items = [PricingItem(product_id=it.product_id, quantity=it.quantity, unit_price=it.unit_price) for it in order.items]
                 
+                # Use updated discount if provided, else keep existing
+                disc_type = update_data.manual_discount_type if 'manual_discount_type' in provided_fields else order.discount_type
+                disc_value = update_data.manual_discount_value if 'manual_discount_value' in provided_fields else order.discount_value
+
                 pricing_req = PricingRequest(
                     items=pricing_items, order_type=order.order_type, delivery_fee=order.delivery_fee, 
-                    offer_code=None, customer_phone=order.customer_phone, cashier_id=current_user_id
+                    offer_code=None, customer_phone=order.customer_phone, cashier_id=current_user_id,
+                    manual_discount_type=disc_type,
+                    manual_discount_value=disc_value
                 )
                 pricing_res = await self.pricing_service.calculate_price(pricing_req)
                 
@@ -352,8 +400,14 @@ class OrderService:
                 
                 order.subtotal = pricing_res.subtotal
                 order.discount_amount = pricing_res.discount_amount
+                order.discount_type = disc_type
+                order.discount_value = disc_value
                 order.delivery_fee = pricing_res.delivery_fee
                 order.total_amount = pricing_res.total_amount
+            
+            # Update discount reason if provided
+            if 'discount_reason' in provided_fields:
+                order.discount_reason = update_data.discount_reason
 
             updated_order = await self.repository.update_order_full(order, update_data, changed_by_user_id=current_user_id)
             await self.db.flush()

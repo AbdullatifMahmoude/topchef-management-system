@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.pricing.schemas import PricingRequest, PricingResult
-from app.core.enums import OrderType
+from app.core.enums import OrderType, DiscountType
 from app.modules.offer.service import OfferService
 from app.modules.pricing.domain import FinancialSnapshot
 
@@ -33,6 +33,14 @@ class PricingService:
                 commit_usage=False # This is a price calculation preview
             )
             discount_amount = offer_response.discount_amount
+
+        # 2b. Apply manual discount if present (cashier-entered)
+        if request.manual_discount_type and request.manual_discount_value and request.manual_discount_value > 0:
+            if request.manual_discount_type == DiscountType.PERCENTAGE:
+                manual_disc = (subtotal * request.manual_discount_value) / Decimal("100")
+            else:  # fixed
+                manual_disc = request.manual_discount_value
+            discount_amount = discount_amount + min(manual_disc, subtotal - discount_amount)
 
         # 3. Handle Delivery Fee
         delivery_fee = Decimal("0.00")

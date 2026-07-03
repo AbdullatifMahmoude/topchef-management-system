@@ -108,6 +108,12 @@ function printReceipt(orderData) {
             <span>${Number(orderData.delivery_fee || orderData.selectedDineInFee || 0).toFixed(2)}</span>
           </div>
         ` : ''}
+        ${(orderData.discount_amount && Number(orderData.discount_amount) > 0) ? `
+          <div class="totals-row">
+            <span>الخصم${orderData.discount_reason ? ` (${orderData.discount_reason})` : ''}:</span>
+            <span>- ${Number(orderData.discount_amount).toFixed(2)}</span>
+          </div>
+        ` : ''}
         <div class="totals-row grand">
           <span>الإجمالي النهائي:</span>
           <span>${Number(orderData.total_amount || orderData.grandTotal || 0).toFixed(2)} ج.م</span>

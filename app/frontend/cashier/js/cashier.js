@@ -570,6 +570,10 @@ function showConfirmModal(orderData) {
           ? deliveryCustomerInfo.newAddress
           : null;
 
+      const discountType = document.getElementById("discount_type")?.value || null;
+      const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
+      const discountReason = document.getElementById("discount_reason")?.value || null;
+
       const payload = {
         customer_id: resolvedCustomerId || null,
         customer_phone: deliveryCustomerInfo.phone || null,
@@ -589,6 +593,9 @@ function showConfirmModal(orderData) {
             ? selectedDeliveryFee
             : selectedDineInFee) || 0,
         offer_code: null,
+        manual_discount_type: discountType,
+        manual_discount_value: discountValue,
+        discount_reason: discountReason,
       };
 
       const res = await apiFetch("/orders/", {
@@ -678,6 +685,13 @@ function showConfirmModal(orderData) {
         dcFormOk.style.display = "none";
         dcFormOk.innerHTML = "";
       }
+      
+      const discType = document.getElementById("discount_type");
+      const discValue = document.getElementById("discount_value");
+      const discReason = document.getElementById("discount_reason");
+      if (discType) discType.value = "";
+      if (discValue) discValue.value = "";
+      if (discReason) discReason.value = "";
       renderCart();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
@@ -997,6 +1011,9 @@ async function updatePricingPreview() {
         (orderType === "delivery" ? selectedDeliveryFee : selectedDineInFee) ||
         0;
 
+      const discountType = document.getElementById("discount_type")?.value || null;
+      const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
+
       const payload = {
         items: items,
         order_type: mappedOrderType,
@@ -1006,6 +1023,8 @@ async function updatePricingPreview() {
         customer_phone:
           orderType === "delivery" ? deliveryCustomerInfo.phone : null,
         cashier_id: parseInt(localStorage.getItem("user_id"), 10) || null,
+        manual_discount_type: discountType,
+        manual_discount_value: discountValue,
       };
 
       const res = await apiFetch("/pricing/preview", {
@@ -1905,7 +1924,16 @@ function renderOnlineOrders() {
     return;
   }
 
-  if (onlineOrdersList.length === 0) {
+  const term = (onlineOrdersSearchTerm || "").toLowerCase();
+  const filteredList = onlineOrdersList.filter(o => {
+    if (!term) return true;
+    const oNum = String(o.order_number || o.id || "").toLowerCase();
+    const phone = String(o.customer_phone || "").toLowerCase();
+    const name = String(o.customer_name || "").toLowerCase();
+    return oNum.includes(term) || phone.includes(term) || name.includes(term);
+  });
+
+  if (filteredList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات أون لاين</p>`;
     return;
   }
@@ -1944,6 +1972,14 @@ function renderOnlineOrders() {
       }
     }
 
+    let updatedTimeStr = "";
+    if (order.updated_at && order.updated_at !== order.created_at) {
+        let du = new Date(order.updated_at);
+        if (!isNaN(du)) {
+            updatedTimeStr = `<span style="font-size:10px; color:#f39c12; margin-top:2px;">عدل في: ${du.toLocaleTimeString("ar-EG", {hour: "2-digit", minute: "2-digit"})} - ${du.toLocaleDateString("ar-EG")}</span>`;
+        }
+    }
+
     const card = document.createElement("div");
     card.className = "online_order_card";
     card.id = `online_order_card_${order.id}`;
@@ -1954,6 +1990,7 @@ function renderOnlineOrders() {
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
           <span class="order_id" style="margin-bottom:2px;">طلب #${order.order_number || order.id}</span>
           <span style="font-size:11px; opacity:0.7;">${timeStr}</span>
+          ${updatedTimeStr}
         </div>
       </div>
       <div class="card_details">
@@ -2068,7 +2105,7 @@ function renderOnlineOrders() {
     }
   };
 
-  onlineOrdersList.forEach((order) => {
+  filteredList.forEach((order) => {
     grid.appendChild(createOnlineOrderCardElement(order));
   });
 
@@ -2782,7 +2819,16 @@ function renderAllOrders() {
     return;
   }
 
-  if (allOrdersList.length === 0) {
+  const term = (allOrdersSearchTerm || "").toLowerCase();
+  const filteredList = allOrdersList.filter(o => {
+    if (!term) return true;
+    const oNum = String(o.order_number || o.id || "").toLowerCase();
+    const phone = String(o.customer_phone || "").toLowerCase();
+    const name = String(o.customer_name || "").toLowerCase();
+    return oNum.includes(term) || phone.includes(term) || name.includes(term);
+  });
+
+  if (filteredList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات</p>`;
     return;
   }
@@ -2888,6 +2934,14 @@ function renderAllOrders() {
         `;
     }
 
+    let updatedTimeStr = "";
+    if (order.updated_at && order.updated_at !== order.created_at) {
+        let du = new Date(order.updated_at);
+        if (!isNaN(du)) {
+            updatedTimeStr = `<span style="display:block; color:#f39c12; font-size:10px; margin-top:2px;">عدل في: ${du.toLocaleTimeString("ar-EG", {hour: "2-digit", minute: "2-digit"})} - ${du.toLocaleDateString("ar-EG")}</span>`;
+        }
+    }
+
     const card = document.createElement("div");
     card.className = "online_order_card";
     card.id = `all_order_card_${order.id}`;
@@ -2895,13 +2949,16 @@ function renderAllOrders() {
     card.style.cssText =
       "padding:12px; gap:8px; min-height:0; display:flex; flex-direction:column;";
     card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="display:flex; align-items:center; gap:8px;">
             ${badgeHtml}
             <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${order.order_number || order.id}</span>
             <span style="font-size:11px; padding:2px 6px; background:rgba(255,255,255,0.05); border-radius:4px; color:var(--color-subtext);">${typeLabel}</span>
           </div>
-          <span style="font-size:11px; color:var(--color-subtext);">${timeStr}</span>
+          <div style="display:flex; flex-direction:column; align-items:flex-end;">
+            <span style="font-size:11px; color:var(--color-subtext);">${timeStr}</span>
+            ${updatedTimeStr}
+          </div>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(201,168,76,0.3); padding-top:8px; margin-top:2px;">
           <span style="font-size:15px; font-weight:800; color:var(--color-primary);">${totalAmount} ج.م</span>
@@ -2958,7 +3015,7 @@ function renderAllOrders() {
     }
   };
 
-  allOrdersList.forEach((order) => {
+  filteredList.forEach((order) => {
     grid.appendChild(createAllOrderCardElement(order));
   });
 
@@ -3300,7 +3357,7 @@ function openOrderDetails(orderId, source) {
     .join("");
 
   const deliveryFee = parseFloat(order.delivery_fee || 0);
-  const itemsTotal = parseFloat(order.total_amount || 0) - deliveryFee;
+  const itemsTotal = parseFloat(order.subtotal || order.total_amount || 0);
 
   // قسم تخصيص الدليفري — يظهر فقط لطلبات الأونلاين نوع delivery
   const isOnlineDelivery =
@@ -3334,6 +3391,11 @@ function openOrderDetails(orderId, source) {
         <div style="text-align:center; margin-bottom:24px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:16px;">
           <h2 style="color:var(--color-primary); margin-bottom:8px;">تفاصيل الطلب #${order.order_number || order.id}</h2>
           <span class="order_status ${statusObj.cls}">${statusObj.label}</span>
+          ${
+            order.updated_at && order.updated_at !== order.created_at
+              ? `<div style="margin-top:10px; color:#f39c12; font-size:12px;">عدل في: ${new Date(order.updated_at).toLocaleString("ar-EG")}</div>`
+              : ""
+          }
         </div>
 
         <div class="order_detail_info_grid">
@@ -3405,6 +3467,16 @@ function openOrderDetails(orderId, source) {
             <span>خدمة التوصيل:</span>
             <span id="od_delivery_fee">${deliveryFee.toFixed(2)} ج.م</span>
           </div>
+          ${
+            order.discount_amount && parseFloat(order.discount_amount) > 0
+              ? `
+          <div class="summary_row" style="color: #e74c3c;">
+            <span>الخصم${order.discount_reason ? ` (${order.discount_reason})` : ""}:</span>
+            <span>- ${parseFloat(order.discount_amount).toFixed(2)} ج.م</span>
+          </div>
+              `
+              : ""
+          }
           <div class="summary_row total">
             <span>الإجمالي الكلي:</span>
             <span id="od_grand_total">${parseFloat(order.total_amount).toFixed(2)} ج.م</span>
@@ -3806,6 +3878,10 @@ function openEditOrderModal(orderId, sourceList) {
       ? order.address.address
       : getOrderAddressText(order);
 
+  editModalState.discountType = order.discount_type || "";
+  editModalState.discountValue = parseFloat(order.discount_value) || 0;
+  editModalState.discountReason = order.discount_reason || "";
+
   editModalState.cart = (order.items || []).map((item) => {
     let prod = products.find((p) => p.id === item.product_id);
     let name = prod ? prod.product_name : `صنف #${item.product_id}`;
@@ -3908,6 +3984,25 @@ function renderEditOrderModal() {
             </div>
             
             <div class="total_cards" id="edit_modal_cart_list" style="padding:0 16px;"></div>
+
+            <!-- Edit Discount Section -->
+            <div id="edit_modal_discount_form" style="border-top: 1px solid rgba(201, 168, 76, 0.3); padding: 12px 14px; flex-shrink: 0; margin-bottom: 8px;">
+              <div class="dcf_title" style="margin-bottom: 8px;">
+                <i class="fa-solid fa-tags"></i>
+                <span>تعديل الخصم</span>
+              </div>
+              <div class="delivery_customer_card">
+                <div style="display:flex; gap:8px;">
+                  <select id="edit_modal_discount_type" class="dcf_select" style="flex:1;" onchange="editModalState.discountType = this.value; updateEditModalGrandTotal()">
+                    <option value="" ${!editModalState.discountType ? "selected" : ""}>بدون خصم</option>
+                    <option value="fixed" ${editModalState.discountType === "fixed" ? "selected" : ""}>مبلغ ثابت</option>
+                    <option value="percentage" ${editModalState.discountType === "percentage" ? "selected" : ""}>نسبة مئوية (%)</option>
+                  </select>
+                  <input type="number" id="edit_modal_discount_value" class="dcf_input" style="flex:1;" placeholder="القيمة" min="0" step="0.01" value="${editModalState.discountValue || ""}" oninput="editModalState.discountValue = parseFloat(this.value) || 0; updateEditModalGrandTotal()">
+                </div>
+                <input type="text" id="edit_modal_discount_reason" class="dcf_input" placeholder="سبب الخصم (اختياري)" value="${editModalState.discountReason || ""}" oninput="editModalState.discountReason = this.value">
+              </div>
+            </div>
           </div>
 
           <div class="total_footer" style="flex-shrink:0;">
@@ -4377,7 +4472,14 @@ function updateEditModalGrandTotal() {
     fee = editModalState.selectedDineInFee;
   }
 
-  const grandTotal = itemsTotal + fee;
+  let discount = 0;
+  if (editModalState.discountType === "fixed") {
+    discount = editModalState.discountValue;
+  } else if (editModalState.discountType === "percentage") {
+    discount = itemsTotal * (editModalState.discountValue / 100);
+  }
+
+  const grandTotal = Math.max(0, itemsTotal + fee - discount);
   totalEl.textContent = grandTotal.toFixed(2) + " ج.م";
 }
 
@@ -4508,6 +4610,9 @@ async function updateEditOrderConfirm() {
           : editModalState.orderType === "dine_in"
             ? editModalState.selectedDineInFee
             : 0,
+      manual_discount_type: editModalState.discountType || null,
+      manual_discount_value: editModalState.discountValue || null,
+      discount_reason: editModalState.discountReason || null,
     };
 
     // إرسال طلب التحديث (PATCH)

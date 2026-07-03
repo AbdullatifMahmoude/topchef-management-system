@@ -17,7 +17,7 @@ from sqlalchemy import (
     Sequence,
     Boolean,
 )
-from app.core.enums import OrderStatus, OrderType, OrderSource
+from app.core.enums import OrderStatus, OrderType, OrderSource, DiscountType
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base, DbEnum
@@ -59,6 +59,9 @@ class Order(Base):
     
     subtotal = Column(Numeric(10, 2), nullable=False, default=0)
     discount_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    discount_type = Column(DbEnum(DiscountType, name="discounttype"), nullable=True)
+    discount_value = Column(Numeric(10, 2), nullable=True)  # raw value entered by cashier
+    discount_reason = Column(String(255), nullable=True)
     delivery_fee = Column(Numeric(10, 2), nullable=False, default=0)
     total_amount = Column(Numeric(10, 2), nullable=False, default=0)
     

@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.modules.auth.dependencies import get_current_user, get_optional_user
 from app.modules.orders.service import OrderService
 from app.modules.orders import schemas
-from app.core.enums import OrderSource, OrderStatus, OrderType
+from app.core.enums import OrderSource, OrderStatus, OrderType, UserRole
 
 from app.core.redis import get_redis
 from app.modules.orders.dependencies import get_order_service
@@ -37,12 +37,17 @@ async def list_orders(
     service: OrderService = Depends(get_order_service),
     current_user: any = Depends(get_current_user)
 ):
+    cashier_id = None
+    if current_user and hasattr(current_user, 'role') and current_user.role == UserRole.CASHIER:
+        cashier_id = current_user.id
+
     total, orders = await service.list_orders_paginated(
         source=source,
         status=status,
         order_type=order_type,
         page=page,
-        page_size=page_size
+        page_size=page_size,
+        cashier_id=cashier_id
     )
 
     return {

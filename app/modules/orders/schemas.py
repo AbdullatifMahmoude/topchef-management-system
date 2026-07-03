@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator, AliasChoices
 from decimal import Decimal
-from app.core.enums import OrderType, OrderSource, OrderStatus
+from app.core.enums import OrderType, OrderSource, OrderStatus, DiscountType
 from app.modules.customer.schemas import CustomerAddressResponse
 
 class OrderItemBase(BaseModel):
@@ -35,6 +35,9 @@ class OrderCreate(OrderBase):
     delivery_person_id: Optional[int] = None
     delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
     offer_code: Optional[str] = None
+    manual_discount_type: Optional[DiscountType] = None
+    manual_discount_value: Optional[Decimal] = None
+    discount_reason: Optional[str] = None
     order_number: Optional[str] = None
     order_date: Optional[date] = None
     
@@ -70,6 +73,9 @@ class OrderUpdateFull(BaseModel):
     customer_id: Optional[int] = None
     delivery_fee: Optional[Decimal] = None
     items: Optional[List[OrderItemCreate]] = None
+    manual_discount_type: Optional[DiscountType] = None
+    manual_discount_value: Optional[Decimal] = None
+    discount_reason: Optional[str] = None
 
     @field_validator('delivery_person_id', 'address_id', mode='before')
     @classmethod
@@ -84,9 +90,13 @@ class OrderResponse(OrderBase):
     order_number: str
     order_date: date
     created_at: datetime
+    updated_at: Optional[datetime] = None
     order_status: OrderStatus
     subtotal: Decimal
     discount_amount: Decimal
+    discount_type: Optional[DiscountType] = None
+    discount_value: Optional[Decimal] = None
+    discount_reason: Optional[str] = None
     delivery_fee: Decimal
     total_amount: Decimal
     items: List[OrderItemResponse]

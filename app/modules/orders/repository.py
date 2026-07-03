@@ -67,7 +67,8 @@ class OrderRepository:
         status: Optional[OrderStatus] = None,
         order_type: Optional[OrderType] = None,
         page: int = 1,
-        page_size: int = 50
+        page_size: int = 50,
+        cashier_id: Optional[int] = None
     ) -> Tuple[int, List[models.Order]]:
 
         """Get paginated orders."""
@@ -84,6 +85,16 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
+            
+        if cashier_id:
+            from sqlalchemy import or_, and_
+            query = query.where(
+                or_(
+                    and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
+                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id.is_(None)),
+                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id == cashier_id)
+                )
+            )
 
         # Filter by current business shift (24h starting at 5am)
         query = query.where(models.Order.order_date == self.get_business_date())
@@ -97,6 +108,16 @@ class OrderRepository:
             count_query = count_query.where(models.Order.order_status == status)
         if order_type:
             count_query = count_query.where(models.Order.order_type == order_type)
+            
+        if cashier_id:
+            count_query = count_query.where(
+                or_(
+                    and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
+                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id.is_(None)),
+                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id == cashier_id)
+                )
+            )
+            
         count_query = count_query.where(models.Order.order_date == self.get_business_date())
         
         total = await self.db.scalar(count_query) or 0
@@ -112,7 +133,8 @@ class OrderRepository:
         self,
         source: Optional[OrderSource] = None,
         status: Optional[OrderStatus] = None,
-        order_type: Optional[OrderType] = None
+        order_type: Optional[OrderType] = None,
+        cashier_id: Optional[int] = None
     ) -> List[models.Order]:
         query = select(models.Order).options(
             selectinload(models.Order.items),
@@ -126,6 +148,16 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
+
+        if cashier_id:
+            from sqlalchemy import or_, and_
+            query = query.where(
+                or_(
+                    and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
+                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id.is_(None)),
+                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id == cashier_id)
+                )
+            )
 
         # Filter by current business shift (24h starting at 5am)
         query = query.where(models.Order.order_date == self.get_business_date())
@@ -167,10 +199,11 @@ class OrderRepository:
         seq_name = f"order_seq_{business_date.strftime('%Y_%m_%d')}"
         
         try:
-            # Try to get next value from the daily sequence
-            result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
-            seq_value = result.scalar()
-            return f"{prefix}-{seq_value:04d}"
+            # Use a savepoint so if the sequence doesn't exist, it doesn't abort the outer transaction
+            async with self.db.begin_nested():
+                result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
+                seq_value = result.scalar()
+                return f"{prefix}-{seq_value:04d}"
         except Exception as e:
             # If sequence doesn't exist for the day, try to create it
             if seq_name in str(e).lower() or "does not exist" in str(e).lower() or "relation" in str(e).lower():
@@ -179,10 +212,7 @@ class OrderRepository:
                     async with engine.begin() as conn:
                         await conn.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {seq_name} START WITH 1"))
                     
-                    # Manual rollback of the failed transaction in the current session
-                    await self.db.rollback()
-                    
-                    # Retry after creation
+                    # Retry after creation on the main transaction
                     result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
                     seq_value = result.scalar()
                     return f"{prefix}-{seq_value:04d}"

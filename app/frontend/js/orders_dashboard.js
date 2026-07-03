@@ -52,6 +52,10 @@
     tbody.innerHTML = ordersList.map(order => {
       const statusObj = getStatusInfo(order.order_status);
       const timeStr = formatOrderTime(order.created_at);
+      let updatedTimeStr = "";
+      if (order.updated_at && order.updated_at !== order.created_at) {
+         updatedTimeStr = `<br><span style="color:#f39c12; font-size:10px;">عدل في: ${formatOrderTime(order.updated_at)}</span>`;
+      }
       const itemsSummary = summarizeItems(order.items);
       const totalAmount = parseFloat(order.total_amount || 0).toFixed(2);
 
@@ -62,7 +66,7 @@
           <td style="font-size:12px; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${itemsSummary}</td>
           <td style="font-weight:bold;">${totalAmount} ج.م</td>
           <td><span class="${statusObj.cls}">${statusObj.label}</span></td>
-          <td style="opacity:0.7; font-size:11px;">${timeStr}</td>
+          <td style="opacity:0.7; font-size:11px;">${timeStr}${updatedTimeStr}</td>
         </tr>
       `;
     }).join("");
