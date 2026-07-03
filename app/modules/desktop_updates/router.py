@@ -437,6 +437,8 @@ async def desktop_sync_events(
                             if existing_cust.name != name and name:
                                 existing_cust.name = name
                                 await db.flush()
+                                await customer_service._invalidate_cache(f"customer_profile:{existing_cust.id}")
+                                await customer_service._invalidate_cache(f"customer_at_phone:{existing_cust.phone_number}")
                         except Exception:
                             # Not found, create new
                             await customer_service.create_customer(CustomerCreate(

@@ -119,6 +119,19 @@ class OrderService:
                 try:
                     existing_cust = await customer_service.get_customer_by_phone(order_data.customer_phone)
                     order_data.customer_id = existing_cust.id
+                    
+                    # Update local customer name if different, and push sync event
+                    if existing_cust.name != order_data.customer_name and order_data.customer_name:
+                        existing_cust.name = order_data.customer_name
+                        self.db.add(existing_cust)
+                        
+                        customer_service._record_outbox_event("CUSTOMER_CREATED", {
+                            "id": existing_cust.id,
+                            "name": existing_cust.name,
+                            "phone_number": existing_cust.phone_number,
+                            "created_at": existing_cust.created_at.isoformat() if existing_cust.created_at else None,
+                        })
+                        
                 except NotFoundError:
                     # Phone not found — create new customer
                     try:

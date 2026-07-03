@@ -1920,7 +1920,7 @@ function renderOnlineOrders() {
     delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
 
-  onlineOrdersList.forEach((order) => {
+  window.createOnlineOrderCardElement = function(order) {
     let statusObj = statusMap[order.order_status] || {
       label: order.order_status,
       cls: "",
@@ -1946,6 +1946,7 @@ function renderOnlineOrders() {
 
     const card = document.createElement("div");
     card.className = "online_order_card";
+    card.id = `online_order_card_${order.id}`;
     card.onclick = () => openOrderDetails(order.id, "online");
     card.innerHTML = `
       <div class="card_header">
@@ -2039,7 +2040,36 @@ function renderOnlineOrders() {
         }
       </div>
     `;
-    grid.appendChild(card);
+    return card;
+  };
+
+  window.updateOrAddOnlineOrderDOM = function(order) {
+    const grid = document.getElementById("online_orders_grid");
+    if (!grid) return;
+
+    // Check if empty message is present and remove it
+    if (grid.innerHTML.includes("لا توجد طلبات أون لاين") || grid.innerHTML.includes("جاري الاتصال")) {
+        grid.innerHTML = "";
+    }
+
+    const newCard = createOnlineOrderCardElement(order);
+    const existingCard = document.getElementById(`online_order_card_${order.id}`);
+
+    if (existingCard) {
+      existingCard.replaceWith(newCard);
+    } else {
+      // Prepend before pagination if exists
+      const firstCard = grid.querySelector('.online_order_card');
+      if (firstCard) {
+        grid.insertBefore(newCard, firstCard);
+      } else {
+        grid.prepend(newCard);
+      }
+    }
+  };
+
+  onlineOrdersList.forEach((order) => {
+    grid.appendChild(createOnlineOrderCardElement(order));
   });
 
   const pagination = renderPagination(
@@ -2081,8 +2111,18 @@ async function updateOnlineStatus(orderId, newStatus) {
 
       updateOnlineStats();
       refreshNewOrdersBadge();
-      renderOnlineOrders();
-      renderAllOrders();
+      
+      const oIdx = onlineOrdersList.findIndex((o) => o.id === orderId);
+      if (oIdx !== -1) {
+        window.updateOrAddOnlineOrderDOM(onlineOrdersList[oIdx]);
+      }
+      
+      if (typeof allOrdersList !== "undefined") {
+        const aIdx = allOrdersList.findIndex((o) => o.id === orderId);
+        if (aIdx !== -1) {
+          window.updateOrAddAllOrderDOM(allOrdersList[aIdx]);
+        }
+      }
 
       showToast("تم تحديث الحالة بنجاح", "success");
     } else {
@@ -2482,10 +2522,20 @@ function handleSocketEvent(payload) {
 
     if (onlineLayout && onlineLayout.style.display !== "none") {
       updateOnlineStats();
-      renderOnlineOrders();
+      const oIdx = onlineOrdersList.findIndex(o => String(o.id) === String(data.id) || (o.order_number === data.order_number && o.order_date === data.order_date));
+      if (oIdx !== -1) {
+        window.updateOrAddOnlineOrderDOM(onlineOrdersList[oIdx]);
+      } else {
+        renderOnlineOrders();
+      }
     }
     if (allLayout && allLayout.style.display !== "none") {
-      renderAllOrders();
+      const aIdx = allOrdersList.findIndex(o => String(o.id) === String(data.id) || (o.order_number === data.order_number && o.order_date === data.order_date));
+      if (aIdx !== -1) {
+        window.updateOrAddAllOrderDOM(allOrdersList[aIdx]);
+      } else {
+        renderAllOrders();
+      }
     }
     if (ridersLayout && ridersLayout.style.display !== "none") {
       renderRidersTab();
@@ -2747,7 +2797,7 @@ function renderAllOrders() {
     delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
 
-  allOrdersList.forEach((order) => {
+  window.createAllOrderCardElement = function(order) {
     const typeLabel =
       order.order_type === "delivery"
         ? "دليفري"
@@ -2840,6 +2890,7 @@ function renderAllOrders() {
 
     const card = document.createElement("div");
     card.className = "online_order_card";
+    card.id = `all_order_card_${order.id}`;
     card.onclick = () => openOrderDetails(order.id, "all");
     card.style.cssText =
       "padding:12px; gap:8px; min-height:0; display:flex; flex-direction:column;";
@@ -2880,7 +2931,35 @@ function renderAllOrders() {
             : ""
         }
       `;
-    grid.appendChild(card);
+    return card;
+  };
+
+  window.updateOrAddAllOrderDOM = function(order) {
+    const grid = document.getElementById("all_orders_grid");
+    if (!grid) return;
+
+    if (grid.innerHTML.includes("لا توجد طلبات") || grid.innerHTML.includes("جاري الاتصال")) {
+        grid.innerHTML = "";
+    }
+
+    const newCard = createAllOrderCardElement(order);
+    const existingCard = document.getElementById(`all_order_card_${order.id}`);
+
+    if (existingCard) {
+      existingCard.replaceWith(newCard);
+    } else {
+      // Prepend before pagination if exists
+      const firstCard = grid.querySelector('.online_order_card'); // note: both use online_order_card class
+      if (firstCard) {
+        grid.insertBefore(newCard, firstCard);
+      } else {
+        grid.prepend(newCard);
+      }
+    }
+  };
+
+  allOrdersList.forEach((order) => {
+    grid.appendChild(createAllOrderCardElement(order));
   });
 
   const pagination = renderPagination(
@@ -3031,8 +3110,15 @@ async function changeOrderStatus(orderId, status) {
         updateInList(onlineOrdersList);
 
       showToast("تم تحديث حالة الطلب", "success");
-      renderAllOrders();
-      renderOnlineOrders();
+      const oIdx = typeof onlineOrdersList !== "undefined" ? onlineOrdersList.findIndex((o) => String(o.id) === String(orderId)) : -1;
+      if (oIdx !== -1) {
+        window.updateOrAddOnlineOrderDOM(onlineOrdersList[oIdx]);
+      }
+
+      const aIdx = allOrdersList.findIndex((o) => String(o.id) === String(orderId));
+      if (aIdx !== -1) {
+        window.updateOrAddAllOrderDOM(allOrdersList[aIdx]);
+      }
       updateOnlineStats();
       refreshNewOrdersBadge();
     } else {
@@ -3639,7 +3725,16 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
     `;
 
     updateOnlineStats();
-    renderOnlineOrders();
+    const oIdx = onlineOrdersList.findIndex((o) => String(o.id) === String(orderId));
+    if (oIdx !== -1) {
+      window.updateOrAddOnlineOrderDOM(onlineOrdersList[oIdx]);
+    }
+    if (typeof allOrdersList !== "undefined") {
+      const aIdx = allOrdersList.findIndex((o) => String(o.id) === String(orderId));
+      if (aIdx !== -1) {
+        window.updateOrAddAllOrderDOM(allOrdersList[aIdx]);
+      }
+    }
     showToast(`تم تخصيص ${riderName} برسوم ${fee} ج.م`, "success");
   } catch (err) {
     console.error(err);
@@ -4457,13 +4552,13 @@ async function updateEditOrderConfirm() {
       const idx = onlineOrdersList.findIndex((o) => o.id === orig.id);
       if (idx !== -1) {
         onlineOrdersList[idx] = updatedLocalOrder;
-        renderOnlineOrders();
+        window.updateOrAddOnlineOrderDOM(onlineOrdersList[idx]);
       }
     } else {
       const idx = allOrdersList.findIndex((o) => o.id === orig.id);
       if (idx !== -1) {
         allOrdersList[idx] = updatedLocalOrder;
-        renderAllOrders();
+        window.updateOrAddAllOrderDOM(allOrdersList[idx]);
       }
     }
 
