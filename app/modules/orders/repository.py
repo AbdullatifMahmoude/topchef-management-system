@@ -291,7 +291,9 @@ class OrderRepository:
         
         query = select(
             func.count(models.Order.id).label("total_count"),
-            func.sum(models.Order.total_amount).label("total_sales"),
+            func.sum(models.Order.total_amount).filter(
+                models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED])
+            ).label("total_sales"),
             func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.COMPLETED).label("completed_count"),
             func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.CANCELLED).label("cancelled_count"),
         ).where(
