@@ -263,6 +263,7 @@ class OrderService:
                     raise ValidationError(f"Invalid status transition from {order.order_status} to {update_data.order_status}")
             
             updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
+            await self.db.flush()
             completed_order = await self.get_order(updated_order.id)
             completed_schema = schemas.OrderResponse.model_validate(completed_order)
             payload_data = completed_schema.model_dump(mode='json')
@@ -307,6 +308,9 @@ class OrderService:
             if update_data.delivery_fee is not None and update_data.delivery_fee != order.delivery_fee:
                 order.delivery_fee = update_data.delivery_fee
                 needs_reprice = True
+            if hasattr(update_data, 'order_type') and update_data.order_type is not None and update_data.order_type != order.order_type:
+                order.order_type = update_data.order_type
+                needs_reprice = True
             if update_data.items is not None:
                 needs_reprice = True
             
@@ -327,7 +331,7 @@ class OrderService:
                     raise ValidationError("Invalid financial state after recalculating.")
                 
                 if update_data.items is not None:
-                    order.items = []
+                    order.items.clear()
                     for item_data in update_data.items:
                         item = models.OrderItem(**item_data.model_dump())
                         item.total_price = item.quantity * item.unit_price
@@ -340,11 +344,11 @@ class OrderService:
 
             updated_order = await self.repository.update_order_full(order, update_data, changed_by_user_id=current_user_id)
             await self.db.flush()
-        
-        completed_order = await self.get_order(updated_order.id)
-        completed_schema = schemas.OrderResponse.model_validate(completed_order)
-        payload_data = completed_schema.model_dump(mode='json')
-        self._record_outbox_event("ORDER_UPDATED", payload_data)
+            
+            completed_order = await self.get_order(updated_order.id)
+            completed_schema = schemas.OrderResponse.model_validate(completed_order)
+            payload_data = completed_schema.model_dump(mode='json')
+            self._record_outbox_event("ORDER_UPDATED", payload_data)
         from app.core.events import get_outbox_sync_trigger
         get_outbox_sync_trigger().set()
         await order_events_manager.emit({

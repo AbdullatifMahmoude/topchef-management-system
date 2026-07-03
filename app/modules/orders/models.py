@@ -79,16 +79,16 @@ class Order(Base):
     address = relationship("CustomerAddress", foreign_keys=[address_id])
 
     @property
-    def creator_name(self) -> str:
+    def creator_name(self) -> Optional[str]:
         if self.creator:
             return self.creator.full_name or self.creator.username
-        return "Unknown"
+        return None
 
     @property
-    def delivery_person_name(self) -> str:
+    def delivery_person_name(self) -> Optional[str]:
         if self.delivery_person:
             return self.delivery_person.full_name or self.delivery_person.username
-        return "Unknown"
+        return None
 
     @property
     def customer_address(self) -> Optional[str]:

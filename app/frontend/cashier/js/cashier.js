@@ -3570,16 +3570,22 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
     body.innerHTML = `<p style="color:var(--color-subtext);font-size:13px;text-align:center;">جاري الحفظ...</p>`;
 
   try {
-    const res = await apiFetch(`/orders/${orderId}`, {
+    const resFull = await apiFetch(`/orders/${orderId}`, {
       method: "PATCH",
       body: JSON.stringify({
-        order_status: "confirmed",
         delivery_person_id: riderId,
         delivery_fee: parseFloat(fee),
       }),
     });
+    if (!resFull.ok) throw new Error("فشل تحديث بيانات التوصيل");
 
-    if (!res.ok) throw new Error("فشل التحديث");
+    const resStatus = await apiFetch(`/orders/${orderId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        order_status: "confirmed",
+      }),
+    });
+    if (!resStatus.ok) throw new Error("فشل تحديث الحالة");
 
     // تحديث الأرقام في السامري داخل المودال
     const feeEl = document.getElementById("od_delivery_fee");
@@ -4320,8 +4326,8 @@ function handleEditModalProductClick(product, defaultPrice) {
     btn.onclick = () => {
       addEditModalCartItem({
         originalProductId: product.id,
-        id:
-          `${product.id}_${v.id}, name: ${v.name}` - `${product.product_name}`,
+        id: `${product.id}_${v.id}`,
+        name: `${product.product_name} - ${v.name}`,
         price: parseFloat(v.price),
       });
       overlay.remove();
@@ -4393,7 +4399,6 @@ async function updateEditOrderConfirm() {
       customer_name: editModalState.customerName,
       customer_phone: editModalState.customerPhone,
       order_type: mappedOrderType,
-      source: orig.source,
       customer_notes: orig.customer_notes,
       internal_notes: orig.internal_notes,
       items: newItems,
@@ -4408,7 +4413,6 @@ async function updateEditOrderConfirm() {
           : editModalState.orderType === "dine_in"
             ? editModalState.selectedDineInFee
             : 0,
-      offer_code: orig.offer_code || null,
     };
 
     // إرسال طلب التحديث (PATCH)
@@ -4445,20 +4449,7 @@ async function updateEditOrderConfirm() {
 
     const updatedLocalOrder = {
       ...orig,
-      ...updatedOrder,
-      items: newItems,
-      order_type: mappedOrderType,
-      delivery_fee: deliveryFee,
-      customer_name: editModalState.customerName,
-      customer_phone: editModalState.customerPhone,
-      customer_address: editModalState.customerAddress,
-      delivery_person_id: editModalState.selectedDelivery
-        ? editModalState.selectedDelivery.id
-        : null,
-      delivery_person_name: editModalState.selectedDelivery
-        ? editModalState.selectedDelivery.name
-        : null,
-      total_amount: itemsTotal + deliveryFee,
+      ...updatedOrder
     };
 
     // تحديث القائمة المحلية فوراً لضمان ظهور التعديلات في الكارد (Card)

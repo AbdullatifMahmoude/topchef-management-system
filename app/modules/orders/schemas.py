@@ -59,6 +59,7 @@ class OrderUpdate(BaseModel):
 
 class OrderUpdateFull(BaseModel):
     """Comprehensive order update schema for patch endpoint."""
+    order_type: Optional[OrderType] = None
     delivery_person_id: Optional[int] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
