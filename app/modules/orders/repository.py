@@ -24,7 +24,8 @@ class OrderRepository:
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            selectinload(models.Order.modifications)
         ).where(
             models.Order.id == order_id,
             models.Order.is_deleted == False
@@ -76,7 +77,8 @@ class OrderRepository:
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            selectinload(models.Order.modifications)
         ).where(models.Order.is_deleted == False)
         
         if source:
@@ -140,7 +142,8 @@ class OrderRepository:
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            selectinload(models.Order.modifications)
         ).where(models.Order.is_deleted == False)
         if source:
             query = query.where(models.Order.order_source == source)
@@ -208,9 +211,9 @@ class OrderRepository:
             # If sequence doesn't exist for the day, try to create it
             if seq_name in str(e).lower() or "does not exist" in str(e).lower() or "relation" in str(e).lower():
                 try:
-                    logger.info(f"Sequence '{seq_name}' missing. Creating via independent connection...")
-                    async with engine.begin() as conn:
-                        await conn.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {seq_name} START WITH 1"))
+                    logger.info(f"Sequence '{seq_name}' missing. Creating via main connection...")
+                    async with self.db.begin_nested():
+                        await self.db.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {seq_name} START WITH 1"))
                     
                     # Retry after creation on the main transaction
                     result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
@@ -276,6 +279,8 @@ class OrderRepository:
         
         # Update all provided fields
         for field, value in update_dict.items():
+            if value is None and field in ["order_type", "subtotal", "total_amount"]:
+                continue
             setattr(order, field, value)
         
         # Update timestamp

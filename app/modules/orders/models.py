@@ -149,6 +149,21 @@ class OrderStatusHistory(Base):
 
     order = relationship("Order", backref="status_history")
 
+class OrderModificationHistory(Base):
+    __tablename__ = "order_modification_history"
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
+    
+    from sqlalchemy.dialects.postgresql import JSONB
+    from sqlalchemy import JSON
+    # We will use JSON to store the modifications array
+    changes = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=False)
+
+    order = relationship("Order", backref="modifications")
+    changed_by = relationship("User", foreign_keys=[changed_by_user_id])
+
 class OutboxEventStatus(str, enum.Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"

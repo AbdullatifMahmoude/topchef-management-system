@@ -118,7 +118,7 @@
       const id = sw.dataset.id;
       const isActive = !sw.classList.contains("active");
       try {
-        const res = await apiFetch("/user/users/" + id, {
+        const res = await apiFetch(`/user/users/${id}/toggle`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ is_active: isActive }),

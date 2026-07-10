@@ -310,6 +310,15 @@ class OrderService:
             if order.order_status in [models.OrderStatus.COMPLETED, models.OrderStatus.DELIVERED, models.OrderStatus.CANCELLED]:
                 raise ValidationError(f"Cannot update an order that is {order.order_status.value}")
             
+            old_state = {
+                "total_amount": order.total_amount,
+                "discount_amount": order.discount_amount,
+                "delivery_fee": order.delivery_fee,
+                "items_count": sum(i.quantity for i in order.items) if order.items else 0,
+                "customer_name": order.customer_name,
+                "customer_phone": order.customer_phone
+            }
+            
             if update_data.customer_phone or update_data.customer_name or getattr(update_data, 'customer_address', None):
                 target_phone = update_data.customer_phone or order.customer_phone
                 target_name = update_data.customer_name or order.customer_name
@@ -410,6 +419,30 @@ class OrderService:
                 order.discount_reason = update_data.discount_reason
 
             updated_order = await self.repository.update_order_full(order, update_data, changed_by_user_id=current_user_id)
+            
+            # Track changes
+            changes = []
+            if old_state["total_amount"] != updated_order.total_amount:
+                changes.append(f"تعديل الإجمالي من {float(old_state['total_amount']):.2f} إلى {float(updated_order.total_amount):.2f}")
+            if old_state["discount_amount"] != updated_order.discount_amount:
+                changes.append(f"تعديل الخصم من {float(old_state['discount_amount']):.2f} إلى {float(updated_order.discount_amount):.2f}")
+            if old_state["delivery_fee"] != updated_order.delivery_fee:
+                changes.append(f"تعديل خدمة التوصيل من {float(old_state['delivery_fee']):.2f} إلى {float(updated_order.delivery_fee):.2f}")
+            new_items_count = sum(i.quantity for i in updated_order.items) if updated_order.items else 0
+            if old_state["items_count"] != new_items_count:
+                changes.append(f"تعديل الأصناف (من {old_state['items_count']} صنف إلى {new_items_count} صنف)")
+            if old_state["customer_name"] != updated_order.customer_name:
+                changes.append(f"تعديل العميل من '{old_state['customer_name'] or 'نقدي'}' إلى '{updated_order.customer_name or 'نقدي'}'")
+
+            if changes:
+                mod_history = models.OrderModificationHistory(
+                    order_id=updated_order.id,
+                    changed_by_user_id=current_user_id,
+                    changes=changes
+                )
+                self.db.add(mod_history)
+                updated_order.modifications.append(mod_history)
+
             await self.db.flush()
             
             completed_order = await self.get_order(updated_order.id)

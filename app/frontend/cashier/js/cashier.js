@@ -52,7 +52,7 @@ let onlineOrdersSearchTerm = "";
 let onlineOrdersCurrentPage = 1;
 let onlineOrdersTotal = 0;
 let totalNewOrdersGlobalCount = 0; // New orders only
-const ordersPageSize = 12;
+const ordersPageSize = 30;
 let lastNewOrdersCount = 0;
 let isNotificationSoundEnabled = true;
 let socket = null;
@@ -1973,7 +1973,7 @@ function renderOnlineOrders() {
     }
 
     let updatedTimeStr = "";
-    if (order.updated_at && order.updated_at !== order.created_at) {
+    if (order.updated_at && order.created_at && Math.abs(new Date(order.updated_at).getTime() - new Date(order.created_at).getTime()) > 2000) {
         let du = new Date(order.updated_at);
         if (!isNaN(du)) {
             updatedTimeStr = `<span style="font-size:10px; color:#f39c12; margin-top:2px;">عدل في: ${du.toLocaleTimeString("ar-EG", {hour: "2-digit", minute: "2-digit"})} - ${du.toLocaleDateString("ar-EG")}</span>`;
@@ -2384,9 +2384,15 @@ function handleSocketEvent(payload) {
       : [];
     ordersSnapshotLoaded = true;
     // Local (cashier) orders from snapshot are authoritative on desktop
-    allOrdersList = orders.filter((o) => !isOnlineOrder(o));
-    // For online orders: use snapshot initially, then immediately overwrite from cloud
-    onlineOrdersList = orders.filter(isOnlineOrder);
+    const allFromSnapshot = orders.filter((o) => !isOnlineOrder(o));
+    const onlineFromSnapshot = orders.filter(isOnlineOrder);
+    // Respect pagination: only keep first page and set totals
+    allOrdersTotal = allFromSnapshot.length;
+    onlineOrdersTotal = onlineFromSnapshot.length;
+    allOrdersList = allFromSnapshot.slice(0, ordersPageSize);
+    onlineOrdersList = onlineFromSnapshot.slice(0, ordersPageSize);
+    allOrdersCurrentPage = 1;
+    onlineOrdersCurrentPage = 1;
     lastSocketOrderUpdate = Date.now();
     updateOnlineStats();
     renderOnlineOrders();
@@ -2394,17 +2400,11 @@ function handleSocketEvent(payload) {
     refreshNewOrdersBadge();
     updateConnectionStatus("connected");
 
-    // On desktop, ORDER_SNAPSHOT reads from local SQLite which may have STALE
-    // online order statuses. Immediately fetch from cloud to get the truth.
-    if (IS_DESKTOP_RUNTIME) {
-      console.log(
-        "🔄 Desktop: Fetching online orders from cloud for accurate statuses...",
-      );
-      setTimeout(() => {
-        fetchOnlineOrdersServer(1, true);
-        fetchAllOrdersServer(1, true);
-      }, 300);
-    }
+    // Always fetch from server for accurate pagination and data
+    setTimeout(() => {
+      fetchOnlineOrdersServer(1, true);
+      fetchAllOrdersServer(1, true);
+    }, 300);
     return;
   }
 
@@ -2462,6 +2462,11 @@ function handleSocketEvent(payload) {
     if (isOnlineOrder(data)) {
       if (!isDuplicateNumber(onlineOrdersList, data)) {
         onlineOrdersList.unshift(data);
+        // Trim to page size to keep pagination consistent
+        if (onlineOrdersList.length > ordersPageSize) {
+          onlineOrdersList = onlineOrdersList.slice(0, ordersPageSize);
+        }
+        onlineOrdersTotal++;
         hasChanged = true;
         playNotificationSound();
         showToast(
@@ -2475,6 +2480,11 @@ function handleSocketEvent(payload) {
       if (!isDuplicateNumber(allOrdersList, data)) {
         if (!isOnlineOrder(data)) {
           allOrdersList.unshift(data);
+          // Trim to page size to keep pagination consistent
+          if (allOrdersList.length > ordersPageSize) {
+            allOrdersList = allOrdersList.slice(0, ordersPageSize);
+          }
+          allOrdersTotal++;
           hasChanged = true;
         }
       }
@@ -2581,6 +2591,14 @@ function handleSocketEvent(payload) {
     // Update count badge from server
     refreshNewOrdersBadge();
     lastNewOrdersCount = totalNewOrdersGlobalCount; // for legacy sync if any
+    
+    // Refresh order details modal if it's open for the updated order
+    const detailOverlay = document.getElementById("order_detail_overlay");
+    if (detailOverlay && detailOverlay.dataset.orderId === String(data.id)) {
+      const source = detailOverlay.dataset.source;
+      detailOverlay.remove();
+      openOrderDetails(data.id, source);
+    }
   }
 }
 
@@ -2935,7 +2953,7 @@ function renderAllOrders() {
     }
 
     let updatedTimeStr = "";
-    if (order.updated_at && order.updated_at !== order.created_at) {
+    if (order.updated_at && order.created_at && Math.abs(new Date(order.updated_at).getTime() - new Date(order.created_at).getTime()) > 2000) {
         let du = new Date(order.updated_at);
         if (!isNaN(du)) {
             updatedTimeStr = `<span style="display:block; color:#f39c12; font-size:10px; margin-top:2px;">عدل في: ${du.toLocaleTimeString("ar-EG", {hour: "2-digit", minute: "2-digit"})} - ${du.toLocaleDateString("ar-EG")}</span>`;
@@ -3320,6 +3338,8 @@ function openOrderDetails(orderId, source) {
 
   const overlay = document.createElement("div");
   overlay.id = "order_detail_overlay";
+  overlay.dataset.orderId = orderId;
+  overlay.dataset.source = source;
   overlay.style.position = "fixed";
   overlay.style.inset = "0";
   overlay.style.background = "rgba(0,0,0,0.85)";
@@ -3359,6 +3379,20 @@ function openOrderDetails(orderId, source) {
   const deliveryFee = parseFloat(order.delivery_fee || 0);
   const itemsTotal = parseFloat(order.subtotal || order.total_amount || 0);
 
+  // Compute modification date display
+  let modificationHtml = "";
+  if (order.updated_at && order.created_at) {
+    const createdMs = new Date(order.created_at).getTime();
+    const updatedMs = new Date(order.updated_at).getTime();
+    if (Math.abs(updatedMs - createdMs) > 2000) {
+      modificationHtml = `<div style="color:#f39c12;">
+        <span style="opacity:0.8;">آخر تعديل:</span>
+        <span style="font-weight:700; margin-right:4px;">${new Date(order.updated_at).toLocaleString("ar-EG")}</span>
+      </div>`;
+    }
+  }
+  const createdAtStr = order.created_at ? new Date(order.created_at).toLocaleString("ar-EG") : "---";
+
   // قسم تخصيص الدليفري — يظهر فقط لطلبات الأونلاين نوع delivery
   const isOnlineDelivery =
     source === "online" &&
@@ -3391,11 +3425,13 @@ function openOrderDetails(orderId, source) {
         <div style="text-align:center; margin-bottom:24px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:16px;">
           <h2 style="color:var(--color-primary); margin-bottom:8px;">تفاصيل الطلب #${order.order_number || order.id}</h2>
           <span class="order_status ${statusObj.cls}">${statusObj.label}</span>
-          ${
-            order.updated_at && order.updated_at !== order.created_at
-              ? `<div style="margin-top:10px; color:#f39c12; font-size:12px;">عدل في: ${new Date(order.updated_at).toLocaleString("ar-EG")}</div>`
-              : ""
-          }
+          <div style="display:flex; justify-content:center; gap:20px; margin-top:12px; font-size:12px;">
+            <div style="color:var(--color-subtext);">
+              <span style="opacity:0.7;">تاريخ الإنشاء:</span>
+              <span style="font-weight:700; margin-right:4px;">${createdAtStr}</span>
+            </div>
+            ${modificationHtml}
+          </div>
         </div>
 
         <div class="order_detail_info_grid">
@@ -3482,6 +3518,30 @@ function openOrderDetails(orderId, source) {
             <span id="od_grand_total">${parseFloat(order.total_amount).toFixed(2)} ج.م</span>
           </div>
         </div>
+        
+        ${
+          order.modifications && order.modifications.length > 0
+            ? `
+        <div style="margin-top: 24px; padding: 16px; background: rgba(243, 156, 18, 0.05); border: 1px solid rgba(243, 156, 18, 0.2); border-radius: 8px;">
+          <h4 style="color: #f39c12; margin-bottom: 12px; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-clock-rotate-left"></i> سجل التعديلات
+          </h4>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${order.modifications.map(mod => `
+              <div style="font-size: 12px; border-right: 2px solid #f39c12; padding-right: 12px;">
+                <div style="color: var(--color-subtext); margin-bottom: 4px;">
+                  <span style="font-weight: 700; color: var(--color-text);">${new Date(mod.changed_at).toLocaleString("ar-EG")}</span>
+                </div>
+                <ul style="margin: 0; padding-right: 16px; color: var(--color-text);">
+                  ${mod.changes.map(c => `<li>${c}</li>`).join("")}
+                </ul>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+            `
+            : ""
+        }
 
 
 
@@ -4589,6 +4649,13 @@ async function updateEditOrderConfirm() {
       editModalState.orderType === "dine_in"
         ? "hall"
         : editModalState.orderType;
+
+    if (!mappedOrderType) {
+      alert("يجب اختيار نوع الطلب أولاً");
+      btn.innerHTML = originalBtnHTML;
+      btn.disabled = false;
+      return;
+    }
 
     // تجهيز حمولة البيانات (Payload) للـ PATCH
     const payload = {

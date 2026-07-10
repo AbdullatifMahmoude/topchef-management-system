@@ -53,7 +53,7 @@
       const statusObj = getStatusInfo(order.order_status);
       const timeStr = formatOrderTime(order.created_at);
       let updatedTimeStr = "";
-      if (order.updated_at && order.updated_at !== order.created_at) {
+      if (order.updated_at && order.created_at && Math.abs(new Date(order.updated_at).getTime() - new Date(order.created_at).getTime()) > 2000) {
          updatedTimeStr = `<br><span style="color:#f39c12; font-size:10px;">عدل في: ${formatOrderTime(order.updated_at)}</span>`;
       }
       const itemsSummary = summarizeItems(order.items);

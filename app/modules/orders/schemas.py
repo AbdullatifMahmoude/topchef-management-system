@@ -106,6 +106,7 @@ class OrderResponse(OrderBase):
     address_id: Optional[int] = None
     customer_address: Optional[str] = None
     address: Optional[CustomerAddressResponse] = None
+    modifications: List["OrderModificationResponse"] = []
 
     @model_validator(mode='after')
     def validate_financial_integrity(self):
@@ -118,11 +119,22 @@ class OrderResponse(OrderBase):
         return self
 
 
+class OrderModificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    changed_by_user_id: Optional[int] = None
+    changed_at: datetime
+    changes: List[str]  # We will store a list of string messages
+
+# Resolve forward reference for OrderResponse.modifications
+OrderResponse.model_rebuild()
+
 class OrderDetailResponse(OrderResponse):
     created_by_user_id: Optional[int] = None
     delivery_person_id: Optional[int] = None
     updated_at: datetime
     internal_notes: Optional[str] = None
+    modifications: List[OrderModificationResponse] = []
 
 
 class OrderListResponse(BaseModel):
