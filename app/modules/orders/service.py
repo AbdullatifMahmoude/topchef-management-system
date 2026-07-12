@@ -276,6 +276,14 @@ class OrderService:
     async def list_orders(self, cashier_id: Optional[int] = None, **kwargs) -> List[models.Order]:
         return await self.repository.list_orders(cashier_id=cashier_id, **kwargs)
 
+    async def list_orders_for_business_day(self, source: Optional[str] = None, status: Optional[str] = None, order_type: Optional[str] = None, cashier_id: Optional[int] = None) -> List[models.Order]:
+        return await self.repository.list_orders(
+            source=source,
+            status=status,
+            order_type=order_type,
+            cashier_id=cashier_id,
+        )
+
     async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: Optional[int] = None) -> models.Order:
         async with self._transaction_scope():
             order = await self.get_order(order_id)

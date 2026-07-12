@@ -72,6 +72,32 @@ async def get_dashboard_stats(
 ):
     return await service.get_today_stats()
 
+@router.get("/dashboard/today", response_model=schemas.OrderListResponse)
+async def list_dashboard_today_orders(
+    source: Optional[OrderSource] = None,
+    status: Optional[OrderStatus] = None,
+    order_type: Optional[OrderType] = None,
+    service: OrderService = Depends(get_order_service),
+    current_user: any = Depends(get_current_user)
+):
+    cashier_id = None
+    if current_user and hasattr(current_user, 'role') and current_user.role == UserRole.CASHIER:
+        cashier_id = current_user.id
+
+    orders = await service.list_orders_for_business_day(
+        source=source,
+        status=status,
+        order_type=order_type,
+        cashier_id=cashier_id,
+    )
+
+    return {
+        "total": len(orders),
+        "page": 1,
+        "page_size": len(orders),
+        "orders": orders,
+    }
+
 @router.get("/riders/stats")
 async def get_rider_stats(
     db: AsyncSession = Depends(get_db),

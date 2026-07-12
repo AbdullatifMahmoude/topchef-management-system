@@ -27,8 +27,8 @@
         }
       }
 
-      // 3. Fetch Orders (today's shift)
-      const ordersRes = await apiFetch("/orders/?page=1&page_size=50", { hideLoader: true });
+      // 3. Fetch all orders for the current business day for the admin dashboard only
+      const ordersRes = await apiFetch("/orders/dashboard/today", { hideLoader: true });
       if (ordersRes.ok) {
         const data = await ordersRes.json();
         ordersList = data.orders || [];
