@@ -60,7 +60,7 @@ function renderShifts(shifts) {
       <td>${start}</td>
       <td>${end}</td>
       <td>${shift.total_orders}</td>
-      <td>${shift.total_sales.toFixed(2)} ج.م</td>
+      <td>${Number(shift.total_sales || 0).toFixed(2)} ج.م</td>
       <td>${shift.target_date}</td>
     `;
     tbody.appendChild(tr);

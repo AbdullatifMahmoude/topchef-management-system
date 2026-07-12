@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 
 from app.modules.shifts.models import CashierShift
 from app.modules.orders.models import Order
-from app.core.enums import UserRole
+from app.core.enums import UserRole, OrderStatus, OrderStatus
 
 def get_business_date() -> date:
     # Business shift starts at 5am (UTC+3)
@@ -108,28 +108,35 @@ class ShiftsService:
         )
         result = await self.db.execute(query)
         shifts = result.scalars().all()
-
         # Fetch orders for the day to compute stats
-        # We define business day boundaries
+        # We define business day boundaries in LOCAL naive time because Order.created_at is stored in LOCAL naive time.
         # From 5 AM target_date to 4:59:59 AM next day
-        tz = timezone(timedelta(hours=3))
-        start_dt = datetime.combine(target_date, datetime.min.time()).replace(hour=5, tzinfo=tz)
-        end_dt = start_dt + timedelta(days=1)
-        start_utc = start_dt.astimezone(timezone.utc).replace(tzinfo=None)
-        end_utc = end_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        start_local = datetime.combine(target_date, datetime.min.time()).replace(hour=5)
+        end_local = start_local + timedelta(days=1)
 
         orders_query = select(
             Order.created_by_user_id,
             func.count(Order.id).label("total_orders"),
             func.sum(Order.total_amount).label("total_sales")
         ).where(
-            Order.created_at >= start_utc,
-            Order.created_at < end_utc,
-            Order.is_deleted == False
+            Order.created_at >= start_local,
+            Order.created_at < end_local,
+            Order.is_deleted == False,
+            Order.order_status != OrderStatus.CANCELLED
         ).group_by(Order.created_by_user_id)
 
         orders_result = await self.db.execute(orders_query)
         stats = {row.created_by_user_id: {"total_orders": row.total_orders, "total_sales": row.total_sales or 0.0} for row in orders_result}
+
+        def format_dt(dt):
+            if not dt:
+                return None
+            s = dt.isoformat()
+            if s.endswith("+00:00"):
+                s = s[:-6]
+            if not s.endswith("Z"):
+                s += "Z"
+            return s
 
         report = []
         for shift in shifts:
@@ -138,10 +145,10 @@ class ShiftsService:
                 "id": shift.id,
                 "user_id": shift.user_id,
                 "cashier_name": shift.user.full_name or shift.user.username,
-                "start_time": shift.start_time.isoformat() + "Z" if shift.start_time else None,
-                "end_time": shift.end_time.isoformat() + "Z" if shift.end_time else None,
+                "start_time": format_dt(shift.start_time),
+                "end_time": format_dt(shift.end_time),
                 "total_orders": st["total_orders"],
-                "total_sales": st["total_sales"],
+                "total_sales": float(st["total_sales"]),
                 "target_date": shift.target_date.isoformat()
             })
             
