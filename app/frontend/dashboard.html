@@ -30,6 +30,7 @@
         <button class="side_btn" data-page="items">إدارة الأصناف</button>
         <button class="side_btn" data-page="categories">التصنيفات</button>
         <button class="side_btn" data-page="delivery">المستخدمين</button>
+        <button class="side_btn" data-page="shifts">الشيفتات</button>
         <button class="side_btn" data-page="reports">التقارير</button>
         <button class="side_btn" data-page="offers">العروض</button>
         <button class="side_btn" id="goeventspage">الاحداث</button>
@@ -337,6 +338,39 @@
             <p>هل أنت متأكد من حذف هذا المستخدم؟</p>
           </div>
           <div class="bttns"><button class="confirm_btn">موافق</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== صفحة الشيفتات ===== -->
+    <div class="page-content" id="page-shifts" style="display: none">
+      <div class="title_btn">
+        <div class="title">
+          <h1>تسليم شيفتات الكاشير</h1>
+          <h2>متابعة دخول وخروج وأداء كل كاشير خلال يوم العمل</h2>
+        </div>
+        <div class="custom-date-filter" style="display: flex; gap: 10px; align-items: center;">
+          <input type="date" id="shiftsDateFilter" style="background: transparent; color: var(--color-text, #fff); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 5px 10px; outline: none; font-size: 14px; font-weight: bold; cursor: pointer; color-scheme: dark;" />
+          <button id="shiftsDateBtn" style="background-color: var(--color-primary); color: #000; border: none; border-radius: 8px; padding: 5px 15px; font-weight: bold; cursor: pointer; height: 35px;">بحث</button>
+        </div>
+      </div>
+      <div class="table_structure_unified">
+        <div class="table_scroll_unified">
+          <table class="orders_table" id="shifts_table">
+            <thead>
+              <tr class="no_borer_bottom">
+                <th>اسم الكاشير</th>
+                <th>بداية الشيفت</th>
+                <th>نهاية الشيفت</th>
+                <th>عدد الطلبات</th>
+                <th>المبيعات</th>
+                <th>التاريخ (يوم العمل)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="6" style="text-align:center; padding:20px; opacity:0.5;">جاري التحميل...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -783,6 +817,7 @@
     <script src="js/category.js"></script>
     <script src="js/delivery.js"></script>
     <script src="js/offer.js"></script>
+    <script src="js/shifts.js"></script>
 
     <script src="js/chart.js?v=20260712-reports-fix"></script>
     <script src="js/sync_monitoring.js?v=20260506-devices"></script>

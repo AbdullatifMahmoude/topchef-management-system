@@ -16,6 +16,14 @@ async def login(
     auth_service = AuthService(db)
     response = await auth_service.login(login_data)
     
+    # Start shift only if the user is a cashier
+    from app.core.enums import UserRole
+    if response.role == UserRole.CASHIER:
+        from app.modules.shifts.service import ShiftsService
+        shifts_service = ShiftsService(db)
+        await shifts_service.start_shift(response.user_id)
+    
+    
     # In desktop mode, ensure synchronization bridge is started on login
     from app.core.config import settings
     from app.core.events import order_events_manager
@@ -41,7 +49,17 @@ async def logout(
     payload = decode_token(token)
     if payload:
         exp = payload.get("exp")
+        user_id = payload.get("user_id")
         await TokenBlacklist().revoke_token(token, exp)
+        
+        if user_id:
+            from app.core.enums import UserRole
+            if payload.get("role") == UserRole.CASHIER.value:
+                from app.modules.shifts.service import ShiftsService
+                from app.core.database import AsyncSessionLocal
+                async with AsyncSessionLocal() as db:
+                    shifts_service = ShiftsService(db)
+                    await shifts_service.end_shift(user_id)
     
     # In desktop mode, clean up synchronization bridge on logout
     if settings.RUNTIME_MODE == "desktop":

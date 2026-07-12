@@ -1,0 +1,148 @@
+from datetime import datetime, date, timedelta, timezone
+from sqlalchemy import select, func, desc, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from typing import List, Dict, Any, Optional
+
+from app.modules.shifts.models import CashierShift
+from app.modules.orders.models import Order
+from app.core.enums import UserRole
+
+def get_business_date() -> date:
+    # Business shift starts at 5am (UTC+3)
+    tz = timezone(timedelta(hours=3))
+    now = datetime.now(tz)
+    if now.hour < 5:
+        return (now - timedelta(days=1)).date()
+    return now.date()
+
+class ShiftsService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    def _record_outbox_event(self, event_type: str, data: dict):
+        import os
+        import json
+        if os.environ.get("RUNTIME_MODE") == "desktop":
+            from app.modules.orders.models import OutboxEvent, OutboxEventStatus
+            outbox_record = OutboxEvent(
+                event_type=event_type,
+                topic="shifts.local",
+                payload=json.dumps(data, default=str),
+                status=OutboxEventStatus.PENDING
+            )
+            self.db.add(outbox_record)
+
+    async def start_shift(self, user_id: int):
+        target_date = get_business_date()
+        
+        # Get the absolute last shift for today, regardless of who owns it
+        last_shift_query = select(CashierShift).where(
+            CashierShift.target_date == target_date
+        ).order_by(desc(CashierShift.id))
+        result = await self.db.execute(last_shift_query)
+        last_shift = result.scalars().first()
+        
+        if last_shift and last_shift.user_id == user_id:
+            if last_shift.end_time is not None:
+                # Reopen the shift since no one else logged in between
+                last_shift.end_time = None
+                self._record_outbox_event("shift.updated", {
+                    "id": last_shift.id,
+                    "user_id": last_shift.user_id,
+                    "end_time": None
+                })
+                await self.db.commit()
+                
+                from app.core.events import get_outbox_sync_trigger
+                get_outbox_sync_trigger().set()
+            # If it's already open, do nothing
+        else:
+            # Create a new shift since the last one belongs to someone else, or no shifts exist today
+            new_shift = CashierShift(
+                user_id=user_id,
+                target_date=target_date,
+                start_time=datetime.utcnow()
+            )
+            self.db.add(new_shift)
+            await self.db.flush() # To get the ID
+            
+            self._record_outbox_event("shift.created", {
+                "id": new_shift.id,
+                "user_id": new_shift.user_id,
+                "target_date": new_shift.target_date.isoformat(),
+                "start_time": new_shift.start_time.isoformat()
+            })
+            await self.db.commit()
+            
+            from app.core.events import get_outbox_sync_trigger
+            get_outbox_sync_trigger().set()
+
+    async def end_shift(self, user_id: int):
+        target_date = get_business_date()
+        
+        query = select(CashierShift).where(
+            CashierShift.user_id == user_id,
+            CashierShift.target_date == target_date,
+            CashierShift.end_time.is_(None)
+        )
+        result = await self.db.execute(query)
+        active_shift = result.scalars().first()
+        
+        if active_shift:
+            active_shift.end_time = datetime.utcnow()
+            self._record_outbox_event("shift.updated", {
+                "id": active_shift.id,
+                "user_id": active_shift.user_id,
+                "end_time": active_shift.end_time.isoformat()
+            })
+            await self.db.commit()
+            
+            from app.core.events import get_outbox_sync_trigger
+            get_outbox_sync_trigger().set()
+
+    async def get_shifts_report(self, target_date: date) -> List[Dict[str, Any]]:
+        # Fetch shifts for the day
+        query = select(CashierShift).options(selectinload(CashierShift.user)).where(
+            CashierShift.target_date == target_date
+        )
+        result = await self.db.execute(query)
+        shifts = result.scalars().all()
+
+        # Fetch orders for the day to compute stats
+        # We define business day boundaries
+        # From 5 AM target_date to 4:59:59 AM next day
+        tz = timezone(timedelta(hours=3))
+        start_dt = datetime.combine(target_date, datetime.min.time()).replace(hour=5, tzinfo=tz)
+        end_dt = start_dt + timedelta(days=1)
+        start_utc = start_dt.astimezone(timezone.utc).replace(tzinfo=None)
+        end_utc = end_dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+        orders_query = select(
+            Order.created_by_user_id,
+            func.count(Order.id).label("total_orders"),
+            func.sum(Order.total_amount).label("total_sales")
+        ).where(
+            Order.created_at >= start_utc,
+            Order.created_at < end_utc,
+            Order.is_deleted == False
+        ).group_by(Order.created_by_user_id)
+
+        orders_result = await self.db.execute(orders_query)
+        stats = {row.created_by_user_id: {"total_orders": row.total_orders, "total_sales": row.total_sales or 0.0} for row in orders_result}
+
+        report = []
+        for shift in shifts:
+            st = stats.get(shift.user_id, {"total_orders": 0, "total_sales": 0.0})
+            report.append({
+                "id": shift.id,
+                "user_id": shift.user_id,
+                "cashier_name": shift.user.full_name or shift.user.username,
+                "start_time": shift.start_time.isoformat() + "Z" if shift.start_time else None,
+                "end_time": shift.end_time.isoformat() + "Z" if shift.end_time else None,
+                "total_orders": st["total_orders"],
+                "total_sales": st["total_sales"],
+                "target_date": shift.target_date.isoformat()
+            })
+            
+        return report

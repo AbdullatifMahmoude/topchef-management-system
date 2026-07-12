@@ -26,6 +26,7 @@ from app.modules.pricing import register_pricing
 from app.modules.settings import register_settings
 from app.modules.users import register_user
 from app.modules.report import register_report
+from app.modules.shifts import register_shifts
 from app.core.leader import global_leader_manager
 
 APP_ROLE = os.getenv("APP_ROLE", "all").lower()
@@ -208,6 +209,7 @@ register_settings(app)
 register_comments(app)
 register_desktop_updates(app)
 register_report(app)
+register_shifts(app)
 
 
 
