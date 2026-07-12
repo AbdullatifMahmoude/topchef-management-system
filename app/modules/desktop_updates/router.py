@@ -30,6 +30,7 @@ from app.modules.settings.models import AppSetting
 from app.modules.customer.models import Customer, CustomerAddress
 from app.modules.comments.models import Comment
 from app.modules.orders.models import Order, OrderItem, OrderStatusHistory
+from app.modules.shifts.models import CashierShift
 
 from app.modules.auth.dependencies import get_current_user
 
@@ -92,6 +93,7 @@ async def get_master_data(
 
     return MasterDataResponse(
         users=await _fetch_incremental(User),
+        cashier_shifts=await _fetch_incremental(CashierShift),
         categories=await _fetch_incremental(Category),
         products=await _fetch_incremental(Product),
         variants=await _fetch_incremental(Variant),
@@ -507,6 +509,74 @@ async def desktop_sync_events(
                 except Exception as e:
                     rejected += 1
                     errors.append(f"ADDRESS_CREATED error: {str(e)}")
+            elif event.event_type == "SHIFT_CREATED":
+                try:
+                    from app.modules.shifts.models import CashierShift
+                    from datetime import date as _date
+                    
+                    user_id = event_data.get("user_id")
+                    target_date_str = event_data.get("target_date")
+                    start_time_str = event_data.get("start_time")
+                    
+                    if user_id and target_date_str and start_time_str:
+                        target_date = _date.fromisoformat(target_date_str[:10])
+                        start_time = datetime.fromisoformat(start_time_str)
+                        
+                        # Idempotency: check if shift already exists for this user+date+start_time
+                        existing_shift = await db.execute(
+                            select(CashierShift).where(
+                                CashierShift.user_id == user_id,
+                                CashierShift.target_date == target_date,
+                                CashierShift.start_time == start_time
+                            )
+                        )
+                        if not existing_shift.scalars().first():
+                            new_shift = CashierShift(
+                                user_id=user_id,
+                                target_date=target_date,
+                                start_time=start_time
+                            )
+                            db.add(new_shift)
+                    
+                    if not existing_processed_record:
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    accepted += 1
+                except Exception as e:
+                    rejected += 1
+                    errors.append(f"SHIFT_CREATED error: {str(e)}")
+            elif event.event_type == "SHIFT_UPDATED":
+                try:
+                    from app.modules.shifts.models import CashierShift
+                    
+                    shift_id = event_data.get("id")
+                    user_id = event_data.get("user_id")
+                    end_time_str = event_data.get("end_time")
+                    
+                    # Find the shift by user_id (more reliable across systems)
+                    cloud_shift = None
+                    if user_id:
+                        # Find the latest open shift for this user
+                        shift_result = await db.execute(
+                            select(CashierShift).where(
+                                CashierShift.user_id == user_id,
+                                CashierShift.end_time.is_(None)
+                            ).order_by(CashierShift.id.desc())
+                        )
+                        cloud_shift = shift_result.scalars().first()
+                    
+                    if cloud_shift:
+                        if end_time_str:
+                            cloud_shift.end_time = datetime.fromisoformat(end_time_str)
+                        elif end_time_str is None and "end_time" in event_data:
+                            # Explicitly reopening a shift
+                            cloud_shift.end_time = None
+                    
+                    if not existing_processed_record:
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    accepted += 1
+                except Exception as e:
+                    rejected += 1
+                    errors.append(f"SHIFT_UPDATED error: {str(e)}")
             else:
                 rejected += 1
                 errors.append(f"Unknown event type: {event.event_type}")

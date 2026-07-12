@@ -211,11 +211,14 @@ def main():
             return
         while True:
             try:
-                # Sleep briefly to avoid maxing out CPU but remain highly responsive
-                await asyncio.sleep(1.0)
-                
                 from app.core.events import get_outbox_sync_trigger
                 trigger = get_outbox_sync_trigger()
+                
+                # Wait for the trigger OR timeout after 1s for periodic checks
+                try:
+                    await asyncio.wait_for(trigger.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
                 
                 if trigger.is_set():
                     log.info("🔄 Sync: Worker woke up (trigger set).")

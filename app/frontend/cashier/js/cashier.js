@@ -89,7 +89,7 @@ function isValidEgyptianPhone(phone) {
 
 function getOrderAddressText(order) {
   if (!order) return "";
-  const raw = order.customer_address || order.address || order.customer_notes || "";
+  const raw = order.customer_address || order.address || "";
   if (raw && typeof raw === "object") {
     return raw.address || raw.address_line || raw.full_address || raw.street || raw.name || "";
   }
@@ -2009,7 +2009,6 @@ function renderOnlineOrders() {
                 ? order.address.address
                 : order.customer_address ||
                   order.address ||
-                  order.customer_notes ||
                   "لا يوجد عنوان"
             }
           </span>
@@ -2989,7 +2988,6 @@ function renderAllOrders() {
                   ? order.address.address
                   : order.customer_address ||
                     order.address ||
-                    order.customer_notes ||
                     "---"
               }
             </span>
@@ -3454,7 +3452,6 @@ function openOrderDetails(orderId, source) {
                 ? order.address.address
                 : order.customer_address ||
                   order.address ||
-                  order.customer_notes ||
                   "---"
             }</p>
           </div>

@@ -315,7 +315,7 @@ class PrinterManager:
         draw_right(formatted_date, y + u(14), fonts["small"])
         draw_right(formatted_time, y + u(42), fonts["small"])
 
-        order_text = f"#{order_number}"
+        order_text = f"رقم الطلب #{order_number}"
         shaped_order = rtl(order_text)
         order_bbox = draw.textbbox((0, 0), shaped_order, font=fonts["order"])
         order_w = order_bbox[2] - order_bbox[0]
@@ -417,6 +417,17 @@ class PrinterManager:
             draw_text(f"{hall_fee:.2f}", margin, y, fonts["small"])
             y += u(34)
 
+        discount_amount = self._number(self._value(order, "discount_amount", "discountAmount", default=0))
+        discount_reason = self._value(order, "discount_reason", "discountReason", default="")
+        
+        if discount_amount > 0:
+            discount_label = "الخصم:"
+            if discount_reason:
+                discount_label = f"الخصم ({discount_reason}):"
+            draw_right(discount_label, y, fonts["small"])
+            draw_text(f"- {discount_amount:.2f}", margin, y, fonts["small"])
+            y += u(34)
+
         y += u(2)
         line(y, dash=True)
         y += u(12)
@@ -432,7 +443,7 @@ class PrinterManager:
         y += u(34)
         draw_center("01212758001 - 01129820007", y, fonts["footer"])
         y += u(34)
-        draw_center("شكراً لزيارتكم - Top Chef", y, fonts["footer"])
+        draw_center('زورو موقعنا الإلكتروني "topchefeg.com"', y, fonts["footer"])
         y += u(52)
 
         return image.crop((0, 0, width, y))
@@ -441,18 +452,20 @@ class PrinterManager:
         return bool(
             self._value(order, "customerName", "customer_name", default="")
             or self._value(order, "customerPhone", "customer_phone", default="")
+            or self._value(order, "customerNotes", "customer_notes", default="")
             or self._address_to_text(
-                self._value(order, "customerAddress", "customer_address", "address", "customer_notes", default="")
+                self._value(order, "customerAddress", "customer_address", "address", default="")
             )
         )
 
     def _draw_customer_info(self, order, image, draw, fonts, y: int, scale: int = 1) -> int:
         customer_name = self._value(order, "customerName", "customer_name", default="")
         customer_phone = self._value(order, "customerPhone", "customer_phone", default="")
+        customer_notes = self._value(order, "customerNotes", "customer_notes", default="")
         address = self._address_to_text(
-            self._value(order, "customerAddress", "customer_address", "address", "customer_notes", default="")
+            self._value(order, "customerAddress", "customer_address", "address", default="")
         )
-        if not any([customer_name, customer_phone, address]):
+        if not any([customer_name, customer_phone, address, customer_notes]):
             return y
 
         def u(value: int | float) -> int:
@@ -479,6 +492,9 @@ class PrinterManager:
             y += u(36)
         if address:
             draw_right(f" العنوان :{address}", y, fonts["customer"])
+            y += u(36)
+        if customer_notes:
+            draw_right(f" ملاحظات :{customer_notes}", y, fonts["customer"])
             y += u(36)
 
         draw.rounded_rectangle((x1, box_top, x2, y + u(10)), radius=u(4), outline="black", width=scale)

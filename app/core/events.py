@@ -59,24 +59,20 @@ class EventBus:
 
 
 event_bus = EventBus()
-_pending_sync_trigger: bool = False
+_outbox_sync_event: Optional[asyncio.Event] = None
 
-def get_outbox_sync_trigger():
-    """Returns an object with .set() for backward compatibility."""
-    class _DummyTrigger:
-        def set(self):
-            global _pending_sync_trigger
-            _pending_sync_trigger = True
-            
-        def clear(self):
-            global _pending_sync_trigger
-            _pending_sync_trigger = False
-            
-        def is_set(self):
-            global _pending_sync_trigger
-            return _pending_sync_trigger
-            
-    return _DummyTrigger()
+
+def get_outbox_sync_trigger() -> asyncio.Event:
+    """Returns a shared asyncio.Event used to wake the desktop sync loop instantly.
+
+    The event is lazily created on first access so that it is always bound to
+    the running event-loop.  Callers use ``.set()`` to wake the sync worker
+    and the worker calls ``.wait()`` / ``.clear()`` as usual.
+    """
+    global _outbox_sync_event
+    if _outbox_sync_event is None:
+        _outbox_sync_event = asyncio.Event()
+    return _outbox_sync_event
 
 
 class OrderEventsManager:

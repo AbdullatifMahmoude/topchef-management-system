@@ -55,7 +55,8 @@ async def lifespan(app: FastAPI):
             tables_to_fix = [
                 "categories", "products", "variants", "users", "customers", 
                 "customer_addresses", "offers", "comments", "orders", 
-                "order_items", "order_status_history", "app_settings"
+                "order_items", "order_status_history", "app_settings",
+                "cashier_shifts"
             ]
             
             for table in tables_to_fix:

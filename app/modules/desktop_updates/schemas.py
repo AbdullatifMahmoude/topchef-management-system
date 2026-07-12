@@ -32,6 +32,7 @@ class ChangelogResponse(BaseModel):
 class MasterDataResponse(BaseModel):
     """Full snapshot of production data to be pulled by the desktop."""
     users: List[dict]
+    cashier_shifts: List[dict] = []
     categories: List[dict]
     products: List[dict]
     variants: List[dict]

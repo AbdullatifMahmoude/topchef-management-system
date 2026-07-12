@@ -32,9 +32,10 @@ function printReceipt(orderData) {
   document.body.appendChild(iframe);
   const doc = iframe.contentWindow.document;
   
-  let rawAddr = orderData.customerAddress || orderData.customer_address || orderData.address || orderData.customer_notes || '';
+  let rawAddr = orderData.customerAddress || orderData.customer_address || orderData.address || '';
   let printAddrText = (typeof rawAddr === 'object' && rawAddr !== null) ? (rawAddr.address || rawAddr.address_line || rawAddr.full_address || rawAddr.street || rawAddr.name || '') : rawAddr;
   const isDoublePrint = false; // (orderData.orderType === 'delivery' || orderData.order_type === 'delivery' || orderData.orderType === 'takeaway' || orderData.order_type === 'takeaway');
+
 
   const receiptContent = `
       <div class="receipt-header">
@@ -48,7 +49,7 @@ function printReceipt(orderData) {
           <!-- Middle: Order Number -->
           <div style="flex:2; text-align:center;">
             <h1 class="order-number" style="display:inline-block; font-size:18px; font-weight:900; border:2px solid #000; padding:3px 6px; border-radius:5px; margin:0 5px;">
-              #${orderNumber}
+              رقم الطلب #${orderNumber}
             </h1>
           </div>
           
@@ -120,7 +121,7 @@ function printReceipt(orderData) {
         </div>
       </div>
 
-      ${(orderData.customerName || orderData.customer_name || orderData.customerPhone || orderData.customer_phone || printAddrText) ? `
+      ${(orderData.customerName || orderData.customer_name || orderData.customerPhone || orderData.customer_phone || printAddrText || orderData.customer_notes) ? `
       <div class="customer-info">
         <div class="customer-info-title">بيانات العميل</div>
         ${(orderData.customerName || orderData.customer_name) ? `
@@ -135,13 +136,17 @@ function printReceipt(orderData) {
         <div class="customer-info-row">
           <span> العنوان :${printAddrText}</span>
         </div>` : ''}
+        ${(orderData.customer_notes) ? `
+        <div class="customer-info-row">
+          <span> ملاحظات :${orderData.customer_notes}</span>
+        </div>` : ''}
        
       </div>` : ''}
 
       <div class="footer">
         <p>مزلقان هرية رزنة - الزقازيق - الشرقية</p>
         <p>01212758001 - 01129820007</p>
-        <p style="margin-top: 5px;">شكراً لزيارتكم - Top Chef</p>
+        <p style="margin-top: 5px;">زورو موقعنا الإلكتروني "topchefeg.com"</p>
       </div>
   `;
 

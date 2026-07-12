@@ -47,7 +47,7 @@ class ShiftsService:
             if last_shift.end_time is not None:
                 # Reopen the shift since no one else logged in between
                 last_shift.end_time = None
-                self._record_outbox_event("shift.updated", {
+                self._record_outbox_event("SHIFT_UPDATED", {
                     "id": last_shift.id,
                     "user_id": last_shift.user_id,
                     "end_time": None
@@ -67,7 +67,7 @@ class ShiftsService:
             self.db.add(new_shift)
             await self.db.flush() # To get the ID
             
-            self._record_outbox_event("shift.created", {
+            self._record_outbox_event("SHIFT_CREATED", {
                 "id": new_shift.id,
                 "user_id": new_shift.user_id,
                 "target_date": new_shift.target_date.isoformat(),
@@ -91,7 +91,7 @@ class ShiftsService:
         
         if active_shift:
             active_shift.end_time = datetime.utcnow()
-            self._record_outbox_event("shift.updated", {
+            self._record_outbox_event("SHIFT_UPDATED", {
                 "id": active_shift.id,
                 "user_id": active_shift.user_id,
                 "end_time": active_shift.end_time.isoformat()

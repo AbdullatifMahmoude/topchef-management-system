@@ -13,11 +13,13 @@ from app.modules.menu.models import Category, Product, Variant
 from app.modules.offer.models import Offer
 from app.modules.orders.models import Order, OrderItem, OrderStatusHistory
 from app.modules.settings.models import AppSetting
+from app.modules.shifts.models import CashierShift
 from app.modules.users.models import User
 
 
 MODEL_ORDER = (
     (User, "users"),
+    (CashierShift, "cashier_shifts"),
     (Category, "categories"),
     (Product, "products"),
     (Variant, "variants"),
