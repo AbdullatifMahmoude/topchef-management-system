@@ -49,6 +49,18 @@ function showPage(pageId) {
 // ============================================
 document.addEventListener("DOMContentLoaded", function () {
 
+  // --- إخفاء صفحات الإدارة في وضع الديسكتوب ---
+  const IS_DESKTOP_RUNTIME = ["127.0.0.1", "localhost"].includes(window.location.hostname);
+  if (IS_DESKTOP_RUNTIME) {
+    document.querySelectorAll(".side_btn").forEach((btn) => {
+      const page = btn.getAttribute("data-page");
+      const isEvents = btn.id === "goeventspage" || page === "events";
+      if (page !== "home" && !isEvents) {
+        btn.style.display = "none";
+      }
+    });
+  }
+
   // --- تفعيل القائمة الجانبية في مقاس التابلت ---
   const sidebar = document.querySelector(".sidemenu");
   const toggleBtn = document.getElementById("sidebar_toggle_btn");

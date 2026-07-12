@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260615-tablet-mobile-sidebar" />
+  <link rel="stylesheet" href="css/admin.css?v=20260712-calendar-icon" />
 </head>
 
 <body>
@@ -343,7 +343,10 @@
 
     <!-- ===== صفحة التقارير ===== -->
     <div class="page-content" id="page-reports" style="display: none">
-      <div class="reports_btn">
+      <div class="reports_btn" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+        <button id="yearlyBtn" class="filter-btn" data-period="year">
+          سنوي
+        </button>
         <button id="monthlyBtn" class="filter-btn" data-period="month">
           شهري
         </button>
@@ -353,32 +356,38 @@
         <button id="dailyBtn" class="filter-btn" data-period="day">
           يومي
         </button>
+        <div class="custom-date-filter" style="display: flex; gap: 10px; align-items: center; margin-right: auto; padding: 0 10px; border-radius: 15px; border: 1px solid var(--color-primary-border); height: 50px; backdrop-filter: blur(20px); background-color: transparent;">
+          <input type="date" id="customStartDate" style="background: transparent; color: var(--color-text); border: none; outline: none; font-size: 16px; font-weight: bold; cursor: pointer; color-scheme: dark;" />
+          <span style="color: var(--color-text); font-weight: bold; font-size: 18px;">إلى</span>
+          <input type="date" id="customEndDate" style="background: transparent; color: var(--color-text); border: none; outline: none; font-size: 16px; font-weight: bold; cursor: pointer; color-scheme: dark;" />
+          <button id="customDateBtn" style="background-color: var(--color-primary); color: white; border: 1px solid var(--color-primary-border); border-radius: 10px; padding: 5px 15px; font-weight: bold; cursor: pointer; height: 35px;">بحث</button>
+        </div>
       </div>
       <div class="container1_reports">
         <div class="card_reports">
           <h1>إجمالي المبيعات</h1>
-          <h2>3000 ج.م</h2>
+          <h2 id="total_revenue_value">0 ج.م</h2>
           <span>25% من امس</span>
         </div>
         <div class="card_reports">
-          <h1>عدد طلبات الصالة</h1>
-          <h2>25 طلب</h2>
+          <h1>إجمالي الطلبات</h1>
+          <h2 id="total_orders_value">0 طلب</h2>
           <span>25% من امس</span>
         </div>
         <div class="card_reports">
-          <h1>أكتر صنف مبيعا</h1>
-          <h2>كبده مقلية</h2>
+          <h1>متوسط قيمة الطلب</h1>
+          <h2 id="average_order_value">0 ج.م</h2>
           <span>50 طلب</span>
         </div>
       </div>
       <div class="container2_reports">
         <div class="card_reports">
           <h1>عدد الطلبات الملغية</h1>
-          <h2>طلب اليوم 10</h2>
+          <h2 id="cancelled_orders_value">0 طلب</h2>
         </div>
         <div class="card_reports">
           <h1>عدد الطلبات المكتملة</h1>
-          <h2>150 طلبات</h2>
+          <h2 id="successful_orders_value">0 طلب</h2>
           <span>5% من امس</span>
         </div>
         <div class="card_reports">
@@ -775,10 +784,10 @@
     <script src="js/delivery.js"></script>
     <script src="js/offer.js"></script>
 
-    <script src="js/chart.js"></script>
+    <script src="js/chart.js?v=20260712-reports-fix"></script>
     <script src="js/sync_monitoring.js?v=20260506-devices"></script>
     <script src="js/orders_dashboard.js"></script>
-    <script src="js/admin.js?v=20260615-tablet-mobile-sidebar"></script>
+    <script src="js/admin.js?v=20260712-desktop-menu-fix"></script>
     <script>
       // ===== عرض اسم المستخدم =====
       (function () {

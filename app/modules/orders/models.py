@@ -107,6 +107,8 @@ class Order(Base):
         Index('idx_order_created', 'created_at'),
         Index('idx_order_number_date', 'order_number', 'order_date', unique=True),
         Index('idx_order_date_source', 'order_date', 'order_source'),
+        # Index مخصوص للتقارير - بيسرع الـ aggregation بتاعة الشهري والسنوي
+        Index('idx_order_date_status', 'order_date', 'order_status'),
     )
 
 
