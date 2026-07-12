@@ -211,7 +211,7 @@ class PrinterManager:
             "table": self._font("arialbd", size(27)),
             "customer": self._font("arialbd", size(26)),
             "footer": self._font("arialbd", size(24)),
-            "order": self._font("arialbd", size(40)),
+            "order": self._font("arialbd", size(35)),
             "grand": self._font("arialbd", size(33)),
         }
 
@@ -315,7 +315,7 @@ class PrinterManager:
         draw_right(formatted_date, y + u(14), fonts["small"])
         draw_right(formatted_time, y + u(42), fonts["small"])
 
-        order_text = f"رقم الطلب #{order_number}"
+        order_text = f"رقم الطلب {order_number}"
         shaped_order = rtl(order_text)
         order_bbox = draw.textbbox((0, 0), shaped_order, font=fonts["order"])
         order_w = order_bbox[2] - order_bbox[0]
@@ -515,15 +515,49 @@ class PrinterManager:
         except Exception:
             return available[:1]
 
+    def _is_printer_ready(self, printer_name: str) -> tuple[bool, str]:
+        handle = None
+        try:
+            handle = win32print.OpenPrinter(printer_name)
+            info = win32print.GetPrinter(handle, 2)
+            status = info.get("Status", 0) if isinstance(info, dict) else 0
+            if not isinstance(status, int):
+                try:
+                    status = int(status)
+                except (TypeError, ValueError):
+                    return False, "Unknown"
+
+            # Printer Status is only a best-effort optimization.
+            # Some Windows printer drivers (especially thermal printers) report Status == 0 even when
+            # the printer is disconnected. The actual readiness check is whether StartDoc succeeds.
+            unready_masks = (
+                (getattr(win32print, "PRINTER_STATUS_OFFLINE", 0x00000080), "Offline"),
+                (getattr(win32print, "PRINTER_STATUS_ERROR", 0x00000002), "Error"),
+                (getattr(win32print, "PRINTER_STATUS_NOT_AVAILABLE", 0x00001000), "Not Available"),
+                (getattr(win32print, "PRINTER_STATUS_PAPER_OUT", 0x00000010), "Paper Out"),
+                (getattr(win32print, "PRINTER_STATUS_DOOR_OPEN", 0x00400000), "Door Open"),
+                (getattr(win32print, "PRINTER_STATUS_PAUSED", 0x00000001), "Paused"),
+                (getattr(win32print, "PRINTER_STATUS_PAPER_JAM", 0x00000008), "Paper Jam"),
+                (getattr(win32print, "PRINTER_STATUS_PAPER_PROBLEM", 0x00000040), "Paper Problem"),
+            )
+            for mask, label in unready_masks:
+                if status & mask:
+                    return False, label
+
+            return True, "No blocking status"
+        except Exception as exc:
+            log.warning("Could not read printer readiness for '%s': %s", printer_name, exc)
+            return False, "Unknown"
+        finally:
+            if handle is not None:
+                try:
+                    win32print.ClosePrinter(handle)
+                except Exception:
+                    pass
+
     def _print_native_gdi(self, image: Image.Image, printer_name: str, document_name: str) -> bool:
         hdc = None
         try:
-            available_printers = self.get_printers()
-            if printer_name not in available_printers:
-                log.error("Pre-flight check failed: Printer '%s' not found in system registered printers.", printer_name)
-                self._alert_ui(f"Cashier printer '{printer_name}' not found on this machine. Check printer name in Settings.")
-                return False
-
             hdc = win32ui.CreateDC()
             hdc.CreatePrinterDC(printer_name)
             printable_width = hdc.GetDeviceCaps(110)
@@ -561,18 +595,47 @@ class PrinterManager:
                 info = win32print.GetPrinter(handle, 2)
                 status = info.get("Status", 0)
                 win32print.ClosePrinter(handle)
-                printer_status = f"Status Code: {status}"
+                status_label = self._status_label(status)
+                printer_status = f"Status Code: {status} ({status_label})"
             except Exception:
                 pass
             
             log.error("Native Python GDI print failed on %s: %s | Printer Status: %s", printer_name, exc, printer_status)
-            self._alert_ui(f"Print failed on '{printer_name}'. Check printer connection and paper.")
             try:
                 if hdc:
                     hdc.AbortDoc()
             except Exception:
                 pass
             return False
+        finally:
+            try:
+                if hdc:
+                    hdc.DeleteDC()
+            except Exception:
+                pass
+
+    def _status_label(self, status: Any) -> str:
+        if not isinstance(status, int):
+            try:
+                status = int(status)
+            except (TypeError, ValueError):
+                return "Unknown"
+
+        status_map = {
+            getattr(win32print, "PRINTER_STATUS_OFFLINE", 0x00000080): "Offline",
+            getattr(win32print, "PRINTER_STATUS_ERROR", 0x00000002): "Error",
+            getattr(win32print, "PRINTER_STATUS_NOT_AVAILABLE", 0x00001000): "Not Available",
+            getattr(win32print, "PRINTER_STATUS_PAPER_OUT", 0x00000010): "Paper Out",
+            getattr(win32print, "PRINTER_STATUS_DOOR_OPEN", 0x00400000): "Door Open",
+            getattr(win32print, "PRINTER_STATUS_PAUSED", 0x00000001): "Paused",
+            getattr(win32print, "PRINTER_STATUS_PAPER_JAM", 0x00000008): "Paper Jam",
+            getattr(win32print, "PRINTER_STATUS_PAPER_PROBLEM", 0x00000040): "Paper Problem",
+        }
+
+        matched = [label for mask, label in status_map.items() if status & mask]
+        if matched:
+            return ", ".join(matched)
+        return "Unknown"
 
     def _alert_ui(self, message: str) -> None:
         try:
@@ -603,12 +666,30 @@ class PrinterManager:
                 image = self._generate_receipt_image(order, job.get("receipt_type", "customer"))
                 printers = self._target_printers()
                 if not printers:
-                    log.warning("No printers found on this device.")
+                    log.error("No printers found on this device.")
+                    self._alert_ui("No printers found. Please check printer connections.")
                     continue
 
+                printed_count = 0
                 for printer_name in printers:
-                    self._print_native_gdi(image, printer_name, job.get("document_name", "Top Chef Receipt"))
-                    time.sleep(0.4)
+                    try:
+                        ready, reason = self._is_printer_ready(printer_name)
+                        if not ready:
+                            log.warning(
+                                "Skipping printer '%s' because it is %s.",
+                                printer_name,
+                                reason,
+                            )
+                            continue
+
+                        if self._print_native_gdi(image, printer_name, job.get("document_name", "Top Chef Receipt")):
+                            printed_count += 1
+                    finally:
+                        time.sleep(0.4)
+
+                if printed_count == 0:
+                    self._alert_ui("No available printer found. Please check printer connections.")
+                    log.error("No available printer found. Please check printer connections.")
             except Exception as exc:
                 log.error("Printer worker encountered an error: %s", exc, exc_info=True)
             finally:

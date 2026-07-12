@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cloud_client import cloud_client
 from app.core.database import get_db
 from app.modules.auth.schemas import LoginRequest, TokenResponse
 from app.modules.auth.service import AuthService
@@ -24,10 +25,17 @@ async def login(
         await shifts_service.start_shift(response.user_id)
     
     
-    # In desktop mode, ensure synchronization bridge is started on login
+    # In desktop mode, make the sync worker immediately authenticate so outbox
+    # events (including shift changes) can be pushed right away.
     from app.core.config import settings
     from app.core.events import order_events_manager
     if settings.RUNTIME_MODE == "desktop":
+        cloud_client.update_token(response.access_token)
+        try:
+            import desktop.launcher as desktop_launcher
+            desktop_launcher._auth_header_cache = response.access_token if response.access_token.startswith("Bearer ") else f"Bearer {response.access_token}"
+        except Exception:
+            pass
         await order_events_manager.start()
         
     return response
@@ -63,5 +71,12 @@ async def logout(
     
     # In desktop mode, clean up synchronization bridge on logout
     if settings.RUNTIME_MODE == "desktop":
+        cloud_client._token = None
+        cloud_client._client.headers.pop("Authorization", None)
+        try:
+            import desktop.launcher as desktop_launcher
+            desktop_launcher._auth_header_cache = None
+        except Exception:
+            pass
         await order_events_manager.stop()
     return {"message": "Logged out successfully"}

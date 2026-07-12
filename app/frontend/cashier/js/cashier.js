@@ -82,6 +82,15 @@ function normalizePhoneDigits(phone) {
   return String(phone || "").replace(/\D/g, "").slice(0, 11);
 }
 
+function hasFeeValue(value) {
+  return value !== null && value !== undefined && value !== "";
+}
+
+function formatFeeValue(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? `${numericValue.toFixed(0)} ج.م` : "0 ج.م";
+}
+
 function isValidEgyptianPhone(phone) {
   return /^\d{11}$/.test(normalizePhoneDigits(phone));
 }
@@ -319,9 +328,9 @@ function renderCart() {
 
   const itemsTotal = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
   let fee = 0;
-  if (orderType === "delivery" && selectedDeliveryFee !== null)
+  if (orderType === "delivery" && hasFeeValue(selectedDeliveryFee))
     fee = selectedDeliveryFee;
-  else if (orderType === "dine_in" && selectedDineInFee !== null)
+  else if (orderType === "dine_in" && hasFeeValue(selectedDineInFee))
     fee = selectedDineInFee;
 
   const grandTotal = itemsTotal + fee;
@@ -408,9 +417,9 @@ function confirmOrder() {
 
   const itemsTotal = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
   let fee = 0;
-  if (orderType === "delivery" && selectedDeliveryFee !== null)
+  if (orderType === "delivery" && hasFeeValue(selectedDeliveryFee))
     fee = selectedDeliveryFee;
-  else if (orderType === "dine_in" && selectedDineInFee !== null)
+  else if (orderType === "dine_in" && hasFeeValue(selectedDineInFee))
     fee = selectedDineInFee;
 
   const grandTotal = itemsTotal + fee;
@@ -913,12 +922,12 @@ function renderOrderTypeBadge() {
   if (
     orderType === "delivery" &&
     selectedDelivery &&
-    selectedDeliveryFee !== null
+    hasFeeValue(selectedDeliveryFee)
   ) {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">${selectedDelivery.name}</span>
-      <span class="badge_fee">رسوم توصيل: ${selectedDeliveryFee} ج.م</span>
+      <span class="badge_fee">رسوم توصيل: ${formatFeeValue(selectedDeliveryFee)}</span>
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   } else if (orderType === "takeaway") {
@@ -931,7 +940,7 @@ function renderOrderTypeBadge() {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">صالة</span>
-      ${selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${selectedDineInFee} ج.م</span>` : ""}
+      ${hasFeeValue(selectedDineInFee) ? `<span class="badge_fee">رسوم خدمة: ${formatFeeValue(selectedDineInFee)}</span>` : ""}
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   } else if (orderType === "delivery") {
@@ -1085,7 +1094,7 @@ function showDineInFeeSelector() {
 }
 
 function selectDineInFee(fee) {
-  selectedDineInFee = fee;
+  selectedDineInFee = Number(fee);
   selectedDeliveryFee = null;
   selectedDelivery = null;
   orderType = "dine_in";
@@ -1163,7 +1172,7 @@ function showDeliveryFeeSelector(rider) {
   if (!list) return;
 
   const fees = [
-    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
     100,
   ];
 
@@ -1187,7 +1196,7 @@ function showDeliveryFeeSelector(rider) {
     btn.textContent = `${fee} ج.م`;
     btn.onclick = () => {
       selectedDelivery = { id: rider.id, name: rider.name };
-      selectedDeliveryFee = fee;
+      selectedDeliveryFee = Number(fee);
       orderType = "delivery";
       resetDeliveryCustomerInfo();
       closeDeliveryModal();
@@ -3750,7 +3759,7 @@ function showFeeSelectorInModal(riderId, riderName, orderId) {
   const fees = [
     0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
     100,
-  ]; // أمثلة لرسوم التوصيل، يمكن تعديلها حسب الحاجة
+  ];
 
   body.innerHTML = `
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
@@ -4127,12 +4136,12 @@ function renderEditModalOrderTypeBadge() {
   if (
     editModalState.orderType === "delivery" &&
     editModalState.selectedDelivery &&
-    editModalState.selectedDeliveryFee !== null
+    hasFeeValue(editModalState.selectedDeliveryFee)
   ) {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">${editModalState.selectedDelivery.name}</span>
-      <span class="badge_fee">رسوم توصيل: ${editModalState.selectedDeliveryFee} ج.م</span>
+      <span class="badge_fee">رسوم توصيل: ${formatFeeValue(editModalState.selectedDeliveryFee)}</span>
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   } else if (editModalState.orderType === "takeaway") {
@@ -4145,7 +4154,7 @@ function renderEditModalOrderTypeBadge() {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">صالة</span>
-      ${editModalState.selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${editModalState.selectedDineInFee} ج.م</span>` : ""}
+      ${hasFeeValue(editModalState.selectedDineInFee) ? `<span class="badge_fee">رسوم خدمة: ${formatFeeValue(editModalState.selectedDineInFee)}</span>` : ""}
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   } else if (editModalState.orderType === "delivery") {
@@ -4293,7 +4302,7 @@ function showDeliveryFeeSelectorInEditModal(rider) {
     btn.textContent = `${fee} ج.م`;
     btn.onclick = () => {
       editModalState.selectedDelivery = { id: rider.id, name: rider.name };
-      editModalState.selectedDeliveryFee = fee;
+      editModalState.selectedDeliveryFee = Number(fee);
       editModalState.orderType = "delivery";
       closeEditModalSub();
       renderEditModalOrderTypeBadge();
@@ -4340,7 +4349,7 @@ function showDineInFeeSelectorInEditModal() {
 }
 
 function selectDineInFeeInEditModal(fee) {
-  editModalState.selectedDineInFee = fee;
+  editModalState.selectedDineInFee = Number(fee);
   editModalState.selectedDeliveryFee = null;
   editModalState.selectedDelivery = null;
   editModalState.orderType = "dine_in";
@@ -4519,12 +4528,12 @@ function updateEditModalGrandTotal() {
   let fee = 0;
   if (
     editModalState.orderType === "delivery" &&
-    editModalState.selectedDeliveryFee !== null
+    hasFeeValue(editModalState.selectedDeliveryFee)
   ) {
     fee = editModalState.selectedDeliveryFee;
   } else if (
     editModalState.orderType === "dine_in" &&
-    editModalState.selectedDineInFee !== null
+    hasFeeValue(editModalState.selectedDineInFee)
   ) {
     fee = editModalState.selectedDineInFee;
   }

@@ -49,7 +49,7 @@ function printReceipt(orderData) {
           <!-- Middle: Order Number -->
           <div style="flex:2; text-align:center;">
             <h1 class="order-number" style="display:inline-block; font-size:18px; font-weight:900; border:2px solid #000; padding:3px 6px; border-radius:5px; margin:0 5px;">
-              رقم الطلب #${orderNumber}
+              رقم الطلب ${orderNumber}
             </h1>
           </div>
           
