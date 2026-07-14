@@ -22,11 +22,12 @@ def setup_logger(name: str = "topchef_desktop") -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # ── Console handler ──
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(level)
-    ch.setFormatter(fmt)
-    logger.addHandler(ch)
+    # ── Console handler (dev only; frozen builds redirect stdout to errors.log) ──
+    if not getattr(sys, "frozen", False):
+        ch = logging.StreamHandler(sys.stdout)
+        ch.setLevel(level)
+        ch.setFormatter(fmt)
+        logger.addHandler(ch)
 
     # ── Rotating file handler ──
     log_file = LOGS_DIR / "desktop.log"

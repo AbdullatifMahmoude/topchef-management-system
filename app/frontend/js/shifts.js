@@ -17,10 +17,72 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", () => {
       if (btn.getAttribute("data-page") === "shifts") {
         fetchShiftsReport();
+        startShiftsAutoRefresh();
       }
     });
   });
+
+  startShiftsWebSocket();
 });
+
+let shiftsRefreshTimer = null;
+
+function startShiftsAutoRefresh() {
+  if (shiftsRefreshTimer) return;
+  shiftsRefreshTimer = setInterval(() => {
+    const page = document.getElementById("page-shifts");
+    if (page && page.style.display !== "none") {
+      fetchShiftsReport();
+    }
+  }, 15000);
+}
+
+function startShiftsWebSocket() {
+  if (!window.WebSocket) return;
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/orders/ws/admin`;
+  let socket = null;
+  let reconnectTimer = null;
+
+  const connect = () => {
+    if (socket) return;
+    socket = new WebSocket(wsUrl);
+
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (
+          payload.type === "SHIFT_CREATED" ||
+          payload.type === "SHIFT_UPDATED"
+        ) {
+          const page = document.getElementById("page-shifts");
+          if (page && page.style.display !== "none") {
+            fetchShiftsReport();
+          }
+        }
+      } catch (err) {
+        console.error("Shifts WS message error:", err);
+      }
+    };
+
+    socket.onclose = () => {
+      socket = null;
+      if (!reconnectTimer) {
+        reconnectTimer = setInterval(connect, 10000);
+      }
+    };
+
+    socket.onopen = () => {
+      if (reconnectTimer) {
+        clearInterval(reconnectTimer);
+        reconnectTimer = null;
+      }
+    };
+  };
+
+  connect();
+}
 
 async function fetchShiftsReport() {
   const tbody = document.querySelector("#shifts_table tbody");

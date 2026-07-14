@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
 from app.core.cloud_client import cloud_client
 from app.core.database import get_db
@@ -34,6 +35,11 @@ async def login(
         try:
             import desktop.launcher as desktop_launcher
             desktop_launcher._auth_header_cache = response.access_token if response.access_token.startswith("Bearer ") else f"Bearer {response.access_token}"
+        except Exception:
+            pass
+        try:
+            from desktop.launcher import flush_outbox_now
+            await flush_outbox_now(max_rounds=3)
         except Exception:
             pass
         await order_events_manager.start()
@@ -71,6 +77,33 @@ async def logout(
     
     # In desktop mode, clean up synchronization bridge on logout
     if settings.RUNTIME_MODE == "desktop":
+        # Keep cloud auth alive long enough to push shift-end events.
+        bearer = token if token.startswith("Bearer ") else f"Bearer {token}"
+        cloud_client.update_token(token)
+        try:
+            import desktop.launcher as desktop_launcher
+            desktop_launcher._auth_header_cache = bearer
+        except Exception:
+            pass
+
+        try:
+            from desktop.launcher import flush_outbox_now
+            from desktop.logger import desktop_logger as desktop_log
+
+            flushed = False
+            for attempt in range(5):
+                if await flush_outbox_now(max_rounds=2):
+                    flushed = True
+                    break
+                await asyncio.sleep(0.3)
+            if not flushed:
+                desktop_log.warning(
+                    "Outbox flush after logout did not confirm shift sync; event may retry on next login"
+                )
+        except Exception as exc:
+            from desktop.logger import desktop_logger as desktop_log
+            desktop_log.error("Outbox flush after logout failed: %s", exc)
+
         cloud_client._token = None
         cloud_client._client.headers.pop("Authorization", None)
         try:

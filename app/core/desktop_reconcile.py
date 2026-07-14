@@ -156,6 +156,18 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
         result = await session.execute(select(Offer).where(Offer.code == row["code"]))
         return result.scalars().first()
 
+    if model is CashierShift and row.get("user_id") is not None and row.get("target_date"):
+        target_date = _parse_date(row.get("target_date"))
+        start_time = _parse_datetime(row.get("start_time"))
+        stmt = select(CashierShift).where(
+            CashierShift.user_id == row["user_id"],
+            CashierShift.target_date == target_date,
+        )
+        if start_time is not None:
+            stmt = stmt.where(CashierShift.start_time == start_time)
+        result = await session.execute(stmt.order_by(CashierShift.id.desc()))
+        return result.scalars().first()
+
     return None
 
 

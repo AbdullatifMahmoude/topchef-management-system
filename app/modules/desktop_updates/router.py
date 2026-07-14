@@ -9,7 +9,7 @@ Features:
 
 from fastapi import APIRouter, HTTPException, Query, Header, Depends, Request
 from fastapi.responses import FileResponse
-from typing import Optional, List
+from typing import Optional, List, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from datetime import datetime, timedelta
@@ -37,6 +37,72 @@ from app.modules.auth.dependencies import get_current_user
 router = APIRouter()
 
 _DESKTOP_API_TOKEN: Optional[str] = None # Set via env
+
+
+async def _remap_order_event_foreign_keys(
+    event_data: dict,
+    db: AsyncSession,
+    redis,
+) -> dict:
+    """Map desktop-local foreign keys to cloud IDs before applying order updates."""
+    data = dict(event_data)
+
+    phone = data.get("customer_phone")
+    if phone:
+        try:
+            from app.modules.customer.service import CustomerService
+
+            cloud_cust = await CustomerService(db, redis=redis).get_customer_by_phone(phone)
+            data["customer_id"] = cloud_cust.id
+
+            addr_text = data.get("customer_address")
+            if not addr_text and isinstance(data.get("address"), dict):
+                addr_text = data["address"].get("address")
+            if data.get("address_id") and addr_text:
+                matched = next(
+                    (a for a in (cloud_cust.addresses or []) if a.address == addr_text),
+                    None,
+                )
+                data["address_id"] = matched.id if matched else None
+            elif data.get("address_id"):
+                data["address_id"] = None
+        except Exception:
+            data.pop("customer_id", None)
+            data.pop("address_id", None)
+    else:
+        data.pop("customer_id", None)
+        data.pop("address_id", None)
+
+    dp_name = data.get("delivery_person_name")
+    if dp_name:
+        dp_result = await db.execute(select(User).where(User.full_name == dp_name))
+        cloud_dp = dp_result.scalars().first()
+        data["delivery_person_id"] = cloud_dp.id if cloud_dp else None
+    elif data.get("delivery_person_id"):
+        data["delivery_person_id"] = None
+
+    return data
+
+
+def _parse_shift_datetime(value: Any) -> datetime | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if dt.tzinfo is not None:
+        return dt.replace(tzinfo=None)
+    return dt
+
+
+async def _broadcast_shift_event(event_type: str, event_data: dict) -> None:
+    from app.core.events import order_events_manager
+
+    await order_events_manager.emit({
+        "type": event_type,
+        "data": event_data,
+    })
 
 
 # ──────────────────────── Sync Trigger ────────────────────────
@@ -225,7 +291,7 @@ async def desktop_sync_events(
             )
             existing_processed_record = (await db.execute(stmt)).scalar_one_or_none()
             if existing_processed_record:
-                if event.event_type in ["SETTING_UPDATED", "ORDER_UPDATED"]:
+                if event.event_type in ["SETTING_UPDATED", "ORDER_UPDATED", "SHIFT_CREATED", "SHIFT_UPDATED"]:
                     # Inherently idempotent, safe to re-process. We just won't insert a duplicate ProcessedEvent.
                     pass
                 elif event.event_type == "ORDER_CREATED":
@@ -377,13 +443,19 @@ async def desktop_sync_events(
                     # 2. Update if found
                     if cloud_order:
                         from app.modules.orders.schemas import OrderUpdateFull, OrderUpdate
-                        
-                        # Apply non-status updates if present
-                        await order_service.update_order(
-                            cloud_order.id, 
-                            OrderUpdateFull(**event_data), 
-                            current_user_id=current_user.id if current_user else None
-                        )
+
+                        remapped = await _remap_order_event_foreign_keys(event_data, db, redis)
+                        update_fields = {
+                            key: value
+                            for key, value in remapped.items()
+                            if key in OrderUpdateFull.model_fields
+                        }
+                        if update_fields:
+                            await order_service.update_order(
+                                cloud_order.id,
+                                OrderUpdateFull(**update_fields),
+                                current_user_id=current_user.id if current_user else None,
+                            )
                         
                         # Apply status updates if present
                         # Robust comparison: extract value and normalize to lower case
@@ -513,67 +585,107 @@ async def desktop_sync_events(
                 try:
                     from app.modules.shifts.models import CashierShift
                     from datetime import date as _date
-                    
+
                     user_id = event_data.get("user_id")
                     target_date_str = event_data.get("target_date")
                     start_time_str = event_data.get("start_time")
-                    
+
                     if user_id and target_date_str and start_time_str:
                         target_date = _date.fromisoformat(target_date_str[:10])
-                        start_time = datetime.fromisoformat(start_time_str)
-                        
-                        # Idempotency: check if shift already exists for this user+date+start_time
-                        existing_shift = await db.execute(
+                        start_time = _parse_shift_datetime(start_time_str)
+
+                        open_shift = await db.execute(
                             select(CashierShift).where(
                                 CashierShift.user_id == user_id,
                                 CashierShift.target_date == target_date,
-                                CashierShift.start_time == start_time
+                                CashierShift.end_time.is_(None),
                             )
                         )
-                        if not existing_shift.scalars().first():
-                            new_shift = CashierShift(
-                                user_id=user_id,
-                                target_date=target_date,
-                                start_time=start_time
+                        if not open_shift.scalars().first():
+                            existing_shift = await db.execute(
+                                select(CashierShift).where(
+                                    CashierShift.user_id == user_id,
+                                    CashierShift.target_date == target_date,
+                                    CashierShift.start_time == start_time,
+                                )
                             )
-                            db.add(new_shift)
-                    
+                            if not existing_shift.scalars().first():
+                                db.add(
+                                    CashierShift(
+                                        user_id=user_id,
+                                        target_date=target_date,
+                                        start_time=start_time,
+                                    )
+                                )
+
                     if not existing_processed_record:
                         db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                     accepted += 1
+                    await _broadcast_shift_event("SHIFT_CREATED", event_data)
                 except Exception as e:
                     rejected += 1
                     errors.append(f"SHIFT_CREATED error: {str(e)}")
             elif event.event_type == "SHIFT_UPDATED":
                 try:
                     from app.modules.shifts.models import CashierShift
-                    
-                    shift_id = event_data.get("id")
+                    from datetime import date as _date
+
                     user_id = event_data.get("user_id")
+                    target_date_str = event_data.get("target_date")
                     end_time_str = event_data.get("end_time")
-                    
-                    # Find the shift by user_id (more reliable across systems)
+                    start_time_str = event_data.get("start_time")
+                    target_date = _date.fromisoformat(target_date_str[:10]) if target_date_str else None
+
                     cloud_shift = None
-                    if user_id:
-                        # Find the latest open shift for this user
-                        shift_result = await db.execute(
-                            select(CashierShift).where(
-                                CashierShift.user_id == user_id,
-                                CashierShift.end_time.is_(None)
-                            ).order_by(CashierShift.id.desc())
-                        )
-                        cloud_shift = shift_result.scalars().first()
-                    
-                    if cloud_shift:
-                        if end_time_str:
-                            cloud_shift.end_time = datetime.fromisoformat(end_time_str)
-                        elif end_time_str is None and "end_time" in event_data:
-                            # Explicitly reopening a shift
-                            cloud_shift.end_time = None
-                    
+                    if user_id and target_date:
+                        if "end_time" in event_data and end_time_str is None:
+                            open_result = await db.execute(
+                                select(CashierShift).where(
+                                    CashierShift.user_id == user_id,
+                                    CashierShift.target_date == target_date,
+                                    CashierShift.end_time.is_(None),
+                                )
+                            )
+                            cloud_shift = open_result.scalars().first()
+                            if not cloud_shift:
+                                start_time = _parse_shift_datetime(start_time_str) or datetime.utcnow()
+                                closed_result = await db.execute(
+                                    select(CashierShift)
+                                    .where(
+                                        CashierShift.user_id == user_id,
+                                        CashierShift.target_date == target_date,
+                                    )
+                                    .order_by(CashierShift.id.desc())
+                                )
+                                cloud_shift = closed_result.scalars().first()
+                                if cloud_shift:
+                                    cloud_shift.end_time = None
+                                    cloud_shift.start_time = start_time
+                                else:
+                                    cloud_shift = CashierShift(
+                                        user_id=user_id,
+                                        target_date=target_date,
+                                        start_time=start_time,
+                                    )
+                                    db.add(cloud_shift)
+                        elif end_time_str:
+                            open_result = await db.execute(
+                                select(CashierShift)
+                                .where(
+                                    CashierShift.user_id == user_id,
+                                    CashierShift.target_date == target_date,
+                                    CashierShift.end_time.is_(None),
+                                )
+                                .order_by(CashierShift.id.desc())
+                            )
+                            cloud_shift = open_result.scalars().first()
+                            if cloud_shift:
+                                cloud_shift.end_time = _parse_shift_datetime(end_time_str)
+
                     if not existing_processed_record:
                         db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                     accepted += 1
+                    await _broadcast_shift_event("SHIFT_UPDATED", event_data)
                 except Exception as e:
                     rejected += 1
                     errors.append(f"SHIFT_UPDATED error: {str(e)}")

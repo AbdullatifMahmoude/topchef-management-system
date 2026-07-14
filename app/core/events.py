@@ -530,8 +530,8 @@ class OrderEventsManager:
             except websockets.exceptions.ConnectionClosed:
                 break
             alive_for = time.monotonic() - connection_started_at
-            logger.info("💓 WebSocket heartbeat sent")
-            logger.info("🟢 Connection alive for %.0fs", alive_for)
+            logger.debug("💓 WebSocket heartbeat sent")
+            logger.debug("🟢 Connection alive for %.0fs", alive_for)
 
     def _desktop_disconnect_reason(self, exc: Exception) -> str:
         message = str(exc).lower()

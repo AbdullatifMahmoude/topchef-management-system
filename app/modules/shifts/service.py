@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from app.modules.shifts.models import CashierShift
 from app.modules.orders.models import Order
 from app.core.enums import UserRole, OrderStatus, OrderStatus
+from app.core.logging import logger
 
 def get_business_date() -> date:
     # Business shift starts at 5am (UTC+3)
@@ -33,6 +34,23 @@ class ShiftsService:
             )
             self.db.add(outbox_record)
 
+    def _shift_outbox_payload(
+        self,
+        shift: CashierShift,
+        end_time: Optional[datetime] = None,
+        *,
+        for_update: bool = False,
+    ) -> dict:
+        payload = {
+            "id": shift.id,
+            "user_id": shift.user_id,
+            "target_date": shift.target_date.isoformat(),
+            "start_time": shift.start_time.isoformat() if shift.start_time else None,
+        }
+        if for_update:
+            payload["end_time"] = end_time.isoformat() if end_time else None
+        return payload
+
     async def start_shift(self, user_id: int):
         target_date = get_business_date()
         
@@ -47,16 +65,24 @@ class ShiftsService:
             if last_shift.end_time is not None:
                 # Reopen the shift since no one else logged in between
                 last_shift.end_time = None
-                self._record_outbox_event("SHIFT_UPDATED", {
-                    "id": last_shift.id,
-                    "user_id": last_shift.user_id,
-                    "end_time": None
-                })
+                self._record_outbox_event(
+                    "SHIFT_UPDATED",
+                    self._shift_outbox_payload(last_shift, for_update=True),
+                )
                 await self.db.commit()
-                
+
                 from app.core.events import get_outbox_sync_trigger
                 get_outbox_sync_trigger().set()
-            # If it's already open, do nothing
+            else:
+                # Already open locally — re-assert active state on the cloud admin.
+                self._record_outbox_event(
+                    "SHIFT_UPDATED",
+                    self._shift_outbox_payload(last_shift, for_update=True),
+                )
+                await self.db.commit()
+
+                from app.core.events import get_outbox_sync_trigger
+                get_outbox_sync_trigger().set()
         else:
             # Create a new shift since the last one belongs to someone else, or no shifts exist today
             new_shift = CashierShift(
@@ -71,7 +97,7 @@ class ShiftsService:
                 "id": new_shift.id,
                 "user_id": new_shift.user_id,
                 "target_date": new_shift.target_date.isoformat(),
-                "start_time": new_shift.start_time.isoformat()
+                "start_time": new_shift.start_time.isoformat(),
             })
             await self.db.commit()
             
@@ -91,15 +117,20 @@ class ShiftsService:
         
         if active_shift:
             active_shift.end_time = datetime.utcnow()
-            self._record_outbox_event("SHIFT_UPDATED", {
-                "id": active_shift.id,
-                "user_id": active_shift.user_id,
-                "end_time": active_shift.end_time.isoformat()
-            })
+            self._record_outbox_event(
+                "SHIFT_UPDATED",
+                self._shift_outbox_payload(active_shift, end_time=active_shift.end_time, for_update=True),
+            )
             await self.db.commit()
             
             from app.core.events import get_outbox_sync_trigger
             get_outbox_sync_trigger().set()
+        else:
+            logger.warning(
+                "end_shift: no active shift found for user_id=%s on %s",
+                user_id,
+                target_date,
+            )
 
     async def get_shifts_report(self, target_date: date) -> List[Dict[str, Any]]:
         # Fetch shifts for the day

@@ -102,6 +102,89 @@ class JSAPI:
 
 CURRENT_VERSION = "1.0.0"
 
+
+async def flush_outbox_now(max_rounds: int = 5) -> bool:
+    """Push pending outbox events to cloud immediately (e.g. before logout clears auth)."""
+    from datetime import datetime, timezone, timedelta
+
+    from sqlalchemy import case, literal, select
+
+    from app.core.cloud_client import cloud_client
+    from app.core.database import AsyncSessionLocal
+    from app.modules.orders.models import OutboxEvent, OutboxEventStatus
+
+    global _auth_header_cache
+    if not _auth_header_cache or not cloud_client.is_authenticated():
+        log.warning("Outbox flush: skipped because cloud auth is not available")
+        return False
+
+    device_id = config.device_id
+    event_priority = case(
+        (OutboxEvent.event_type == "CUSTOMER_CREATED", literal(0)),
+        (OutboxEvent.event_type == "ADDRESS_CREATED", literal(1)),
+        (OutboxEvent.event_type == "ORDER_CREATED", literal(2)),
+        (OutboxEvent.event_type == "SHIFT_CREATED", literal(2)),
+        (OutboxEvent.event_type == "SHIFT_UPDATED", literal(2)),
+        else_=literal(3),
+    )
+
+    synced_any = False
+    for round_num in range(max_rounds):
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(OutboxEvent)
+                .where(OutboxEvent.status == OutboxEventStatus.PENDING)
+                .order_by(event_priority, OutboxEvent.created_at.asc())
+                .limit(50)
+            )
+            pending_events = result.scalars().all()
+            if not pending_events:
+                if round_num == 0:
+                    log.debug("Outbox flush: no pending events")
+                return True
+
+            event_types = [e.event_type for e in pending_events]
+            log.info(
+                "Outbox flush: syncing %s pending events (round %s): %s",
+                len(pending_events),
+                round_num + 1,
+                event_types,
+            )
+
+            payload = {
+                "device_id": device_id,
+                "events": [
+                    {
+                        "event_id": e.id,
+                        "event_type": e.event_type,
+                        "topic": e.topic,
+                        "payload": e.payload,
+                        "created_at": e.created_at.isoformat(),
+                    }
+                    for e in pending_events
+                ],
+            }
+
+            sync_result = await cloud_client.post_json("/desktop-updates/sync/events", payload)
+            log.info("Outbox flush: cloud response=%s", sync_result)
+            if not sync_result:
+                log.warning("Outbox flush: cloud unreachable on round %s", round_num + 1)
+                return synced_any
+
+            accepted_ids = {int(event_id) for event_id in sync_result.get("accepted_event_ids", [])}
+            now_ts = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+            for event in pending_events:
+                if event.id not in accepted_ids:
+                    continue
+                event.status = OutboxEventStatus.COMPLETED
+                event.processed_at = now_ts
+            await db.commit()
+            if accepted_ids:
+                synced_any = True
+
+    return synced_any
+
+
 async def check_for_updates():
     """Checks the cloud for a newer desktop version and handles auto-update."""
     if not getattr(sys, 'frozen', False):
@@ -191,6 +274,8 @@ def main():
         global _auth_header_cache
         try:
             log.info("⚙️ Sync: Background worker task started.")
+            from datetime import datetime, timedelta, timezone
+
             from app.core.database import AsyncSessionLocal
             from app.core.desktop_reconcile import apply_master_data_snapshot
             from sqlalchemy import select
@@ -266,6 +351,8 @@ def main():
                             (OutboxEvent.event_type == 'CUSTOMER_CREATED', literal(0)),
                             (OutboxEvent.event_type == 'ADDRESS_CREATED',  literal(1)),
                             (OutboxEvent.event_type == 'ORDER_CREATED',    literal(2)),
+                            (OutboxEvent.event_type == 'SHIFT_CREATED',    literal(2)),
+                            (OutboxEvent.event_type == 'SHIFT_UPDATED',    literal(2)),
                             else_=literal(3)
                         )
                         result = await db.execute(
@@ -300,8 +387,6 @@ def main():
                                 int(event_id) for event_id in (sync_result or {}).get("accepted_event_ids", [])
                             }
                             errors = (sync_result or {}).get("errors", [])
-                            
-                            from datetime import datetime, timezone, timedelta
                             now_ts = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
 
                             if sync_result:
@@ -356,7 +441,6 @@ def main():
                             if last_master_data_sync_at:
                                 # Small overlap protects the query/cursor boundary; local
                                 # reconciliation is idempotent.
-                                from datetime import timedelta
                                 params["since"] = (last_master_data_sync_at - timedelta(seconds=5)).isoformat()
 
                             snapshot = await cloud_client.get("/desktop-updates/master-data", params=params)
@@ -458,8 +542,11 @@ def main():
                 was_empty = (_auth_header_cache is None)
                 _auth_header_cache = auth_header
                 cloud_client.update_token(auth_header)
-                log.info("🔑 Auth: Captured credentials from request.")
-                
+                if was_empty:
+                    log.info("🔑 Auth: Captured credentials from request.")
+                else:
+                    log.debug("🔑 Auth: Refreshed credentials from request.")
+
                 # If we just got a token, wake up the sync loop immediately
                 if was_empty:
                     from app.core.events import get_outbox_sync_trigger
