@@ -6,6 +6,12 @@
   let socket = null;
   let reconnectTimer = null;
 
+  function displayOrderNumber(orderNumber, fallback = "---") {
+    const value = orderNumber ?? fallback;
+    const text = String(value);
+    return text.includes("-") ? text.split("-").pop() : text;
+  }
+
   let productCache = {};
 
   // ===== INITIAL LOAD =====
@@ -61,7 +67,7 @@
 
       return `
         <tr>
-          <td style="font-weight:bold; color:var(--color-primary);">#${order.order_number || order.id}</td>
+          <td style="font-weight:bold; color:var(--color-primary);">#${displayOrderNumber(order.order_number, order.id)}</td>
           <td>${order.customer_name || "عميل نقدي"}</td>
           <td style="font-size:12px; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${itemsSummary}</td>
           <td style="font-weight:bold;">${totalAmount} ج.م</td>

@@ -135,6 +135,10 @@ class CloudSyncClient:
             if response.status_code == 401:
                 logger.warning("Cloud GET %s returned 401 — attempting silent token renewal", endpoint)
                 await self._handle_401()
+                if self.is_authenticated():
+                    retry = await self._client.get(endpoint, params=params)
+                    if retry.status_code == 200:
+                        return retry.json()
             else:
                 logger.warning("Cloud GET %s returned %s: %s", endpoint, response.status_code, response.text)
 
@@ -158,6 +162,10 @@ class CloudSyncClient:
             if response.status_code == 401:
                 logger.warning("Cloud POST %s returned 401 — attempting silent token renewal", endpoint)
                 await self._handle_401()
+                if self.is_authenticated():
+                    retry = await self._client.post(endpoint, json=json_data)
+                    if retry.status_code in (200, 201):
+                        return retry.json() if retry.content else {}
             else:
                 logger.warning("Cloud POST %s failed (%s): %s", endpoint, response.status_code, response.text)
             return None
@@ -176,6 +184,10 @@ class CloudSyncClient:
             if response.status_code == 401:
                 logger.warning("Cloud PATCH %s returned 401 — attempting silent token renewal", endpoint)
                 await self._handle_401()
+                if self.is_authenticated():
+                    retry = await self._client.patch(endpoint, json=json_data)
+                    if retry.status_code in (200, 201):
+                        return retry.json() if retry.content else {}
             else:
                 logger.warning("Cloud PATCH %s failed (%s): %s", endpoint, response.status_code, response.text)
             return None

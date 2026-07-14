@@ -64,3 +64,6 @@ class SyncResult(BaseModel):
     accepted: int = 0
     rejected: int = 0
     errors: list[str] = Field(default_factory=list)
+    # Counts alone are unsafe when a rejected event is in the middle of a batch.
+    # The desktop removes an outbox record only after this durable acknowledgement.
+    accepted_event_ids: list[int] = Field(default_factory=list)

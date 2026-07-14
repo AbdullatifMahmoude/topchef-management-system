@@ -1,3 +1,9 @@
+function displayOrderNumber(orderNumber, fallback = "---") {
+  const value = orderNumber ?? fallback;
+  const text = String(value);
+  return text.includes("-") ? text.split("-").pop() : text;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const filterBtns     = document.querySelectorAll(".filter-btn");
   const reports_modal  = document.querySelector(".reports_modal");
@@ -96,7 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
           tr.classList.add("final_row");
         }
         tr.innerHTML = `
-          <td>#${order.order_number}</td>
+          <td>#${displayOrderNumber(order.order_number)}</td>
           <td>${order.order_type}</td>
           <td>${order.items_summary}</td>
           <td>${Number(order.total_amount).toLocaleString("ar-EG")} ج.م</td>

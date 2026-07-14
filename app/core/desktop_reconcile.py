@@ -189,6 +189,11 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
                         insert_values[k] = v
                     
                     session.add(model(**insert_values))
+                    # Inserts are meaningful changes too. Without this the
+                    # desktop receives the new product but never broadcasts a
+                    # SYNC_COMPLETE event, leaving an already-open cashier UI
+                    # with its stale menu until a manual refresh.
+                    changed += 1
                 else:
                     has_mod = False
                     for key, value in values.items():

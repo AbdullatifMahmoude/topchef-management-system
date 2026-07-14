@@ -323,6 +323,10 @@ class OrderEventsManager:
                     self._remote_bridge_ws = ws
 
                 await sync_manager.report_ws_state(WebSocketConnectionState.CONNECTED)
+                # A reconnect may have missed cloud events while the desktop
+                # was offline. Wake the durable sync worker immediately rather
+                # than waiting for its periodic master-data poll.
+                get_outbox_sync_trigger().set()
                 logger.info(
                     "Desktop bridge connected to cloud ping_interval=%ss ping_timeout=%ss",
                     connect_params["ping_interval"],
@@ -450,9 +454,17 @@ class OrderEventsManager:
                 "ORDER_UPDATED",
                 "CUSTOMER_CREATED",
                 "ADDRESS_CREATED",
+                "PRODUCT_UPDATED",
+                "CATEGORY_UPDATED",
+                "VARIANT_UPDATED",
+                "OFFER_UPDATED",
             }:
                 # Also check top-level type
-                if payload.get("type") not in {"SETTING_UPDATED", "NEW_ORDER", "ORDER_UPDATED", "ORDER_SNAPSHOT", "CUSTOMER_CREATED", "ADDRESS_CREATED"}:
+                if payload.get("type") not in {
+                    "SETTING_UPDATED", "NEW_ORDER", "ORDER_UPDATED", "ORDER_SNAPSHOT",
+                    "CUSTOMER_CREATED", "ADDRESS_CREATED", "PRODUCT_UPDATED",
+                    "CATEGORY_UPDATED", "VARIANT_UPDATED", "OFFER_UPDATED",
+                }:
                     continue
 
             event_data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
@@ -498,7 +510,8 @@ class OrderEventsManager:
                 OrderEvents.CREATED.value, "NEW_ORDER", 
                 OrderEvents.UPDATED.value, "ORDER_UPDATED",
                 OrderEvents.STATUS_CHANGED.value,
-                "CUSTOMER_CREATED", "ADDRESS_CREATED",
+                "CUSTOMER_CREATED", "ADDRESS_CREATED", "SETTING_UPDATED",
+                "PRODUCT_UPDATED", "CATEGORY_UPDATED", "VARIANT_UPDATED", "OFFER_UPDATED",
             }:
                 get_outbox_sync_trigger().set()
 

@@ -594,8 +594,21 @@ async def desktop_sync_events(
             # After rollback, we need to restart the transaction for the remaining events
             continue
     
+    # Acknowledge exact IDs, not merely the first ``accepted`` events.
+    await db.flush()
+    processed_ids = set((await db.execute(
+        select(ProcessedEvent.event_id).where(
+            ProcessedEvent.device_id == payload.device_id,
+            ProcessedEvent.event_id.in_([event.event_id for event in payload.events]),
+        )
+    )).scalars().all())
     await db.commit()
-    return SyncResult(accepted=accepted, rejected=rejected, errors=errors)
+    return SyncResult(
+        accepted=accepted,
+        rejected=rejected,
+        errors=errors,
+        accepted_event_ids=sorted(processed_ids),
+    )
 
 
 @router.post("/sync/heartbeat")

@@ -54,8 +54,12 @@ document.addEventListener("DOMContentLoaded", function () {
   if (IS_DESKTOP_RUNTIME) {
     document.querySelectorAll(".side_btn").forEach((btn) => {
       const page = btn.getAttribute("data-page");
+      // Desktop admins need local operational visibility: home, sync events,
+      // and cashier shifts remain available while configuration pages stay
+      // cloud-managed.
       const isEvents = btn.id === "goeventspage" || page === "events";
-      if (page !== "home" && !isEvents) {
+      const isDesktopOperationalPage = page === "home" || page === "shifts" || isEvents;
+      if (!isDesktopOperationalPage) {
         btn.style.display = "none";
       }
     });
@@ -178,7 +182,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // --- تحديد الصفحة الأولى ---
   const hash = window.location.hash.replace("#", "");
-  const validPages = ["home", "items", "categories", "delivery", "reports", "offers", "events"];
+  const validPages = ["home", "items", "categories", "delivery", "shifts", "reports", "offers", "events"];
   showPage(validPages.includes(hash) ? hash : "home");
 
   // --- Back/Forward ---

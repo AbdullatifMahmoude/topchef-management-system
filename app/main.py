@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
                     
                     if "updated_at" not in existing_cols:
                         # Only certain tables need updated_at for sync
-                        if table in ["categories", "products", "variants", "customers", "customer_addresses", "offers", "comments", "app_settings", "order_items", "order_status_history"]:
+                        if table in ["categories", "products", "variants", "customers", "customer_addresses", "offers", "comments", "app_settings", "order_items", "order_status_history", "cashier_shifts"]:
                             logger.info(f"Adding 'updated_at' to {table}...")
                             await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
                 except Exception as e:

@@ -296,34 +296,30 @@ def main():
                             log.info(f"Outbox: Cloud response: {sync_result}")
                             accepted = int((sync_result or {}).get("accepted", 0))
                             rejected = int((sync_result or {}).get("rejected", 0))
+                            accepted_ids = {
+                                int(event_id) for event_id in (sync_result or {}).get("accepted_event_ids", [])
+                            }
                             errors = (sync_result or {}).get("errors", [])
                             
                             from datetime import datetime, timezone, timedelta
                             now_ts = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
 
                             if sync_result:
-                                # Mark the number of events the cloud actually accepted as COMPLETED
-                                for i in range(min(accepted, len(pending_events))):
-                                    e = pending_events[i]
+                                # Mark only explicitly acknowledged IDs. Counts are not
+                                # enough: a cloud rejection can occur mid-batch.
+                                for e in pending_events:
+                                    if e.id not in accepted_ids:
+                                        continue
                                     e.status = OutboxEventStatus.COMPLETED
                                     e.processed_at = now_ts
-                                
-                                # Mark the specific ones rejected as FAILED if there's a permanent error
-                                # Otherwise they stay PENDING to be retried (or handled by retry_count logic)
-                                for i in range(accepted, min(accepted + rejected, len(pending_events))):
-                                    e = pending_events[i]
-                                    e.status = OutboxEventStatus.FAILED
-                                    e.error_message = errors[i - accepted] if (i - accepted) < len(errors) else "Rejected by cloud"
-                                    e.processed_at = now_ts
 
-                                # Logic for remaining pending events (transient issues)
-                                for i in range(accepted + rejected, len(pending_events)):
-                                    e = pending_events[i]
-                                    e.retry_count = (e.retry_count or 0) + 1
-                                    if e.retry_count >= 5:
-                                        e.status = OutboxEventStatus.FAILED
-                                        e.error_message = "Cloud did not accept after 5 retries"
-                                        e.processed_at = now_ts
+                                # Preserve unacknowledged business events indefinitely. The
+                                # cloud endpoint is idempotent, so replay after reconnect is safe.
+                                for e in pending_events:
+                                    if e.id not in accepted_ids:
+                                        e.retry_count = (e.retry_count or 0) + 1
+                                        if errors:
+                                            e.error_message = "; ".join(map(str, errors))[:2000]
 
                                 await db.commit()
                                 if accepted > 0:
@@ -341,11 +337,9 @@ def main():
                                 _sync_backoff_seconds = min(_sync_backoff_seconds * 2, 60)
                                 
                                 for e in pending_events:
+                                    # Network loss is not a business failure: never discard a
+                                    # restaurant order simply because retries were exhausted.
                                     e.retry_count = (e.retry_count or 0) + 1
-                                    if e.retry_count >= 100: # Very high limit for network errors
-                                        e.status = OutboxEventStatus.FAILED
-                                        e.error_message = "Persistent network failure (100 retries)"
-                                        e.processed_at = now_ts
                                 await db.commit()
                                 log.warning(
                                     "Outbox: cloud unreachable (backoff=%ds). Batch stays PENDING.",
@@ -360,12 +354,25 @@ def main():
                             log.info("📥 Sync: Pulling master data from cloud (forced=%s)...", force_master_pull)
                             params = {}
                             if last_master_data_sync_at:
-                                params["since"] = last_master_data_sync_at
+                                # Small overlap protects the query/cursor boundary; local
+                                # reconciliation is idempotent.
+                                from datetime import timedelta
+                                params["since"] = (last_master_data_sync_at - timedelta(seconds=5)).isoformat()
 
                             snapshot = await cloud_client.get("/desktop-updates/master-data", params=params)
                             if snapshot:
                                 stats = await apply_master_data_snapshot(db, snapshot)
-                                last_master_data_sync_at = snapshot.get("timestamp") or last_master_data_sync_at
+                                cloud_timestamp = snapshot.get("timestamp")
+                                if cloud_timestamp:
+                                    # httpx JSON decoding returns a string. Keep the
+                                    # cursor as a datetime so overlap pulls continue
+                                    # to work after the first successful sync.
+                                    if isinstance(cloud_timestamp, str):
+                                        last_master_data_sync_at = datetime.fromisoformat(
+                                            cloud_timestamp.replace("Z", "+00:00")
+                                        )
+                                    else:
+                                        last_master_data_sync_at = cloud_timestamp
                                 force_master_pull = False
                                 last_pull_at_mon = now_mon
                                 changed = sum(stats.values())

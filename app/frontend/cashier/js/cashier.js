@@ -3,6 +3,15 @@ const IS_DESKTOP_RUNTIME = ["127.0.0.1", "localhost"].includes(
   window.location.hostname,
 );
 
+// The persisted order number contains a device suffix so multiple offline
+// cashiers cannot collide. That identifier is infrastructure, not something
+// staff need to see on tickets or screens.
+function displayOrderNumber(orderNumber, fallback = "---") {
+  const value = orderNumber ?? fallback;
+  const text = String(value);
+  return text.includes("-") ? text.split("-").pop() : text;
+}
+
 // ===================================================
 //  Global API Fetch Wrapper
 // ===================================================
@@ -1626,7 +1635,7 @@ function renderRidersTab() {
 
     riderStats[rid].count++;
     riderStats[rid].total += parseFloat(order.total_amount || 0);
-    riderStats[rid].orderNumbers.push(order.order_number || order.id);
+    riderStats[rid].orderNumbers.push(displayOrderNumber(order.order_number, order.id));
   });
 
   const ridersArr = Object.values(riderStats);
@@ -1997,7 +2006,7 @@ function renderOnlineOrders() {
       <div class="card_header">
         <span class="order_status ${statusObj.cls}">${statusObj.label}</span>
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
-          <span class="order_id" style="margin-bottom:2px;">طلب #${order.order_number || order.id}</span>
+          <span class="order_id" style="margin-bottom:2px;">طلب #${displayOrderNumber(order.order_number, order.id)}</span>
           <span style="font-size:11px; opacity:0.7;">${timeStr}</span>
           ${updatedTimeStr}
         </div>
@@ -2478,7 +2487,7 @@ function handleSocketEvent(payload) {
         hasChanged = true;
         playNotificationSound();
         showToast(
-          "طلب أونلاين جديد! #" + (data.order_number || data.id),
+          "طلب أونلاين جديد! #" + displayOrderNumber(data.order_number, data.id),
           "success",
         );
       }
@@ -2540,7 +2549,7 @@ function handleSocketEvent(payload) {
 
     if (hasChanged) {
       showToast(
-        `تحديث طلب #${data.order_number || data.id}: ${data.order_status}`,
+        `تحديث طلب #${displayOrderNumber(data.order_number, data.id)}: ${data.order_status}`,
         "success",
       );
     } else {
@@ -2978,7 +2987,7 @@ function renderAllOrders() {
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="display:flex; align-items:center; gap:8px;">
             ${badgeHtml}
-            <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${order.order_number || order.id}</span>
+            <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${displayOrderNumber(order.order_number, order.id)}</span>
             <span style="font-size:11px; padding:2px 6px; background:rgba(255,255,255,0.05); border-radius:4px; color:var(--color-subtext);">${typeLabel}</span>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end;">
@@ -3430,7 +3439,7 @@ function openOrderDetails(orderId, source) {
       
       <div style="padding:32px; overflow-y:auto; scrollbar-gutter:stable;">
         <div style="text-align:center; margin-bottom:24px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:16px;">
-          <h2 style="color:var(--color-primary); margin-bottom:8px;">تفاصيل الطلب #${order.order_number || order.id}</h2>
+          <h2 style="color:var(--color-primary); margin-bottom:8px;">تفاصيل الطلب #${displayOrderNumber(order.order_number, order.id)}</h2>
           <span class="order_status ${statusObj.cls}">${statusObj.label}</span>
           <div style="display:flex; justify-content:center; gap:20px; margin-top:12px; font-size:12px;">
             <div style="color:var(--color-subtext);">
@@ -3995,7 +4004,7 @@ function renderEditOrderModal() {
       <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 32px; background:linear-gradient(180deg, #c79a4a 0%, #7a4f1a 100%); direction:rtl;">
         <div style="display:flex; align-items:center; gap:12px;">
           <img src="/assets/توب شيف 1@2x.png" style="width:40px; height:40px; object-fit:contain;" />
-          <h2 style="color:var(--color-bg); margin:0; font-size:18px; font-weight:900;">تعديل الطلب #${editModalState.originalOrder.order_number || editModalState.originalOrder.id}</h2>
+          <h2 style="color:var(--color-bg); margin:0; font-size:18px; font-weight:900;">تعديل الطلب #${displayOrderNumber(editModalState.originalOrder.order_number, editModalState.originalOrder.id)}</h2>
         </div>
         <button onclick="document.getElementById('edit_order_modal_overlay').remove()" style="background:var(--color-bg); border:none; color:var(--color-primary); width:32px; height:32px; border-radius:50%; font-size:20px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center;display:flex; align-items:center; justify-content:center">&times;</button>
       </div>
