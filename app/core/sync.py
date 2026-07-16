@@ -34,8 +34,9 @@ class SyncManager:
         self._ws_state = WebSocketConnectionState.DISCONNECTED
         self._lock = asyncio.Lock()
 
-        # Event Deduplication (Last 1000 event IDs)
+        # Event Deduplication (bounded FIFO — never wipe the whole set)
         self._seen_events: Set[str] = set()
+        self._seen_event_order: list[str] = []
         self._event_history_limit = 1000
 
     @property
@@ -90,9 +91,10 @@ class SyncManager:
             return True
 
         self._seen_events.add(event_id)
-        if len(self._seen_events) > self._event_history_limit:
-            # Simple cleanup of the set.
-            self._seen_events.clear()
+        self._seen_event_order.append(event_id)
+        while len(self._seen_event_order) > self._event_history_limit:
+            oldest = self._seen_event_order.pop(0)
+            self._seen_events.discard(oldest)
 
         return False
 

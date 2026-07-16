@@ -119,26 +119,34 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
         return result.scalars().first()
 
     if model is CustomerAddress and row.get("customer_id") and row.get("address"):
+        # Prefer an active address; fall back to soft-deleted so upsert can revive it.
         result = await session.execute(
-            select(CustomerAddress).where(
+            select(CustomerAddress)
+            .where(
                 CustomerAddress.customer_id == row["customer_id"],
-                CustomerAddress.address == row["address"]
+                CustomerAddress.address == row["address"],
             )
+            .order_by(CustomerAddress.is_deleted.asc(), CustomerAddress.id.desc())
         )
         return result.scalars().first()
 
     if model is Customer and row.get("phone_number"):
-        result = await session.execute(select(Customer).where(Customer.phone_number == row["phone_number"]))
+        from app.modules.customer.phone import phone_lookup_candidates
+        candidates = phone_lookup_candidates(row["phone_number"])
+        result = await session.execute(
+            select(Customer)
+            .where(Customer.phone_number.in_(candidates))
+            .order_by(Customer.is_deleted.asc(), Customer.id.desc())
+        )
         return result.scalars().first()
 
     if model is User and row.get("username"):
-# ... rest of find_existing ...
         result = await session.execute(select(User).where(User.username == row["username"]))
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     if model is Category and row.get("cat_name"):
         result = await session.execute(select(Category).where(Category.cat_name == row["cat_name"]))
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     if model is Product and row.get("product_name") and row.get("cat_id") is not None:
         result = await session.execute(
@@ -185,6 +193,11 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
         if not values:
             continue
 
+        if model is Customer and values.get("phone_number"):
+            from app.modules.customer.phone import normalize_egyptian_phone
+            values["phone_number"] = normalize_egyptian_phone(values["phone_number"]) or values["phone_number"]
+            row = {**row, "phone_number": values["phone_number"]}
+
         existing = await _find_existing(session, model, row)
         
         try:
@@ -224,7 +237,29 @@ async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, 
                         await session.flush()
                         changed += 1
         except sqlalchemy.exc.IntegrityError:
-            pass
+            # Row may already exist under a natural key that _find_existing missed
+            # (e.g. phone format variants). Re-resolve and apply updates.
+            conflict = await _find_existing(session, model, row)
+            if conflict is None:
+                logger.warning(
+                    "Reconcile skipped %s row after IntegrityError (id=%s keys=%s)",
+                    model.__tablename__,
+                    row.get("id"),
+                    {k: row.get(k) for k in ("phone_number", "address", "order_number", "username", "code") if row.get(k) is not None},
+                )
+                continue
+            has_mod = False
+            for key, value in values.items():
+                if key in primary_key_names:
+                    continue
+                col = mapper.columns.get(key)
+                coerced_value = _coerce_value(col, value)
+                if getattr(conflict, key) != coerced_value:
+                    setattr(conflict, key, coerced_value)
+                    has_mod = True
+            if has_mod:
+                await session.flush()
+                changed += 1
 
     return changed
 

@@ -40,10 +40,12 @@ class ShiftsService:
         end_time: Optional[datetime] = None,
         *,
         for_update: bool = False,
+        username: Optional[str] = None,
     ) -> dict:
         payload = {
             "id": shift.id,
             "user_id": shift.user_id,
+            "username": username,
             "target_date": shift.target_date.isoformat(),
             "start_time": shift.start_time.isoformat() if shift.start_time else None,
         }
@@ -51,8 +53,14 @@ class ShiftsService:
             payload["end_time"] = end_time.isoformat() if end_time else None
         return payload
 
+    async def _username_for(self, user_id: int) -> Optional[str]:
+        from app.modules.users.models import User
+        user = await self.db.get(User, user_id)
+        return user.username if user else None
+
     async def start_shift(self, user_id: int):
         target_date = get_business_date()
+        username = await self._username_for(user_id)
         
         # Get the absolute last shift for today, regardless of who owns it
         last_shift_query = select(CashierShift).where(
@@ -67,7 +75,7 @@ class ShiftsService:
                 last_shift.end_time = None
                 self._record_outbox_event(
                     "SHIFT_UPDATED",
-                    self._shift_outbox_payload(last_shift, for_update=True),
+                    self._shift_outbox_payload(last_shift, for_update=True, username=username),
                 )
                 await self.db.commit()
 
@@ -77,7 +85,7 @@ class ShiftsService:
                 # Already open locally — re-assert active state on the cloud admin.
                 self._record_outbox_event(
                     "SHIFT_UPDATED",
-                    self._shift_outbox_payload(last_shift, for_update=True),
+                    self._shift_outbox_payload(last_shift, for_update=True, username=username),
                 )
                 await self.db.commit()
 
@@ -96,6 +104,7 @@ class ShiftsService:
             self._record_outbox_event("SHIFT_CREATED", {
                 "id": new_shift.id,
                 "user_id": new_shift.user_id,
+                "username": username,
                 "target_date": new_shift.target_date.isoformat(),
                 "start_time": new_shift.start_time.isoformat(),
             })
@@ -106,6 +115,7 @@ class ShiftsService:
 
     async def end_shift(self, user_id: int):
         target_date = get_business_date()
+        username = await self._username_for(user_id)
         
         query = select(CashierShift).where(
             CashierShift.user_id == user_id,
@@ -119,7 +129,12 @@ class ShiftsService:
             active_shift.end_time = datetime.utcnow()
             self._record_outbox_event(
                 "SHIFT_UPDATED",
-                self._shift_outbox_payload(active_shift, end_time=active_shift.end_time, for_update=True),
+                self._shift_outbox_payload(
+                    active_shift,
+                    end_time=active_shift.end_time,
+                    for_update=True,
+                    username=username,
+                ),
             )
             await self.db.commit()
             

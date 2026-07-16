@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.modules.customer.repository import CustomerRepository
 from app.modules.customer import models, schemas
+from app.modules.customer.phone import normalize_egyptian_phone
 from app.core.exceptions import NotFoundError, ValidationError
 import contextlib
 
@@ -38,13 +39,18 @@ class CustomerService:
     async def create_customer(self, customer_data: schemas.CustomerCreate) -> models.Customer:
         """Atomic customer creation with phone uniqueness check."""
         async with self._transaction_scope():
+            payload = customer_data.model_dump()
+            payload["phone_number"] = normalize_egyptian_phone(payload.get("phone_number")) or (
+                payload.get("phone_number") or ""
+            ).strip()
+
             # 1. Business Validation
-            existing = await self.repository.get_by_phone(customer_data.phone_number)
+            existing = await self.repository.get_by_phone(payload["phone_number"])
             if existing:
-                raise ValidationError(f"Customer with phone {customer_data.phone_number} already exists")
+                raise ValidationError(f"Customer with phone {payload['phone_number']} already exists")
             
             # 2. Model Instantiation (Service owns this now)
-            new_customer = models.Customer(**customer_data.model_dump())
+            new_customer = models.Customer(**payload)
             
             # 3. Save via Repository
             customer = await self.repository.save(new_customer)
@@ -80,53 +86,33 @@ class CustomerService:
         return reloaded_customer
 
     async def get_customer(self, customer_id: int) -> models.Customer:
-        # 1. Try Cache
-        cache_key = f"customer_profile:{customer_id}"
-        if self.redis:
-            try:
-                cached = await self.redis.get(cache_key)
-                if cached:
-                    return models.Customer(**json.loads(cached))
-            except Exception:
-                pass
-
-        # 2. Get DB
+        # Always load from DB so callers get a session-bound ORM with addresses.
+        # (Rebuilding Customer from Redis JSON dropped addresses and broke mutations.)
         customer = await self.repository.get_by_id(customer_id)
         if not customer:
             raise NotFoundError(f"Customer with id {customer_id} not found")
         
-        # 3. Cache
         if self.redis:
             try:
-                # We convert to dict for storage, careful with datetime
                 data = schemas.CustomerResponse.model_validate(customer).model_dump_json()
-                await self.redis.setex(cache_key, 3600, data)
+                await self.redis.setex(f"customer_profile:{customer_id}", 3600, data)
             except Exception:
                 pass
         
         return customer
 
     async def get_customer_by_phone(self, phone: str) -> models.Customer:
-        # 1. Try Cache
-        cache_key = f"customer_at_phone:{phone}"
-        if self.redis:
-            try:
-                cached = await self.redis.get(cache_key)
-                if cached:
-                    return models.Customer(**json.loads(cached))
-            except Exception:
-                pass
-
-        # 2. Get DB
-        customer = await self.repository.get_by_phone(phone)
+        normalized = normalize_egyptian_phone(phone) or (phone or "").strip()
+        customer = await self.repository.get_by_phone(normalized or phone)
         if not customer:
             raise NotFoundError(f"Customer with phone {phone} not found")
         
-        # 3. Cache
         if self.redis:
             try:
                 data = schemas.CustomerResponse.model_validate(customer).model_dump_json()
-                await self.redis.setex(cache_key, 3600, data)
+                await self.redis.setex(f"customer_at_phone:{customer.phone_number}", 3600, data)
+                if normalized and normalized != customer.phone_number:
+                    await self.redis.setex(f"customer_at_phone:{normalized}", 3600, data)
             except Exception:
                 pass
                 

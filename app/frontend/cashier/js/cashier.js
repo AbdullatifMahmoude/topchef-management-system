@@ -88,7 +88,24 @@ let deliveryCustomerInfo = {
 let _phoneSearchTimeout = null;
 
 function normalizePhoneDigits(phone) {
-  return String(phone || "").replace(/\D/g, "").slice(0, 11);
+  const arabicMap = {
+    "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4",
+    "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9",
+    "۰": "0", "۱": "1", "۲": "2", "۳": "3", "۴": "4",
+    "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9",
+  };
+  let digits = String(phone || "")
+    .replace(/[٠-٩۰-۹]/g, (d) => arabicMap[d] || d)
+    .replace(/\D/g, "");
+
+  // +20 / 20 country code → local 01xxxxxxxxx
+  if (digits.startsWith("20") && digits.length >= 12) {
+    digits = "0" + digits.slice(2);
+  }
+  if (digits.length === 10 && digits.startsWith("1")) {
+    digits = "0" + digits;
+  }
+  return digits.slice(0, 11);
 }
 
 function hasFeeValue(value) {
@@ -1524,7 +1541,7 @@ async function lookupCustomerByPhone(phone) {
     if (r2.ok) {
       const list = await r2.json();
       const found = Array.isArray(list)
-        ? list.find((c) => c.phone_number === phone)
+        ? list.find((c) => normalizePhoneDigits(c.phone_number) === normalizePhoneDigits(phone))
         : null;
       if (found) {
         applyFound(found);

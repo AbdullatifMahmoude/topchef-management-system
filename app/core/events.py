@@ -303,6 +303,7 @@ class OrderEventsManager:
             ws = None
             retry_after = 0.0
             cleanup_state = True
+            connection_started_at = 0.0
             try:
                 state = (
                     WebSocketConnectionState.CONNECTING
@@ -440,7 +441,7 @@ class OrderEventsManager:
                 logger.warning("Desktop bridge received invalid JSON: %s", exc)
                 continue
 
-            if payload.get("type") == "heartbeat_ack":
+            if str(payload.get("type") or "").lower() in {"heartbeat_ack"}:
                 logger.debug("Desktop bridge received heartbeat ack")
                 continue
 
@@ -458,12 +459,15 @@ class OrderEventsManager:
                 "CATEGORY_UPDATED",
                 "VARIANT_UPDATED",
                 "OFFER_UPDATED",
+                "SHIFT_CREATED",
+                "SHIFT_UPDATED",
             }:
                 # Also check top-level type
                 if payload.get("type") not in {
                     "SETTING_UPDATED", "NEW_ORDER", "ORDER_UPDATED", "ORDER_SNAPSHOT",
                     "CUSTOMER_CREATED", "ADDRESS_CREATED", "PRODUCT_UPDATED",
                     "CATEGORY_UPDATED", "VARIANT_UPDATED", "OFFER_UPDATED",
+                    "SHIFT_CREATED", "SHIFT_UPDATED",
                 }:
                     continue
 
