@@ -394,14 +394,15 @@ async def desktop_sync_events(
                             await db.commit()
                             continue
                         else:
-                        # Order NOT found despite ProcessedEvent existing = stale record
-                        logger.warning(
-                            f"ORDER_CREATED: ProcessedEvent exists but order {order_number_check} NOT found. Re-processing..."
-                        )
-                        await db.delete(existing_processed_record)
-                        await db.flush()
-                        existing_processed_record = None
-                        # Fall through to process the event below
+                            # Order NOT found despite ProcessedEvent existing = stale record.
+                            # Remove the stale acknowledgement and replay the event.
+                            logger.warning(
+                                f"ORDER_CREATED: ProcessedEvent exists but order {order_number_check} NOT found. Re-processing..."
+                            )
+                            await db.delete(existing_processed_record)
+                            await db.flush()
+                            existing_processed_record = None
+                            # Fall through to process the event below
                     else:
                         accepted += 1
                         await db.flush()
@@ -420,16 +421,16 @@ async def desktop_sync_events(
                 
                 # Check if it already exists via idempotency_key as secondary safety
                 existing = await db.execute(select(Order).where(Order.idempotency_key == idempotency_key))
-                    if existing.scalars().first():
-                        logger.info(f"ORDER_CREATED: Skipped (already exists by idempotency_key={idempotency_key})")
-                        if not existing_processed_record:
-                            db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
-                        accepted += 1
-                        await db.flush()
-                        await db.commit()
-                        continue
-                    
-                    try:
+                if existing.scalars().first():
+                    logger.info(f"ORDER_CREATED: Skipped (already exists by idempotency_key={idempotency_key})")
+                    if not existing_processed_record:
+                        db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
+                    accepted += 1
+                    await db.flush()
+                    await db.commit()
+                    continue
+
+                try:
                     # === ID REMAPPING: Desktop local IDs -> Cloud IDs ===
                     # The event payload contains LOCAL SQLite IDs which don't match cloud Postgres IDs.
                     # We must resolve them using cross-system identifiers (phone, address text, etc.)
@@ -504,11 +505,11 @@ async def desktop_sync_events(
                     if not existing_processed_record:
                         db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                     accepted += 1
-                    except Exception as e:
-                        logger.error(f"ORDER_CREATED error: {str(e)}", exc_info=True)
-                        rejected += 1
-                        errors.append(f"ORDER_CREATED error: {str(e)}")
-                        raise
+                except Exception as e:
+                    logger.error(f"ORDER_CREATED error: {str(e)}", exc_info=True)
+                    rejected += 1
+                    errors.append(f"ORDER_CREATED error: {str(e)}")
+                    raise
             elif event.event_type == "ORDER_UPDATED":
                 try:
                     # 1. Try to find the order by number (the most reliable way across systems)
@@ -614,9 +615,31 @@ async def desktop_sync_events(
                             await customer_service._invalidate_cache(f"customer_profile:{existing_cust.id}")
                             await customer_service._invalidate_cache(f"customer_at_phone:{existing_cust.phone_number}")
                     except Exception:
-                        await customer_service.create_customer(CustomerCreate(
-                            name=name, phone_number=phone
-                        ))
+                        # Phone numbers may be edited offline.  In that case the
+                        # new number cannot find the cloud row, but the previous
+                        # number identifies the same customer and must be updated
+                        # rather than creating a duplicate customer.
+                        previous_phone = event_data.get("previous_phone_number")
+                        previous_customer = None
+                        if previous_phone:
+                            try:
+                                previous_customer = await customer_service.get_customer_by_phone(previous_phone)
+                            except Exception:
+                                previous_customer = None
+
+                        if previous_customer:
+                            from app.modules.customer.phone import normalize_egyptian_phone
+
+                            previous_customer.phone_number = normalize_egyptian_phone(phone) or phone.strip()
+                            if name:
+                                previous_customer.name = name
+                            await db.flush()
+                            await customer_service._invalidate_cache(f"customer_profile:{previous_customer.id}")
+                            await customer_service._invalidate_cache(f"customer_at_phone:{previous_phone}")
+                        else:
+                            await customer_service.create_customer(CustomerCreate(
+                                name=name, phone_number=phone
+                            ))
                     if not existing_processed_record:
                         db.add(ProcessedEvent(device_id=payload.device_id, event_id=event.event_id))
                     accepted += 1

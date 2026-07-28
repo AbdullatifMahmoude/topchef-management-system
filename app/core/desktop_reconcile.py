@@ -82,7 +82,14 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
     pk_columns = list(mapper.primary_key)
     pk_values = {column.name: row.get(column.name) for column in pk_columns}
 
-    if pk_columns and all(value is not None for value in pk_values.values()):
+    # Desktop-generated IDs are independent from cloud-generated IDs.  Matching
+    # customers, their addresses, or orders by a coincident numeric ID can
+    # overwrite an unrelated local record before its own outbox event is sent.
+    # These entities have stable business keys, so resolve them by those keys
+    # first and never use their surrogate IDs as a reconciliation fallback.
+    identity_by_business_key = {Customer, CustomerAddress, Order}
+
+    if model not in identity_by_business_key and pk_columns and all(value is not None for value in pk_values.values()):
         existing = await session.get(
             model,
             tuple(pk_values.values()) if len(pk_columns) > 1 else next(iter(pk_values.values())),
@@ -98,6 +105,8 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
                 select(Order).where(Order.order_number == order_number, Order.order_date == order_date)
             )
             return result.scalars().first()
+
+        return None
 
     if model is OrderItem and row.get("order_id") is not None and row.get("product_id") is not None:
         result = await session.execute(
@@ -130,6 +139,9 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
         )
         return result.scalars().first()
 
+    if model is CustomerAddress:
+        return None
+
     if model is Customer and row.get("phone_number"):
         from app.modules.customer.phone import phone_lookup_candidates
         candidates = phone_lookup_candidates(row["phone_number"])
@@ -139,6 +151,9 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
             .order_by(Customer.is_deleted.asc(), Customer.id.desc())
         )
         return result.scalars().first()
+
+    if model is Customer:
+        return None
 
     if model is User and row.get("username"):
         result = await session.execute(select(User).where(User.username == row["username"]))

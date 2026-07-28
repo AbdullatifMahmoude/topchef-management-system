@@ -333,6 +333,7 @@ class OrderService:
                 if target_phone and target_name:
                     from app.modules.customer.service import CustomerService
                     from app.modules.customer.schemas import CustomerCreate, CustomerAddressCreate
+                    from app.modules.customer.phone import normalize_egyptian_phone
                     customer_service = CustomerService(self.db, self.redis)
                     try:
                         existing_cust = await customer_service.get_customer_by_phone(target_phone)
@@ -351,11 +352,33 @@ class OrderService:
                             })
                             
                     except NotFoundError:
-                        new_cust = await customer_service.create_customer(CustomerCreate(
-                            name=target_name,
-                            phone_number=target_phone
-                        ))
-                        update_data.customer_id = new_cust.id
+                        # A changed phone number belongs to the customer already
+                        # linked to this order.  Keep that identity instead of
+                        # silently creating a second customer record.
+                        linked_customer = (
+                            await customer_service.repository.get_by_id(order.customer_id)
+                            if order.customer_id else None
+                        )
+                        normalized_phone = normalize_egyptian_phone(target_phone) or target_phone.strip()
+                        if linked_customer:
+                            previous_phone = linked_customer.phone_number
+                            linked_customer.name = target_name
+                            linked_customer.phone_number = normalized_phone
+                            self.db.add(linked_customer)
+                            update_data.customer_id = linked_customer.id
+                            customer_service._record_outbox_event("CUSTOMER_CREATED", {
+                                "id": linked_customer.id,
+                                "name": linked_customer.name,
+                                "phone_number": linked_customer.phone_number,
+                                "previous_phone_number": previous_phone,
+                                "created_at": linked_customer.created_at.isoformat() if linked_customer.created_at else None,
+                            })
+                        else:
+                            new_cust = await customer_service.create_customer(CustomerCreate(
+                                name=target_name,
+                                phone_number=target_phone
+                            ))
+                            update_data.customer_id = new_cust.id
                     if getattr(update_data, 'customer_address', None):
                         # Check if customer already has this exact address
                         existing_customer = await customer_service.repository.get_by_id(update_data.customer_id)
