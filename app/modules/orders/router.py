@@ -103,11 +103,12 @@ async def get_rider_stats(
     db: AsyncSession = Depends(get_db),
     current_user: any = Depends(get_current_user)
 ):
-    """Get delivery rider stats for the current business day (5 AM to 5 AM)."""
+    """Get each rider's assigned, non-cancelled orders for the business day."""
     from datetime import datetime, timedelta, timezone
-    from sqlalchemy import select, func, and_
+    from sqlalchemy import select, and_
     from app.modules.orders.models import Order
     from app.modules.users.models import User
+    from app.core.enums import OrderStatus
     
     # Calculate business day start (5 AM boundary)
     # Using Egypt timezone (UTC+3)
@@ -119,36 +120,49 @@ async def get_rider_stats(
     if now.hour < 5:
         business_day_start = business_day_start - timedelta(days=1)
     
-    # Query: Count orders per delivery person within the business day
+    # `order_date` is set from the 5 AM business-day boundary when the order is
+    # created. It is authoritative on the desktop SQLite database too, unlike
+    # browser/device timestamps or page-limited frontend lists.
+    business_date = business_day_start.date()
     query = (
         select(
             User.id.label("rider_id"),
             User.full_name.label("rider_name"),
             User.username.label("username"),
-            func.count(Order.id).label("total_orders")
+            Order.id.label("order_id"),
+            Order.order_number.label("order_number"),
+            Order.total_amount.label("total_amount"),
         )
         .join(Order, User.id == Order.delivery_person_id)
         .where(
             and_(
-                Order.created_at >= business_day_start,
-                Order.delivery_person_id.isnot(None)
+                Order.order_date == business_date,
+                Order.delivery_person_id.isnot(None),
+                Order.is_deleted == False,
+                Order.order_status != OrderStatus.CANCELLED,
             )
         )
-        .group_by(User.id)
+        .order_by(User.full_name, Order.created_at)
     )
     
     result = await db.execute(query)
-    stats = []
+    riders: dict[int, dict] = {}
     for row in result.all():
-        stats.append({
+        rider = riders.setdefault(row.rider_id, {
             "id": row.rider_id,
             "name": row.rider_name or row.username,
-            "total_orders": row.total_orders
+            "total_orders": 0,
+            "total_amount": 0.0,
+            "order_numbers": [],
         })
+        rider["total_orders"] += 1
+        rider["total_amount"] += float(row.total_amount or 0)
+        rider["order_numbers"].append(row.order_number or str(row.order_id))
     
     return {
         "business_day_start": business_day_start.isoformat(),
-        "stats": stats
+        "business_date": business_date.isoformat(),
+        "stats": list(riders.values()),
     }
 
 @router.patch("/{order_id}", response_model=schemas.OrderResponse)

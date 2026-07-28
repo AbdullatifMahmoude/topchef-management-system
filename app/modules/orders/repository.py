@@ -300,7 +300,9 @@ class OrderRepository:
         
         query = select(
             func.count(models.Order.id).label("total_count"),
-            func.sum(models.Order.total_amount).filter(
+            # Dashboard sales use the same net-sales definition as reports and
+            # cashier shifts: delivery fees are excluded.
+            func.sum(models.Order.total_amount - models.Order.delivery_fee).filter(
                 models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.NEW, OrderStatus.CONFIRMED])
             ).label("total_sales"),
             func.count(models.Order.id).filter(models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED])).label("completed_count"),

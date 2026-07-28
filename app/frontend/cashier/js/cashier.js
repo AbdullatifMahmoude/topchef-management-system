@@ -1603,9 +1603,43 @@ renderOrderTypeBadge();
 // ===================================================
 //  Delivery Riders Tab Logic
 // ===================================================
-function renderRidersTab() {
+async function renderRidersTab() {
   const body = document.getElementById("riders_table_body");
   if (!body) return;
+
+  // Always read the authoritative local API on desktop. The old approach
+  // merged paginated UI lists, which could miss older orders or count an
+  // online order twice when it appeared in both lists.
+  body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
+  try {
+    const response = await apiFetch("/orders/riders/stats", { suppress401: true });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const riders = Array.isArray(data.stats) ? data.stats : [];
+
+    if (!riders.length) {
+      body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
+      return;
+    }
+
+    riders.sort((a, b) => b.total_orders - a.total_orders);
+    body.innerHTML = riders.map((r) => `
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+        <td style="padding:15px; font-weight:700; color:#fff;">${r.name}</td>
+        <td style="padding:15px;">
+          <button onclick='showRiderOrdersPopup("${String(r.name).replace(/"/g, "&quot;")}", ${JSON.stringify(r.order_numbers || [])})'
+            style="background:rgba(61,158,107,.15); color:#3d9e6b; border:1px solid rgba(61,158,107,.3); padding:4px 12px; border-radius:6px; cursor:pointer; font-family:Cairo,sans-serif; font-weight:700;">
+            ${r.total_orders} طلبات
+          </button>
+        </td>
+        <td style="padding:15px; font-weight:900; color:var(--color-primary);">${Number(r.total_amount || 0).toFixed(2)} ج.م</td>
+      </tr>`).join("");
+    return;
+  } catch (error) {
+    console.error("Could not load rider statistics:", error);
+    body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-subtext);">تعذر تحميل بيانات الدليفري</td></tr>`;
+    return;
+  }
 
   if (
     allOrdersList.length === 0 &&

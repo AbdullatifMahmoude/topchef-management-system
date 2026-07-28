@@ -32,7 +32,14 @@ async def get_report_summary(db: AsyncSession, start_date: date, end_date: date)
         func.count(Order.id).label('total_orders'),
         func.sum(case((Order.order_status == OrderStatus.CANCELLED, 1), else_=0)).label('cancelled_orders'),
         func.sum(case((Order.order_status != OrderStatus.CANCELLED, 1), else_=0)).label('successful_orders'),
-        func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.total_amount), else_=0)).label('total_revenue'),
+        # Delivery is collected on behalf of the delivery operation; it is not
+        # restaurant sales and must not inflate report revenue or averages.
+        func.sum(
+            case(
+                (Order.order_status != OrderStatus.CANCELLED, Order.total_amount - Order.delivery_fee),
+                else_=0,
+            )
+        ).label('total_revenue'),
         func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.subtotal), else_=0)).label('total_subtotal'),
         func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.discount_amount), else_=0)).label('total_discount'),
         func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.delivery_fee), else_=0)).label('total_delivery_fee'),
@@ -68,7 +75,7 @@ async def get_report_orders(db: AsyncSession, start_date: date, end_date: date) 
         select(
             Order.order_number,
             Order.order_type,
-            Order.total_amount,
+            (Order.total_amount - Order.delivery_fee).label("total_amount"),
             Order.created_at,
             Order.order_status,
         )

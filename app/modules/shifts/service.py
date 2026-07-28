@@ -163,7 +163,8 @@ class ShiftsService:
         orders_query = select(
             Order.created_by_user_id,
             func.count(Order.id).label("total_orders"),
-            func.sum(Order.total_amount).label("total_sales")
+            # Cashier sales exclude delivery charges.
+            func.sum(Order.total_amount - Order.delivery_fee).label("total_sales")
         ).where(
             Order.created_at >= start_local,
             Order.created_at < end_local,
