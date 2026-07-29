@@ -248,11 +248,9 @@ def main():
 
     log.info(f"Starting Top Chef Enterprise POS [v{CURRENT_VERSION}]...")
 
-    # 1. Splash
-    from desktop.splash import splash
-    splash.show()
-
-    # 2. Local Server (Uvicorn)
+    # 1. Local Server (Uvicorn)
+    # Do not run Tkinter alongside the Edge/WebView2 message loop. On Windows
+    # this can leave the process alive while its native window never paints.
     from app.main import app
     import uvicorn
     import asyncio
@@ -689,7 +687,6 @@ def main():
 
     if not _wait_for_server():
         log.error("Local API failed to become ready at %s", health_url)
-        splash.close()
         return
 
     # Background update check
@@ -703,7 +700,7 @@ def main():
             
     threading.Thread(target=run_update_check, daemon=True).start()
 
-    # 3. Tray
+    # 2. Tray
     from desktop.tray import tray_icon
     
     def _quit():
@@ -712,19 +709,35 @@ def main():
 
     tray_started = threading.Event()
 
+    def _show_window():
+        """Restore the main window when the user opens it from the tray."""
+        try:
+            window.show()
+            window.restore()
+            window.focus()
+        except Exception as exc:
+            # Some WebView2 versions do not expose restore() while the window
+            # is already visible; show/focus still gives the user a usable UI.
+            log.warning("Could not restore the desktop window from the tray: %s", exc)
+            try:
+                window.show()
+                window.focus()
+            except Exception as fallback_exc:
+                log.error("Could not show the desktop window: %s", fallback_exc)
+
     def _start_tray_once():
         if tray_started.is_set():
             return
         tray_started.set()
         tray_icon.set_callbacks(
-            on_show=lambda: None, # Handled by webview
+            on_show=_show_window,
             on_quit=_quit,
             on_sync=lambda: None,
             on_test_print=thermal_printer.test_print
         )
         tray_icon.start()
 
-    # 4. UI Window (PyWebView)
+    # 3. UI Window (PyWebView)
     try:
         log.info("Launching desktop window via pywebview.")
         webview_ready = threading.Event()
@@ -746,7 +759,6 @@ def main():
 
         import webview
         log.info("PyWebView imported successfully.")
-        splash.close()
         api = JSAPI()
         window = webview.create_window(
             "Top Chef POS",
@@ -759,65 +771,46 @@ def main():
         log.info("PyWebView window object created.")
 
         def _inject_zoom():
-            """Inject zoom JS with multiple targets and retry logic."""
+            """Apply the user's saved zoom level and register zoom shortcuts."""
             try:
                 saved_zoom = config.get("zoom_level", 100)
                 zoom_js = """
                 (function() {
-                    console.log("Applying zoom: __ZOOM__%");
                     var apply = function(level) {
                         level = Math.max(50, Math.min(200, level));
                         if (isNaN(level)) level = 100;
-                        var val = level + '%';
-                        if (document.documentElement && document.documentElement.style) {
-                            document.documentElement.style.zoom = val;
-                        }
-                        if (document.body && document.body.style) {
-                            document.body.style.zoom = val;
-                        }
-                        
+                        var value = level + '%';
+                        if (document.documentElement) document.documentElement.style.zoom = value;
+                        if (document.body) document.body.style.zoom = value;
                         if (window.pywebview && window.pywebview.api) {
-                            try { window.pywebview.api.set_zoom(level); } catch(err) {}
+                            try { window.pywebview.api.set_zoom(level); } catch (error) {}
                         }
-                        return level;
                     };
 
-                    // Initial apply (deferred to ensure DOM is ready)
-                    if (document.readyState === 'loading') {
-                        document.addEventListener('DOMContentLoaded', function() { apply(__ZOOM__); });
-                    } else {
-                        apply(__ZOOM__);
-                    }
-
+                    apply(__ZOOM__);
                     if (window.__zoomInitialized) return;
                     window.__zoomInitialized = true;
 
-                    document.addEventListener('keydown', function(e) {
-                        if (!e.ctrlKey) return;
-                        var raw = document.documentElement ? document.documentElement.style.zoom : '100';
-                        var current = parseInt(raw || '100', 10);
-                        if (isNaN(current)) current = 100;
-                        if (e.key === '+' || e.key === '=' || e.code === 'Equal') {
-                            e.preventDefault();
+                    document.addEventListener('keydown', function(event) {
+                        if (!event.ctrlKey) return;
+                        var current = parseInt(document.documentElement.style.zoom || '100', 10);
+                        if (event.key === '+' || event.key === '=' || event.code === 'Equal') {
+                            event.preventDefault();
                             apply(current + 10);
-                        } else if (e.key === '-' || e.code === 'Minus') {
-                            e.preventDefault();
+                        } else if (event.key === '-' || event.code === 'Minus') {
+                            event.preventDefault();
                             apply(current - 10);
-                        } else if (e.key === '0' || e.code === 'Digit0') {
-                            e.preventDefault();
+                        } else if (event.key === '0' || event.code === 'Digit0') {
+                            event.preventDefault();
                             apply(100);
                         }
                     });
-
-                    document.addEventListener('wheel', function(e) {
-                        if (!e.ctrlKey) return;
-                        e.preventDefault();
-                        var raw = document.documentElement ? document.documentElement.style.zoom : '100';
-                        var current = parseInt(raw || '100', 10);
-                        if (isNaN(current)) current = 100;
-                        var delta = e.deltaY < 0 ? 10 : -10;
-                        apply(current + delta);
-                    }, {passive: false});
+                    document.addEventListener('wheel', function(event) {
+                        if (!event.ctrlKey) return;
+                        event.preventDefault();
+                        var current = parseInt(document.documentElement.style.zoom || '100', 10);
+                        apply(current + (event.deltaY < 0 ? 10 : -10));
+                    }, { passive: false });
                 })();
                 """.replace("__ZOOM__", str(saved_zoom))
                 window.evaluate_js(zoom_js)
@@ -836,15 +829,8 @@ def main():
         window.events.loaded += _on_loaded
 
         def _on_shown():
-            """Bring window to foreground, disable always-on-top, and force zoom injection."""
-            import time
+            """Start the tray after the native window has been created."""
             _start_tray_once()
-            
-            # Aggressive retry for zoom injection
-            for i in range(5):
-                if _inject_zoom():
-                    break
-                time.sleep(1.0)
 
         log.info("Starting pywebview event loop.")
         webview.start(

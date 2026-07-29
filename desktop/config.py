@@ -6,6 +6,7 @@ Falls back to sensible defaults when keys are missing.
 """
 
 import json
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -102,8 +103,14 @@ class DesktopConfig:
 
     def load(self):
         if SETTINGS_PATH.exists():
-            with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-                self._data = json.load(f)
+            try:
+                with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                # A hand-edited or partially-written file must never prevent the
+                # desktop shell from opening.
+                self._data = data if isinstance(data, dict) else {}
+            except (OSError, json.JSONDecodeError):
+                self._data = {}
         else:
             self._data = {}
         # Ensure device_id is always populated
@@ -112,8 +119,24 @@ class DesktopConfig:
             self.save()
 
     def save(self):
-        with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, indent=4, ensure_ascii=False)
+        """Persist settings without leaving a truncated file after an interruption.
+
+        Installations under Program Files can be read-only for the current user;
+        settings are non-critical in that case, so failing to save must not make
+        the desktop process crash before it creates its window.
+        """
+        temp_path = SETTINGS_PATH.with_suffix(SETTINGS_PATH.suffix + ".tmp")
+        try:
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(self._data, f, indent=4, ensure_ascii=False)
+            os.replace(temp_path, SETTINGS_PATH)
+            return True
+        except OSError:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return False
 
     # ── Accessors ──────────────────────────────────
 
