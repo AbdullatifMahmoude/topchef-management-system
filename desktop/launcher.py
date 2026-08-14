@@ -266,226 +266,19 @@ def main():
     from app.core.sync import sync_manager
     from app.core.cloud_client import cloud_client
     from app.core.config import settings
+    from app.core.desktop_sync_engine import run_desktop_sync_loop
 
     async def _desktop_sync_loop():
         """Background synchronization engine running constantly with outbox draining."""
         global _auth_header_cache
         try:
-            log.info("⚙️ Sync: Background worker task started.")
-            from datetime import datetime, timedelta, timezone
-
-            from app.core.database import AsyncSessionLocal
-            from app.core.desktop_reconcile import apply_master_data_snapshot
-            from sqlalchemy import select
-            import platform
-            
-            device_id = config.device_id
-            loop_counter = 0
-            last_master_data_sync_at = None
-            force_master_pull = True
-            last_heartbeat_at = 0.0
-            last_pull_at_mon = 0.0
-            _last_sync_failure_at = None
-            _sync_backoff_seconds = 5
-            
-            log.info("⚙️ Sync: Entering main loop...")
+            await run_desktop_sync_loop(
+                device_id=config.device_id,
+                auth_header_getter=lambda: _auth_header_cache,
+                log=log,
+            )
         except Exception as e:
-            log.error(f"FATAL ERROR in _desktop_sync_loop initialization: {e}", exc_info=True)
-            return
-        while True:
-            try:
-                from app.core.events import get_outbox_sync_trigger
-                trigger = get_outbox_sync_trigger()
-                
-                # Wait for the trigger OR timeout after 1s for periodic checks
-                try:
-                    await asyncio.wait_for(trigger.wait(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    pass
-                
-                if trigger.is_set():
-                    log.info("🔄 Sync: Worker woke up (trigger set).")
-                    trigger.clear()
-                    force_master_pull = True
-                    # Wait briefly to let any DB transactions commit before querying Outbox
-                    await asyncio.sleep(0.2)
-                elif force_master_pull:
-                    # if force_master_pull is true, we don't need to wait for trigger
-                    pass
-            except Exception as e:
-                log.error(f"Error checking sync trigger: {e}")
-                pass
-            
-            loop_counter += 1
-            if not _auth_header_cache or not cloud_client.is_authenticated():
-                _auth_header_cache = None
-                if loop_counter % 10 == 0:
-                    log.info("Outbox: Waiting for user activity to capture Auth header...")
-                continue
-
-            # Handle network backoff
-            if _last_sync_failure_at:
-                seconds_since_failure = (asyncio.get_event_loop().time() - _last_sync_failure_at)
-                if seconds_since_failure < _sync_backoff_seconds:
-                    continue
-            
-            # Lazy initialize the sync lock in the correct loop
-            global _sync_lock
-            if _sync_lock is None:
-                _sync_lock = asyncio.Lock()
-                
-            async with _sync_lock:
-                try:
-                    from app.modules.orders.models import OutboxEvent, OutboxEventStatus
-                    
-                    async with AsyncSessionLocal() as db:
-                        # 1. Drain Outbox — dependency-aware ordering:
-                        #    0: CUSTOMER_CREATED  (customer must exist first)
-                        #    1: ADDRESS_CREATED   (address needs customer)
-                        #    2: ORDER_CREATED     (order needs customer + address)
-                        #    3: everything else   (updates need their parent entity)
-                        from sqlalchemy import case, literal
-                        event_priority = case(
-                            (OutboxEvent.event_type == 'CUSTOMER_CREATED', literal(0)),
-                            (OutboxEvent.event_type == 'ADDRESS_CREATED',  literal(1)),
-                            (OutboxEvent.event_type == 'ORDER_CREATED',    literal(2)),
-                            (OutboxEvent.event_type == 'SHIFT_CREATED',    literal(2)),
-                            (OutboxEvent.event_type == 'SHIFT_UPDATED',    literal(2)),
-                            else_=literal(3)
-                        )
-                        result = await db.execute(
-                            select(OutboxEvent)
-                            .where(OutboxEvent.status == OutboxEventStatus.PENDING)
-                            .order_by(event_priority, OutboxEvent.created_at.asc())
-                            .limit(50)
-                        )
-                        pending_events = result.scalars().all()
-                        
-                        if pending_events:
-                            log.info(f"📤 Outbox: Found {len(pending_events)} pending events. Syncing...")
-                            payload = {
-                                "device_id": device_id,
-                                "events": [
-                                    {
-                                        "event_id": e.id,
-                                        "event_type": e.event_type,
-                                        "topic": e.topic,
-                                        "payload": e.payload,
-                                        "created_at": e.created_at.isoformat()
-                                    }
-                                    for e in pending_events
-                                ]
-                            }
-                            
-                            sync_result = await cloud_client.post_json("/desktop-updates/sync/events", payload)
-                            log.info(f"Outbox: Cloud response: {sync_result}")
-                            accepted = int((sync_result or {}).get("accepted", 0))
-                            rejected = int((sync_result or {}).get("rejected", 0))
-                            accepted_ids = {
-                                int(event_id) for event_id in (sync_result or {}).get("accepted_event_ids", [])
-                            }
-                            errors = (sync_result or {}).get("errors", [])
-                            now_ts = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
-
-                            if sync_result:
-                                # Mark only explicitly acknowledged IDs. Counts are not
-                                # enough: a cloud rejection can occur mid-batch.
-                                for e in pending_events:
-                                    if e.id not in accepted_ids:
-                                        continue
-                                    e.status = OutboxEventStatus.COMPLETED
-                                    e.processed_at = now_ts
-
-                                # Preserve unacknowledged business events indefinitely. The
-                                # cloud endpoint is idempotent, so replay after reconnect is safe.
-                                for e in pending_events:
-                                    if e.id not in accepted_ids:
-                                        e.retry_count = (e.retry_count or 0) + 1
-                                        if errors:
-                                            e.error_message = "; ".join(map(str, errors))[:2000]
-
-                                await db.commit()
-                                if accepted > 0:
-                                    log.info(f"📤 Outbox: Successfully synced {accepted} events to cloud.")
-                                    # Reset backoff on success
-                                    _last_sync_failure_at = None
-                                    _sync_backoff_seconds = 5
-                                if rejected > 0:
-                                    log.warning(f"⚠️ Outbox: {rejected} events were rejected by cloud.")
-                            else:
-                                # Total failure (network error, etc.) 
-                                # We stay PENDING because we want to retry when internet is back.
-                                _last_sync_failure_at = asyncio.get_event_loop().time()
-                                # Exponential backoff up to 60 seconds
-                                _sync_backoff_seconds = min(_sync_backoff_seconds * 2, 60)
-                                
-                                for e in pending_events:
-                                    # Network loss is not a business failure: never discard a
-                                    # restaurant order simply because retries were exhausted.
-                                    e.retry_count = (e.retry_count or 0) + 1
-                                await db.commit()
-                                log.warning(
-                                    "Outbox: cloud unreachable (backoff=%ds). Batch stays PENDING.",
-                                    _sync_backoff_seconds
-                                )
-                                force_master_pull = True
-
-                        now_mon = time.monotonic()
-                        should_pull = force_master_pull or (last_master_data_sync_at and (now_mon - last_pull_at_mon > 120))
-                        
-                        if should_pull:
-                            log.info("📥 Sync: Pulling master data from cloud (forced=%s)...", force_master_pull)
-                            params = {}
-                            if last_master_data_sync_at:
-                                # Small overlap protects the query/cursor boundary; local
-                                # reconciliation is idempotent.
-                                params["since"] = (last_master_data_sync_at - timedelta(seconds=5)).isoformat()
-
-                            snapshot = await cloud_client.get("/desktop-updates/master-data", params=params)
-                            if snapshot:
-                                stats = await apply_master_data_snapshot(db, snapshot)
-                                cloud_timestamp = snapshot.get("timestamp")
-                                if cloud_timestamp:
-                                    # httpx JSON decoding returns a string. Keep the
-                                    # cursor as a datetime so overlap pulls continue
-                                    # to work after the first successful sync.
-                                    if isinstance(cloud_timestamp, str):
-                                        last_master_data_sync_at = datetime.fromisoformat(
-                                            cloud_timestamp.replace("Z", "+00:00")
-                                        )
-                                    else:
-                                        last_master_data_sync_at = cloud_timestamp
-                                force_master_pull = False
-                                last_pull_at_mon = now_mon
-                                changed = sum(stats.values())
-                                if changed:
-                                    log.info("Cloud reconciliation applied %s rows: %s", changed, stats)
-                                    # Trigger local UI refresh if anything changed
-                                    from app.core.events import order_events_manager
-                                    await order_events_manager.broadcast_all({"type": "SYNC_COMPLETE", "stats": stats})
-                            elif force_master_pull:
-                                log.warning("Initial cloud reconciliation failed (cloud unreachable); will retry in 30s.")
-                                # Reset force flag but set last_pull to a value that triggers retry in 30s
-                                # 120s (normal interval) - 30s (retry delay) = 90s offset
-                                last_pull_at_mon = now_mon - 90 
-                                force_master_pull = False
-
-                        # 3. Periodic Heartbeat (only if we have auth)
-                        if _auth_header_cache and time.monotonic() - last_heartbeat_at >= 60:
-                            heartbeat_payload = {
-                                "device_id": device_id,
-                                "version": settings.VERSION,
-                                "os": platform.system()
-                            }
-                            await cloud_client.post("/desktop-updates/sync/heartbeat", heartbeat_payload)
-                            last_heartbeat_at = time.monotonic()
-
-                        # 4. Global Counter Reset
-                        if loop_counter >= 1200: # Reset every ~20 mins
-                            loop_counter = 0
-                                
-                except Exception as e:
-                    log.error(f"Desktop background sync loop failed: {e}")
+            log.error("FATAL ERROR in _desktop_sync_loop: %s", e, exc_info=True)
 
     # Robustly wrap the app lifespan to include the desktop sync loop
     # We use a wrapper instead of replacing the property to ensure we capture the correct context
@@ -725,6 +518,12 @@ def main():
             except Exception as fallback_exc:
                 log.error("Could not show the desktop window: %s", fallback_exc)
 
+    def _trigger_manual_sync():
+        from app.core.sync_triggers import request_force_master_pull
+        from app.core.events import get_outbox_sync_trigger
+        request_force_master_pull()
+        get_outbox_sync_trigger().set()
+
     def _start_tray_once():
         if tray_started.is_set():
             return
@@ -732,7 +531,7 @@ def main():
         tray_icon.set_callbacks(
             on_show=_show_window,
             on_quit=_quit,
-            on_sync=lambda: None,
+            on_sync=_trigger_manual_sync,
             on_test_print=thermal_printer.test_print
         )
         tray_icon.start()

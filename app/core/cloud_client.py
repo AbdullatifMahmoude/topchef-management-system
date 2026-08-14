@@ -20,6 +20,7 @@ class CloudSyncClient:
             timeout=15.0,
         )
         self._token = None
+        self.last_response_bytes: int = 0
 
     def is_authenticated(self) -> bool:
         return bool(self._token)
@@ -129,8 +130,14 @@ class CloudSyncClient:
             response = await self._client.get(endpoint, params=params)
             latency = (asyncio.get_event_loop().time() - start_time) * 1000
 
+            self.last_response_bytes = len(response.content or b"")
             if response.status_code == 200:
-                logger.debug("Cloud GET %s successful (%.1fms)", endpoint, latency)
+                logger.debug(
+                    "Cloud GET %s successful (%.1fms, %s bytes)",
+                    endpoint,
+                    latency,
+                    self.last_response_bytes,
+                )
                 return response.json()
             if response.status_code == 401:
                 logger.warning("Cloud GET %s returned 401 — attempting silent token renewal", endpoint)
@@ -138,6 +145,7 @@ class CloudSyncClient:
                 if self.is_authenticated():
                     retry = await self._client.get(endpoint, params=params)
                     if retry.status_code == 200:
+                        self.last_response_bytes = len(retry.content or b"")
                         return retry.json()
             else:
                 logger.warning("Cloud GET %s returned %s: %s", endpoint, response.status_code, response.text)

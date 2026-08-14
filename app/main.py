@@ -46,6 +46,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"[STARTUP] Initializing application [PID: {pid}] [Mode: {settings.RUNTIME_MODE}]")
     
     if settings.RUNTIME_MODE == "desktop":
+        # Ensure sync quarantine model is registered before create_all
+        from app.modules.sync.models import SyncQuarantine  # noqa: F401
+
         logger.info("[DESKTOP] Desktop Mode: Verifying local DB schema...")
         async with engine.begin() as conn:
             # 1. Create any missing tables
@@ -73,9 +76,15 @@ async def lifespan(app: FastAPI):
                         # Only certain tables need updated_at for sync
                         if table in ["categories", "products", "variants", "customers", "customer_addresses", "offers", "comments", "app_settings", "order_items", "order_status_history", "cashier_shifts"]:
                             logger.info(f"Adding 'updated_at' to {table}...")
-                            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+                            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL"))
                 except Exception as e:
                     logger.warning(f"Could not self-heal table {table}: {e}")
+
+            # Backfill any NULL updated_at left from legacy rows or partial migrations
+            from app.core.updated_at_backfill import backfill_null_updated_at
+            backfill_results = await backfill_null_updated_at(conn)
+            if backfill_results:
+                logger.info("[DESKTOP] Backfilled NULL updated_at: %s", backfill_results)
                     
         logger.info("[DESKTOP] Desktop Mode: Local DB schema verified.")
 

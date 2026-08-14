@@ -324,9 +324,9 @@ class OrderEventsManager:
                     self._remote_bridge_ws = ws
 
                 await sync_manager.report_ws_state(WebSocketConnectionState.CONNECTED)
-                # A reconnect may have missed cloud events while the desktop
-                # was offline. Wake the durable sync worker immediately rather
-                # than waiting for its periodic master-data poll.
+                # Reconnect: drain outbox and request incremental catch-up (not full pull).
+                from app.core.sync_triggers import request_incremental_pull
+                request_incremental_pull()
                 get_outbox_sync_trigger().set()
                 logger.info(
                     "Desktop bridge connected to cloud ping_interval=%ss ping_timeout=%ss",

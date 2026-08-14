@@ -134,13 +134,16 @@ async def _broadcast_shift_event(event_type: str, event_data: dict) -> None:
 
 @router.post("/trigger-pull")
 async def trigger_desktop_pull():
-    """Forces the background sync worker to perform a master-data pull from cloud."""
+    """Forces the background sync worker to perform a full master-data pull from cloud."""
     if settings.RUNTIME_MODE != "desktop":
         raise HTTPException(status_code=405, detail="Not supported in cloud mode")
-    
+
     from app.core.events import get_outbox_sync_trigger
+    from app.core.sync_triggers import request_force_master_pull
+
+    request_force_master_pull()
     get_outbox_sync_trigger().set()
-    return {"status": "ok", "message": "Sync pull triggered"}
+    return {"status": "ok", "message": "Full sync pull triggered"}
 
 
 # ──────────────────────── Incremental Pull (Master Data) ────────────────────────
@@ -921,6 +924,8 @@ async def get_sync_status(
     """
     if settings.RUNTIME_MODE == "desktop":
         from app.modules.orders.models import OutboxEvent, OutboxEventStatus
+        from app.modules.sync.models import SyncQuarantine
+        from app.core.sync_health import sync_health
         from sqlalchemy import func
         
         # Summary counts
@@ -935,10 +940,30 @@ async def get_sync_status(
         # Latest failures for review
         stmt_failed = select(OutboxEvent).where(OutboxEvent.status == OutboxEventStatus.FAILED).order_by(OutboxEvent.created_at.desc()).limit(20)
         failed_items = (await db.execute(stmt_failed)).scalars().all()
+
+        quarantined = (
+            await db.execute(
+                select(SyncQuarantine)
+                .where(SyncQuarantine.quarantined.is_(True))
+                .order_by(SyncQuarantine.last_failed_at.desc())
+                .limit(20)
+            )
+        ).scalars().all()
         
         return {
             "mode": "desktop",
             "stats": stats,
+            "health": sync_health.to_dict(),
+            "quarantined_rows": [
+                {
+                    "table": q.table_name,
+                    "record_key": q.record_key,
+                    "error": q.error_message,
+                    "failure_count": q.failure_count,
+                    "last_failed_at": q.last_failed_at.isoformat() if q.last_failed_at else None,
+                }
+                for q in quarantined
+            ],
             "failed_events": [
                 {
                     "id": e.id,

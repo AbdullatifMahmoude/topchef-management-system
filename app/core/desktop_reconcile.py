@@ -1,4 +1,5 @@
 import contextlib
+import json
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -7,6 +8,7 @@ from sqlalchemy import Date, DateTime, Numeric, Integer, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import logger
+from app.core.sync_health import QUARANTINE_AFTER_FAILURES
 from app.modules.comments.models import Comment
 from app.modules.customer.models import Customer, CustomerAddress
 from app.modules.menu.models import Category, Product, Variant
@@ -14,6 +16,7 @@ from app.modules.offer.models import Offer
 from app.modules.orders.models import Order, OrderItem, OrderStatusHistory
 from app.modules.settings.models import AppSetting
 from app.modules.shifts.models import CashierShift
+from app.modules.sync.models import SyncQuarantine
 from app.modules.users.models import User
 
 
@@ -68,13 +71,111 @@ def _coerce_value(column, value: Any) -> Any:
     return value
 
 
-def _column_payload(model: type, row: dict[str, Any]) -> dict[str, Any]:
+def _row_record_key(model: type, row: dict[str, Any]) -> str:
+    row_id = row.get("id")
+    if row_id is not None:
+        return str(row_id)
+    if model is CashierShift:
+        return f"{row.get('user_id')}:{row.get('target_date')}:{row.get('start_time')}"
+    if model is Customer and row.get("phone_number"):
+        return f"phone:{row['phone_number']}"
+    if model is Order and row.get("order_number"):
+        return f"order:{row.get('order_number')}:{row.get('order_date')}"
+    return json.dumps({k: row.get(k) for k in sorted(row.keys())[:5]}, default=str)
+
+
+def _ensure_updated_at(
+    model: type,
+    values: dict[str, Any],
+    row: dict[str, Any],
+    existing: Any | None,
+) -> None:
+    """Never allow updated_at to be written as NULL."""
+    if "updated_at" not in values and not hasattr(model, "updated_at"):
+        return
+    if values.get("updated_at") is not None:
+        return
+
+    fallback = (
+        _parse_datetime(row.get("updated_at"))
+        or _parse_datetime(row.get("created_at"))
+        or _parse_datetime(row.get("start_time"))
+        or _parse_datetime(row.get("changed_at"))
+        or (getattr(existing, "updated_at", None) if existing else None)
+        or (getattr(existing, "created_at", None) if existing else None)
+        or (getattr(existing, "start_time", None) if existing else None)
+        or datetime.utcnow()
+    )
+    values["updated_at"] = fallback
+
+
+def _column_payload(model: type, row: dict[str, Any], existing: Any | None = None) -> dict[str, Any]:
     columns = inspect(model).columns
     payload: dict[str, Any] = {}
     for column in columns:
         if column.name in row:
             payload[column.name] = _coerce_value(column, row[column.name])
+    _ensure_updated_at(model, payload, row, existing)
     return payload
+
+
+async def _is_quarantined(session: AsyncSession, table_name: str, record_key: str) -> bool:
+    result = await session.execute(
+        select(SyncQuarantine.quarantined).where(
+            SyncQuarantine.table_name == table_name,
+            SyncQuarantine.record_key == record_key,
+            SyncQuarantine.quarantined.is_(True),
+        )
+    )
+    return result.scalar_one_or_none() is True
+
+
+async def _record_row_failure(
+    session: AsyncSession,
+    model: type,
+    row: dict[str, Any],
+    error: Exception,
+) -> None:
+    table_name = model.__tablename__
+    record_key = _row_record_key(model, row)
+    error_text = str(error)[:2000]
+
+    result = await session.execute(
+        select(SyncQuarantine).where(
+            SyncQuarantine.table_name == table_name,
+            SyncQuarantine.record_key == record_key,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    now = datetime.utcnow()
+
+    if entry is None:
+        entry = SyncQuarantine(
+            table_name=table_name,
+            record_key=record_key,
+            row_payload=json.dumps(row, default=str)[:4000],
+            error_message=error_text,
+            failure_count=1,
+            first_failed_at=now,
+            last_failed_at=now,
+            quarantined=False,
+        )
+        session.add(entry)
+    else:
+        entry.failure_count = (entry.failure_count or 0) + 1
+        entry.error_message = error_text
+        entry.last_failed_at = now
+        if entry.failure_count >= QUARANTINE_AFTER_FAILURES:
+            entry.quarantined = True
+
+    await session.flush()
+    logger.warning(
+        "Reconcile quarantined row %s.%s (failures=%s): %s",
+        table_name,
+        record_key,
+        entry.failure_count,
+        error_text,
+    )
 
 
 async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]):
@@ -82,11 +183,6 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
     pk_columns = list(mapper.primary_key)
     pk_values = {column.name: row.get(column.name) for column in pk_columns}
 
-    # Desktop-generated IDs are independent from cloud-generated IDs.  Matching
-    # customers, their addresses, or orders by a coincident numeric ID can
-    # overwrite an unrelated local record before its own outbox event is sent.
-    # These entities have stable business keys, so resolve them by those keys
-    # first and never use their surrogate IDs as a reconciliation fallback.
     identity_by_business_key = {Customer, CustomerAddress, Order}
 
     if model not in identity_by_business_key and pk_columns and all(value is not None for value in pk_values.values()):
@@ -105,7 +201,6 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
                 select(Order).where(Order.order_number == order_number, Order.order_date == order_date)
             )
             return result.scalars().first()
-
         return None
 
     if model is OrderItem and row.get("order_id") is not None and row.get("product_id") is not None:
@@ -128,7 +223,6 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
         return result.scalars().first()
 
     if model is CustomerAddress and row.get("customer_id") and row.get("address"):
-        # Prefer an active address; fall back to soft-deleted so upsert can revive it.
         result = await session.execute(
             select(CustomerAddress)
             .where(
@@ -194,87 +288,94 @@ async def _find_existing(session: AsyncSession, model: type, row: dict[str, Any]
     return None
 
 
-async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, Any]]) -> int:
+async def _apply_row_upsert(session: AsyncSession, model: type, row: dict[str, Any]) -> bool:
+    """Apply a single row upsert. Returns True if the row changed."""
     import sqlalchemy.exc
-    changed = 0
+
     mapper = inspect(model)
     primary_key_names = {column.name for column in mapper.primary_key}
-    
-    # Models that MUST have their IDs preserved to maintain relationships
     PRESERVE_ID_MODELS = {User, Category, Product, Variant, Offer, AppSetting}
-    
+
+    values = _column_payload(model, row)
+    if not values:
+        return False
+
+    if model is Customer and values.get("phone_number"):
+        from app.modules.customer.phone import normalize_egyptian_phone
+        values["phone_number"] = normalize_egyptian_phone(values["phone_number"]) or values["phone_number"]
+        row = {**row, "phone_number": values["phone_number"]}
+
+    existing = await _find_existing(session, model, row)
+    _ensure_updated_at(model, values, row, existing)
+
+    async with session.begin_nested():
+        if existing is None:
+            insert_values = {}
+            for k, v in values.items():
+                is_pk = k in primary_key_names
+                col = mapper.columns.get(k)
+                is_int_pk = is_pk and col is not None and isinstance(col.type, Integer)
+                if is_int_pk and model not in PRESERVE_ID_MODELS:
+                    continue
+                insert_values[k] = v
+            session.add(model(**insert_values))
+            return True
+
+        has_mod = False
+        for key, value in values.items():
+            if key in primary_key_names:
+                continue
+            col = mapper.columns.get(key)
+            coerced_value = _coerce_value(col, value)
+            if getattr(existing, key) != coerced_value:
+                setattr(existing, key, coerced_value)
+                has_mod = True
+        if has_mod:
+            await session.flush()
+            return True
+        return False
+
+
+async def _upsert_rows(session: AsyncSession, model: type, rows: list[dict[str, Any]]) -> int:
+    import sqlalchemy.exc
+
+    changed = 0
+    table_name = model.__tablename__
+
     for row in rows:
-        values = _column_payload(model, row)
-        if not values:
+        record_key = _row_record_key(model, row)
+        if await _is_quarantined(session, table_name, record_key):
+            logger.debug("Skipping quarantined row %s.%s", table_name, record_key)
             continue
 
-        if model is Customer and values.get("phone_number"):
-            from app.modules.customer.phone import normalize_egyptian_phone
-            values["phone_number"] = normalize_egyptian_phone(values["phone_number"]) or values["phone_number"]
-            row = {**row, "phone_number": values["phone_number"]}
-
-        existing = await _find_existing(session, model, row)
-        
         try:
-            async with session.begin_nested():
-                if existing is None:
-                    insert_values = {}
-                    for k, v in values.items():
-                        is_pk = k in primary_key_names
-                        col = mapper.columns.get(k)
-                        is_int_pk = is_pk and col is not None and isinstance(col.type, Integer)
-                        
-                        if is_int_pk and model not in PRESERVE_ID_MODELS:
-                            continue
-                        insert_values[k] = v
-                    
-                    session.add(model(**insert_values))
-                    # Inserts are meaningful changes too. Without this the
-                    # desktop receives the new product but never broadcasts a
-                    # SYNC_COMPLETE event, leaving an already-open cashier UI
-                    # with its stale menu until a manual refresh.
-                    changed += 1
-                else:
-                    has_mod = False
-                    for key, value in values.items():
-                        if key in primary_key_names:
-                            continue
-                        
-                        col = mapper.columns.get(key)
-                        coerced_value = _coerce_value(col, value)
-                        
-                        current_val = getattr(existing, key)
-                        if current_val != coerced_value:
-                            setattr(existing, key, coerced_value)
-                            has_mod = True
-                    
-                    if has_mod:
-                        await session.flush()
-                        changed += 1
-        except sqlalchemy.exc.IntegrityError:
-            # Row may already exist under a natural key that _find_existing missed
-            # (e.g. phone format variants). Re-resolve and apply updates.
-            conflict = await _find_existing(session, model, row)
-            if conflict is None:
-                logger.warning(
-                    "Reconcile skipped %s row after IntegrityError (id=%s keys=%s)",
-                    model.__tablename__,
-                    row.get("id"),
-                    {k: row.get(k) for k in ("phone_number", "address", "order_number", "username", "code") if row.get(k) is not None},
-                )
-                continue
-            has_mod = False
-            for key, value in values.items():
-                if key in primary_key_names:
-                    continue
-                col = mapper.columns.get(key)
-                coerced_value = _coerce_value(col, value)
-                if getattr(conflict, key) != coerced_value:
-                    setattr(conflict, key, coerced_value)
-                    has_mod = True
-            if has_mod:
-                await session.flush()
+            if await _apply_row_upsert(session, model, row):
                 changed += 1
+        except sqlalchemy.exc.IntegrityError:
+            try:
+                conflict = await _find_existing(session, model, row)
+                if conflict is None:
+                    await _record_row_failure(session, model, row, sqlalchemy.exc.IntegrityError("unresolved conflict"))
+                    continue
+                values = _column_payload(model, row, conflict)
+                has_mod = False
+                mapper = inspect(model)
+                primary_key_names = {column.name for column in mapper.primary_key}
+                for key, value in values.items():
+                    if key in primary_key_names:
+                        continue
+                    col = mapper.columns.get(key)
+                    coerced_value = _coerce_value(col, value)
+                    if getattr(conflict, key) != coerced_value:
+                        setattr(conflict, key, coerced_value)
+                        has_mod = True
+                if has_mod:
+                    await session.flush()
+                    changed += 1
+            except Exception as retry_exc:
+                await _record_row_failure(session, model, row, retry_exc)
+        except Exception as exc:
+            await _record_row_failure(session, model, row, exc)
 
     return changed
 
@@ -305,41 +406,56 @@ def _remap_foreign_ids(rows: list[dict[str, Any]], field_name: str, id_map: dict
 
 
 async def apply_master_data_snapshot(session: AsyncSession, snapshot: dict[str, Any]) -> dict[str, int]:
-    """Apply a cloud snapshot to the local desktop database."""
+    """Apply a cloud snapshot to the local desktop database with per-row fault isolation."""
     stats: dict[str, int] = {}
+    skipped_tables: list[str] = []
 
-    try:
-        customer_id_map: dict[int, int] = {}
-        address_id_map: dict[int, int] = {}
-        order_id_map: dict[int, int] = {}
+    customer_id_map: dict[int, int] = {}
+    address_id_map: dict[int, int] = {}
+    order_id_map: dict[int, int] = {}
 
-        for model, key in MODEL_ORDER:
-            rows = snapshot.get(key) or []
-            
-            # Remap Foreign Keys before upserting
-            if model is CustomerAddress:
-                rows = _remap_foreign_ids(rows, "customer_id", customer_id_map)
-            elif model is Order:
-                rows = _remap_foreign_ids(rows, "customer_id", customer_id_map)
-                rows = _remap_foreign_ids(rows, "address_id", address_id_map)
-            elif model in {OrderItem, OrderStatusHistory} and order_id_map:
-                rows = _remap_foreign_ids(rows, "order_id", order_id_map)
+    for model, key in MODEL_ORDER:
+        rows = snapshot.get(key) or []
 
+        if model is CustomerAddress:
+            rows = _remap_foreign_ids(rows, "customer_id", customer_id_map)
+        elif model is Order:
+            rows = _remap_foreign_ids(rows, "customer_id", customer_id_map)
+            rows = _remap_foreign_ids(rows, "address_id", address_id_map)
+        elif model in {OrderItem, OrderStatusHistory} and order_id_map:
+            rows = _remap_foreign_ids(rows, "order_id", order_id_map)
+
+        try:
             stats[key] = await _upsert_rows(session, model, rows)
             await session.flush()
+        except Exception:
+            logger.exception("Table-level reconcile failure for %s; continuing with remaining tables", key)
+            skipped_tables.append(key)
+            stats[key] = 0
+            continue
 
-            # Build ID maps for future children in this loop
-            if model is Customer:
-                customer_id_map = await _build_id_map(session, model, rows)
-            elif model is CustomerAddress:
-                address_id_map = await _build_id_map(session, model, rows)
-            elif model is Order:
-                order_id_map = await _build_id_map(session, model, rows)
+        if model is Customer:
+            customer_id_map = await _build_id_map(session, model, rows)
+        elif model is CustomerAddress:
+            address_id_map = await _build_id_map(session, model, rows)
+        elif model is Order:
+            order_id_map = await _build_id_map(session, model, rows)
 
+    try:
         await session.commit()
     except Exception:
         await session.rollback()
-        logger.exception("Cloud-to-local master-data reconciliation failed")
+        logger.exception("Cloud-to-local master-data commit failed")
         raise
 
+    if skipped_tables:
+        logger.warning("Master-data reconcile completed with skipped tables: %s", skipped_tables)
+
     return stats
+
+
+async def count_quarantined_rows(session: AsyncSession) -> int:
+    result = await session.execute(
+        select(SyncQuarantine).where(SyncQuarantine.quarantined.is_(True))
+    )
+    return len(result.scalars().all())
