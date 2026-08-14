@@ -12,22 +12,22 @@ from app.core.config import settings
 
 Base = declarative_base()
 
-class DbEnum(TypeDecorator):
-    """
-    Handles conversion between lowercase Python enums and uppercase DB enums.
-    Usage: Column(DbEnum(MyEnum, name="my_enum_name"))
-    """
-    impl = SA_Enum
-    cache_ok = True
+def DbEnum(enum_cls, **kwargs):
+    kwargs.setdefault(
+        "values_callable",
+        lambda cls: [e.value.upper() for e in cls]
+    )
+    kwargs.setdefault("native_enum", True)
 
-    def __init__(self, enum_cls, **kwargs):
-        self.enum_cls = enum_cls
-        # Tell SQLAlchemy that the database values are uppercase
-        if 'values_callable' not in kwargs:
-            kwargs['values_callable'] = lambda cls: [e.value.upper() for e in cls]
-        # Ensure name is passed for PostgreSQL native enum support
-        super().__init__(enum_cls, **kwargs)
+    if "name" not in kwargs:
+        raise ValueError(
+            f"DbEnum({enum_cls.__name__}) requires a PostgreSQL enum name"
+        )
 
+    return SA_Enum(
+        enum_cls,
+        **kwargs
+    )
     def result_processor(self, dialect, coltype):
         # Bypass SA_Enum.result_processor because it raises LookupError if the DB
         # value doesn't exactly match the uppercase values in _object_lookup.
