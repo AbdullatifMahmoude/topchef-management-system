@@ -27,7 +27,7 @@ def add_user():
     username = "Abdullatif"
     password = "Abdullatif@1234"
     full_name = "Abdullatif"
-    role = "admin"
+    role = "ADMIN"
     phone = "01000000000"
     hashed_password = get_password_hash(password)
     now = datetime.now().isoformat()
