@@ -94,18 +94,27 @@ class ShiftsService:
 
         orders_query = select(
             Order.created_by_user_id,
-            func.count(Order.id).label("total_orders"),
-            # Cashier sales exclude delivery charges.
-            func.sum(Order.total_amount - Order.delivery_fee).label("total_sales")
+            Order.created_at,
+            Order.order_status,
+            Order.total_amount,
+            Order.delivery_fee,
+            Order.discount_amount,
         ).where(
             Order.created_at >= start_local,
             Order.created_at < end_local,
             Order.is_deleted == False,
-            Order.order_status != OrderStatus.CANCELLED
-        ).group_by(Order.created_by_user_id)
+        )
 
         orders_result = await self.db.execute(orders_query)
-        stats = {row.created_by_user_id: {"total_orders": row.total_orders, "total_sales": row.total_sales or 0.0} for row in orders_result}
+        day_orders = orders_result.all()
+
+        def shift_time_to_local(dt):
+            if not dt:
+                return None
+            if dt.tzinfo is not None:
+                return dt.astimezone(timezone(timedelta(hours=3))).replace(tzinfo=None)
+            # CashierShift timestamps are written with datetime.utcnow().
+            return dt + timedelta(hours=3)
 
         def format_dt(dt):
             if not dt:
@@ -119,15 +128,35 @@ class ShiftsService:
 
         report = []
         for shift in shifts:
-            st = stats.get(shift.user_id, {"total_orders": 0, "total_sales": 0.0})
+            shift_start_local = shift_time_to_local(shift.start_time) or start_local
+            shift_end_local = shift_time_to_local(shift.end_time) if shift.end_time else end_local
+            shift_orders = [
+                order for order in day_orders
+                if order.created_by_user_id == shift.user_id
+                and shift_start_local <= order.created_at < shift_end_local
+            ]
+            successful = [order for order in shift_orders if order.order_status != OrderStatus.CANCELLED]
+            cancelled_count = len(shift_orders) - len(successful)
+            total_sales = sum((order.total_amount or 0) - (order.delivery_fee or 0) for order in successful)
+            total_discount = sum((order.discount_amount or 0) for order in successful)
+            total_delivery_fee = sum((order.delivery_fee or 0) for order in successful)
+            duration_end = shift_time_to_local(shift.end_time) or datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+            duration_minutes = max(0, int((duration_end - shift_start_local).total_seconds() // 60))
             report.append({
                 "id": shift.id,
                 "user_id": shift.user_id,
                 "cashier_name": shift.user.full_name or shift.user.username,
                 "start_time": format_dt(shift.start_time),
                 "end_time": format_dt(shift.end_time),
-                "total_orders": st["total_orders"],
-                "total_sales": float(st["total_sales"]),
+                "total_orders": len(shift_orders),
+                "successful_orders": len(successful),
+                "cancelled_orders": cancelled_count,
+                "total_sales": float(total_sales),
+                "average_order": float(total_sales / len(successful)) if successful else 0.0,
+                "total_discount": float(total_discount),
+                "total_delivery_fee": float(total_delivery_fee),
+                "duration_minutes": duration_minutes,
+                "status": "active" if shift.end_time is None else "closed",
                 "target_date": shift.target_date.isoformat()
             })
             

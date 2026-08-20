@@ -1,130 +1,160 @@
+let shiftsRefreshTimer = null;
+let shiftsData = [];
+let selectedShift = null;
+
+const shiftMoney = (value) => `${Number(value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`;
+const shiftNumber = (value) => Number(value || 0).toLocaleString("ar-EG");
+const shiftEscape = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+const shiftTime = (value) => value ? new Date(value).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) : "—";
+const shiftDuration = (minutes) => {
+  const total = Number(minutes || 0), hours = Math.floor(total / 60), rest = total % 60;
+  if (!hours) return `${shiftNumber(rest)} دقيقة`;
+  return `${shiftNumber(hours)} س ${shiftNumber(rest)} د`;
+};
+
 document.addEventListener("DOMContentLoaded", () => {
-  const shiftsDateBtn = document.getElementById("shiftsDateBtn");
-  const shiftsDateFilter = document.getElementById("shiftsDateFilter");
-
-  if (shiftsDateFilter) {
-    // Set default date to today
-    const today = new Date();
-    shiftsDateFilter.value = today.toISOString().split("T")[0];
-  }
-
-  if (shiftsDateBtn) {
-    shiftsDateBtn.addEventListener("click", fetchShiftsReport);
-  }
-
-  // Load initially if page is visible, but we can also just listen to the sidebar button
-  document.querySelectorAll(".side_btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (btn.getAttribute("data-page") === "shifts") {
-        fetchShiftsReport();
-        startShiftsAutoRefresh();
-      }
-    });
+  const dateInput = document.getElementById("shiftsDateFilter");
+  if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
+  document.getElementById("shiftsDateBtn")?.addEventListener("click", fetchShiftsReport);
+  document.getElementById("shiftsStatusFilter")?.addEventListener("change", renderShiftsTable);
+  document.getElementById("shiftsCashierFilter")?.addEventListener("change", renderShiftsTable);
+  document.querySelectorAll('.side_btn[data-page="shifts"]').forEach((button) => button.addEventListener("click", () => {
+    fetchShiftsReport();
+    startShiftsAutoRefresh();
+  }));
+  document.getElementById("closeShiftDrawer")?.addEventListener("click", closeShiftDrawer);
+  document.getElementById("closeShiftDrawerBtn")?.addEventListener("click", closeShiftDrawer);
+  document.getElementById("printShiftBtn")?.addEventListener("click", () => {
+    document.body.classList.add("printing_shift");
+    window.addEventListener("afterprint", () => document.body.classList.remove("printing_shift"), { once: true });
+    window.print();
   });
-
   startShiftsWebSocket();
 });
-
-let shiftsRefreshTimer = null;
 
 function startShiftsAutoRefresh() {
   if (shiftsRefreshTimer) return;
   shiftsRefreshTimer = setInterval(() => {
     const page = document.getElementById("page-shifts");
-    if (page && page.style.display !== "none") {
-      fetchShiftsReport();
-    }
-  }, 15000);
+    if (page && page.style.display !== "none") fetchShiftsReport();
+  }, 60000);
 }
 
 function startShiftsWebSocket() {
   if (!window.WebSocket) return;
-
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/orders/ws/admin`;
-  let socket = null;
-  let reconnectTimer = null;
-
+  let socket = null, reconnectTimer = null;
   const connect = () => {
     if (socket) return;
-    socket = new WebSocket(wsUrl);
-
+    socket = new WebSocket(`${protocol}//${window.location.host}/orders/ws/admin`);
     socket.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
-        if (
-          payload.type === "SHIFT_CREATED" ||
-          payload.type === "SHIFT_UPDATED"
-        ) {
-          const page = document.getElementById("page-shifts");
-          if (page && page.style.display !== "none") {
-            fetchShiftsReport();
-          }
-        }
-      } catch (err) {
-        console.error("Shifts WS message error:", err);
-      }
+        if (["SHIFT_CREATED", "SHIFT_UPDATED"].includes(payload.type) && document.getElementById("page-shifts")?.style.display !== "none") fetchShiftsReport();
+      } catch (error) { console.error("Shifts WS message error:", error); }
     };
-
-    socket.onclose = () => {
-      socket = null;
-      if (!reconnectTimer) {
-        reconnectTimer = setInterval(connect, 10000);
-      }
-    };
-
-    socket.onopen = () => {
-      if (reconnectTimer) {
-        clearInterval(reconnectTimer);
-        reconnectTimer = null;
-      }
-    };
+    socket.onclose = () => { socket = null; if (!reconnectTimer) reconnectTimer = setInterval(connect, 10000); };
+    socket.onopen = () => { if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; } };
   };
-
   connect();
 }
 
 async function fetchShiftsReport() {
   const tbody = document.querySelector("#shifts_table tbody");
   if (!tbody) return;
-
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; opacity:0.5;">جاري التحميل...</td></tr>`;
-
+  tbody.innerHTML = '<tr><td colspan="8" class="shift_empty_cell">جاري تحميل الشيفتات...</td></tr>';
   try {
-    const dateFilter = document.getElementById("shiftsDateFilter").value;
-    const res = await window.apiFetch(`/shifts?target_date=${dateFilter}`);
-    if (!res.ok) throw new Error("Failed to fetch shifts");
-    
-    const data = await res.json();
-    renderShifts(data);
+    const date = document.getElementById("shiftsDateFilter").value;
+    const response = await window.apiFetch(`/shifts?target_date=${date}`, { hideLoader: true });
+    if (!response.ok) throw new Error("Failed to fetch shifts");
+    shiftsData = await response.json();
+    updateShiftDashboard();
   } catch (error) {
     console.error("Error fetching shifts:", error);
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--color-danger, #e74c3c);">حدث خطأ أثناء جلب البيانات</td></tr>`;
+    tbody.innerHTML = '<tr><td colspan="8" class="shift_empty_cell is_error">حدث خطأ أثناء جلب بيانات الشيفتات</td></tr>';
   }
 }
 
-function renderShifts(shifts) {
+function updateShiftDashboard() {
+  const totalSales = shiftsData.reduce((sum, shift) => sum + Number(shift.total_sales || 0), 0);
+  const totalOrders = shiftsData.reduce((sum, shift) => sum + Number(shift.total_orders || 0), 0);
+  const active = shiftsData.filter((shift) => shift.status === "active" || !shift.end_time);
+  const closed = shiftsData.length - active.length;
+  const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+  set("shiftsTotalCount", shiftNumber(shiftsData.length));
+  set("shiftsClosedCount", `${shiftNumber(closed)} شيفت مغلق`);
+  set("shiftsActiveCount", shiftNumber(active.length));
+  set("shiftsActiveCashiers", active.length ? active.map((shift) => shift.cashier_name).join("، ") : "لا يوجد كاشير نشط");
+  set("shiftsTotalSales", shiftMoney(totalSales));
+  set("shiftsTotalOrders", shiftNumber(totalOrders));
+  set("shiftsAverageOrder", `متوسط الطلب ${shiftMoney(totalOrders ? totalSales / totalOrders : 0)}`);
+  renderActiveShift(active);
+  renderShiftPerformance();
+  updateCashierFilter();
+  renderShiftsTable();
+}
+
+function renderActiveShift(activeShifts) {
+  const target = document.getElementById("activeShiftContent");
+  const badge = document.getElementById("activeShiftBadge");
+  if (!activeShifts.length) {
+    badge.textContent = "غير نشط"; badge.className = "";
+    target.className = "active_shift_empty"; target.textContent = "لا يوجد شيفت مفتوح حاليًا"; return;
+  }
+  const shift = activeShifts.slice().sort((a, b) => new Date(b.start_time) - new Date(a.start_time))[0];
+  const needsReview = Number(shift.duration_minutes || 0) >= 720;
+  badge.textContent = needsReview ? "يحتاج مراجعة" : "نشط الآن";
+  badge.className = needsReview ? "needs_review" : "active";
+  target.className = "active_shift_content";
+  target.innerHTML = `<div class="active_cashier"><span>الكاشير الحالي</span><strong>${shiftEscape(shift.cashier_name)}</strong><small>بدأ ${shiftTime(shift.start_time)} • ${shiftDuration(shift.duration_minutes)}</small></div><div class="active_shift_metrics"><div><span>الطلبات</span><strong>${shiftNumber(shift.total_orders)}</strong></div><div><span>المبيعات</span><strong>${shiftMoney(shift.total_sales)}</strong></div><div><span>متوسط الطلب</span><strong>${shiftMoney(shift.average_order)}</strong></div></div>`;
+}
+
+function renderShiftPerformance() {
+  const grouped = new Map();
+  shiftsData.forEach((shift) => {
+    const current = grouped.get(shift.cashier_name) || { sales: 0, orders: 0 };
+    current.sales += Number(shift.total_sales || 0); current.orders += Number(shift.total_orders || 0);
+    grouped.set(shift.cashier_name, current);
+  });
+  const rows = [...grouped.entries()].sort((a, b) => b[1].sales - a[1].sales);
+  const max = Math.max(...rows.map(([, value]) => value.sales), 1);
+  const target = document.getElementById("shiftPerformanceList");
+  target.innerHTML = rows.length ? rows.map(([name, value], index) => `<div class="shift_performance_row"><p><span>${index + 1}. ${shiftEscape(name)}</span><strong>${shiftMoney(value.sales)}</strong></p><i><b style="width:${value.sales / max * 100}%"></b></i><small>${shiftNumber(value.orders)} طلب</small></div>`).join("") : '<div class="active_shift_empty">لا توجد بيانات مقارنة</div>';
+}
+
+function updateCashierFilter() {
+  const select = document.getElementById("shiftsCashierFilter");
+  const current = select.value;
+  const names = [...new Set(shiftsData.map((shift) => shift.cashier_name))];
+  select.innerHTML = '<option value="all">كل الكاشيرين</option>' + names.map((name) => `<option value="${shiftEscape(name)}">${shiftEscape(name)}</option>`).join("");
+  if (names.includes(current)) select.value = current;
+}
+
+function renderShiftsTable() {
   const tbody = document.querySelector("#shifts_table tbody");
   if (!tbody) return;
+  const status = document.getElementById("shiftsStatusFilter")?.value || "all";
+  const cashier = document.getElementById("shiftsCashierFilter")?.value || "all";
+  const filtered = shiftsData.filter((shift) => (status === "all" || shift.status === status) && (cashier === "all" || shift.cashier_name === cashier));
+  document.getElementById("shiftsTableCaption").textContent = `عرض ${shiftNumber(filtered.length)} من ${shiftNumber(shiftsData.length)} شيفت`;
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="8" class="shift_empty_cell">لا توجد شيفتات مطابقة للفلاتر</td></tr>'; return; }
+  tbody.innerHTML = filtered.map((shift) => {
+    const active = shift.status === "active" || !shift.end_time;
+    return `<tr><td><span class="shift_status ${active ? "active" : "closed"}">${active ? "نشط" : "مغلق"}</span></td><td><strong>${shiftEscape(shift.cashier_name)}</strong></td><td>${shiftDuration(shift.duration_minutes)}</td><td><span class="shift_times">${shiftTime(shift.start_time)}<i>←</i>${active ? "الآن" : shiftTime(shift.end_time)}</span></td><td>${shiftNumber(shift.total_orders)}</td><td>${shiftMoney(shift.average_order)}</td><td><strong>${shiftMoney(shift.total_sales)}</strong></td><td><button class="shift_details_btn" type="button" data-shift-id="${shift.id}">عرض</button></td></tr>`;
+  }).join("");
+  tbody.querySelectorAll("[data-shift-id]").forEach((button) => button.addEventListener("click", () => openShiftDrawer(Number(button.dataset.shiftId))));
+}
 
-  if (!shifts || shifts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; opacity:0.5;">لا توجد شيفتات مسجلة في هذا اليوم</td></tr>`;
-    return;
-  }
+function openShiftDrawer(id) {
+  selectedShift = shiftsData.find((shift) => Number(shift.id) === id);
+  if (!selectedShift) return;
+  document.getElementById("drawerCashierName").textContent = selectedShift.cashier_name;
+  document.getElementById("shiftDrawerContent").innerHTML = `<div class="drawer_shift_status"><span class="shift_status ${selectedShift.status}">${selectedShift.status === "active" ? "نشط الآن" : "شيفت مغلق"}</span><small>${selectedShift.target_date}</small></div><div class="drawer_metrics"><div><span>بداية الشيفت</span><strong>${shiftTime(selectedShift.start_time)}</strong></div><div><span>نهاية الشيفت</span><strong>${selectedShift.end_time ? shiftTime(selectedShift.end_time) : "مفتوح"}</strong></div><div><span>مدة الشيفت</span><strong>${shiftDuration(selectedShift.duration_minutes)}</strong></div><div><span>إجمالي الطلبات</span><strong>${shiftNumber(selectedShift.total_orders)}</strong></div><div><span>الطلبات الملغية</span><strong>${shiftNumber(selectedShift.cancelled_orders)}</strong></div><div><span>متوسط الطلب</span><strong>${shiftMoney(selectedShift.average_order)}</strong></div><div><span>الخصومات</span><strong>${shiftMoney(selectedShift.total_discount)}</strong></div><div><span>رسوم التوصيل</span><strong>${shiftMoney(selectedShift.total_delivery_fee)}</strong></div></div><div class="drawer_shift_total"><span>صافي مبيعات الشيفت</span><strong>${shiftMoney(selectedShift.total_sales)}</strong></div>`;
+  const drawer = document.getElementById("shiftDetailsDrawer");
+  drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
+}
 
-  tbody.innerHTML = "";
-  shifts.forEach(shift => {
-    const start = shift.start_time ? new Date(shift.start_time).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : "غير محدد";
-    const end = shift.end_time ? new Date(shift.end_time).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : "<span style='color:var(--color-primary);'>نشط الآن</span>";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${shift.cashier_name}</td>
-      <td>${start}</td>
-      <td>${end}</td>
-      <td>${shift.total_orders}</td>
-      <td>${Number(shift.total_sales || 0).toFixed(2)} ج.م</td>
-      <td>${shift.target_date}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+function closeShiftDrawer() {
+  const drawer = document.getElementById("shiftDetailsDrawer");
+  drawer.classList.remove("open"); drawer.setAttribute("aria-hidden", "true");
 }

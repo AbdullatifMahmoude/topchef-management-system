@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260820-header-margin-fix" />
+  <link rel="stylesheet" href="css/admin.css?v=20260820-shifts-date-control" />
 </head>
 
 <body>
@@ -31,8 +31,8 @@
         <button class="side_btn" data-page="categories">التصنيفات</button>
         <button class="side_btn" data-page="delivery">المستخدمين</button>
         <button class="side_btn" data-page="shifts">الشيفتات</button>
-        <button class="side_btn" data-page="reports">التقارير</button>
         <button class="side_btn" data-page="offers">العروض</button>
+        <button class="side_btn" data-page="reports">التقارير</button>
       </div>
       <div class="logo_bottom sidebar_account">
         <h1 class="sidebar_greeting">
@@ -45,50 +45,64 @@
     </div>
 
     <div class="page-content" id="page-home" style="display: none">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-direction: row-reverse;">
-        <div class="title">
-          <h1 style="margin:0; color: #ffff; text-align: right;">الرئيسية</h1>
-          <p style="margin:4px 0 0 0; font-size:12px; opacity:0.6; color: #f0e6cc;">إحصائيات وطلبات اليوم مباشرة</p>
+      <section class="ops_dashboard" aria-labelledby="ops_dashboard_title">
+        <header class="ops_header">
+          <div><p>غرفة العمليات</p><h1 id="ops_dashboard_title">متابعة تشغيل اليوم</h1><span id="ops_business_date">نظرة مباشرة على أداء المطعم</span></div>
+          <div class="ops_live_area">
+            <strong id="ops_current_time">--:--</strong>
+            <div id="ws_status_badge"><i id="ws_status_dot"></i><span id="ws_status_text">جاري الاتصال...</span></div>
+          </div>
+        </header>
+
+        <div class="ops_kpis">
+          <article class="ops_kpi ops_kpi_primary"><span>صافي مبيعات اليوم</span><strong id="stat_total_sales">0 ج.م</strong><small>بدون رسوم التوصيل</small></article>
+          <article class="ops_kpi"><span>إجمالي الطلبات</span><strong id="stat_total_orders">0</strong><small id="ops_orders_mix">لا توجد طلبات بعد</small></article>
+          <article class="ops_kpi"><span>متوسط قيمة الطلب</span><strong id="ops_average_order">0 ج.م</strong><small>للطلب غير الملغي</small></article>
+          <article class="ops_kpi"><span>معدل نجاح الطلبات</span><strong id="ops_success_rate">0%</strong><small id="ops_cancel_summary">0 طلب ملغي</small></article>
         </div>
-        <div id="ws_status_badge" style="display:flex; align-items:center; gap:8px; background: rgba(255,255,255,0.05); padding: 6px 12px; border-radius: 20px; font-size: 11px;">
-           <div id="ws_status_dot" style="width:8px; height:8px; border-radius:50%; background: #999;"></div>
-           <span id="ws_status_text" style="color: #ffff;">جاري الاتصال...</span>
+
+        <div class="ops_grid">
+          <article class="ops_panel ops_now_panel">
+            <div class="ops_panel_header"><div><h2>التشغيل الآن</h2><p>ما يحتاج انتباهك في اللحظة الحالية</p></div><span class="ops_pulse">مباشر</span></div>
+            <div class="ops_now_stats">
+              <div><strong id="stat_active_orders">0</strong><span>طلبات نشطة</span></div>
+              <div><strong id="ops_new_orders">0</strong><span>جديدة</span></div>
+              <div><strong id="ops_confirmed_orders">0</strong><span>قيد التجهيز</span></div>
+            </div>
+            <div id="ops_attention" class="ops_attention is_clear"><strong>التشغيل مستقر</strong><span>لا توجد طلبات متأخرة حاليًا</span></div>
+          </article>
+
+          <article class="ops_panel">
+            <div class="ops_panel_header"><div><h2>قنوات البيع</h2><p>توزيع طلبات اليوم حسب النوع</p></div></div>
+            <div id="ops_channels" class="ops_channels"></div>
+          </article>
+
+          <article class="ops_panel ops_actions_panel">
+            <div class="ops_panel_header"><div><h2>تحكم سريع</h2><p>اختصارات إدارة اليوم</p></div></div>
+            <div class="ops_quick_actions">
+              <button type="button" data-ops-page="shifts"><span>الشيفتات</span><small>متابعة الوردية</small></button>
+              <button type="button" data-ops-page="items"><span>الأصناف</span><small>التوفر والأسعار</small></button>
+              <button type="button" data-ops-page="offers"><span>العروض</span><small>إدارة العروض</small></button>
+              <button type="button" data-ops-page="reports"><span>التقارير</span><small>تحليل الأداء</small></button>
+            </div>
+          </article>
+
+          <article class="ops_panel ops_alerts_panel">
+            <div class="ops_panel_header"><div><h2>تنبيهات اليوم</h2><p>أحداث تستحق المراجعة</p></div><strong id="ops_alerts_count">0</strong></div>
+            <div id="ops_alerts" class="ops_alerts"><div class="ops_empty_state">لا توجد تنبيهات</div></div>
+          </article>
         </div>
-      </div>
-      
-      <div class="container1">
-        <div class="card">
-          <h1>عدد الطلبات</h1>
-          <h2 id="stat_total_orders">0</h2>
-          <span id="stat_total_orders_trend">--</span>
+
+        <div class="ops_orders_header">
+          <div><h2>حركة الطلبات</h2><p id="ops_orders_caption">آخر طلبات يوم العمل</p></div>
+          <div class="ops_order_filters" role="group" aria-label="فلترة الطلبات">
+            <button class="active" type="button" data-order-filter="all">الكل</button>
+            <button type="button" data-order-filter="active">النشطة</button>
+            <button type="button" data-order-filter="completed">المكتملة</button>
+            <button type="button" data-order-filter="cancelled">الملغية</button>
+          </div>
         </div>
-        <div class="card">
-          <h1>إجمالي المبيعات اليوم</h1>
-          <h2 id="stat_total_sales">0 ج.م</h2>
-          <span id="stat_total_sales_trend">--</span>
-        </div>
-        <div class="card">
-          <h1>أكتر صنف مبيعا</h1>
-          <h2 id="stat_top_product">---</h2>
-          <span id="stat_top_product_count">0 طلب</span>
-        </div>
-      </div>
-      <div class="container2">
-        <div class="card">
-          <h1>الطلبات المكتمله</h1>
-          <h2 id="stat_completed_orders">0</h2>
-        </div>
-        <div class="card">
-          <h1>الطلبات الملغية</h1>
-          <h2 id="stat_cancelled_orders">0</h2>
-          <span id="stat_cancelled_trend">--</span>
-        </div>
-        <div class="card">
-          <h1>الطلبات الجاريه</h1>
-          <h2 id="stat_active_orders">0</h2>
-        </div>
-      </div>
-      <div class="table_structure_unified">
+        <div class="table_structure_unified ops_orders_table_wrap">
         <div class="table_scroll_unified">
           <table class="orders_table" id="home_orders_table">
             <thead>
@@ -109,6 +123,7 @@
           </table>
         </div>
       </div>
+      </section>
     </div>
 
     <!-- ===== صفحة إدارة الأصناف ===== -->
@@ -330,34 +345,53 @@
 
     <!-- ===== صفحة الشيفتات ===== -->
     <div class="page-content" id="page-shifts" style="display: none">
-      <div class="title_btn">
-        <div class="title">
-          <h1>تسليم شيفتات الكاشير</h1>
-          <h2>متابعة دخول وخروج وأداء كل كاشير خلال يوم العمل</h2>
+      <section class="shifts_workspace" aria-labelledby="shifts_page_title">
+        <header class="shifts_header">
+          <div><p>الرقابة التشغيلية</p><h1 id="shifts_page_title">إدارة وتسليم الشيفتات</h1><span>متابعة أداء الكاشير وحركة يوم العمل</span></div>
+          <div class="shifts_date_filter">
+            <input type="date" id="shiftsDateFilter" />
+            <button id="shiftsDateBtn" type="button">عرض اليوم</button>
+          </div>
+        </header>
+
+        <div class="shifts_kpis">
+          <article><span>إجمالي الشيفتات</span><strong id="shiftsTotalCount">0</strong><small id="shiftsClosedCount">0 شيفت مغلق</small></article>
+          <article class="is_active"><span>الشيفتات النشطة</span><strong id="shiftsActiveCount">0</strong><small id="shiftsActiveCashiers">لا يوجد كاشير نشط</small></article>
+          <article><span>مبيعات الشيفتات</span><strong id="shiftsTotalSales">0 ج.م</strong><small>صافي بدون التوصيل</small></article>
+          <article><span>إجمالي الطلبات</span><strong id="shiftsTotalOrders">0</strong><small id="shiftsAverageOrder">متوسط الطلب 0 ج.م</small></article>
         </div>
-        <div class="custom-date-filter" style="display: flex; gap: 10px; align-items: center;">
-          <input type="date" id="shiftsDateFilter" style="background: transparent; color: var(--color-text, #fff); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 5px 10px; outline: none; font-size: 14px; font-weight: bold; cursor: pointer; color-scheme: dark;" />
-          <button id="shiftsDateBtn" style="background-color: var(--color-primary); color: #000; border: none; border-radius: 8px; padding: 5px 15px; font-weight: bold; cursor: pointer; height: 35px;">بحث</button>
+
+        <div class="shifts_grid">
+          <article class="shift_focus_panel">
+            <div class="shift_panel_heading"><div><h2>الشيفت النشط الآن</h2><p>ملخص الوردية الحالية</p></div><span id="activeShiftBadge">غير نشط</span></div>
+            <div id="activeShiftContent" class="active_shift_empty">لا يوجد شيفت مفتوح حاليًا</div>
+          </article>
+          <article class="shift_focus_panel">
+            <div class="shift_panel_heading"><div><h2>مقارنة الأداء</h2><p>ترتيب الكاشير حسب المبيعات</p></div></div>
+            <div id="shiftPerformanceList" class="shift_performance_list"><div class="active_shift_empty">لا توجد بيانات</div></div>
+          </article>
         </div>
-      </div>
-      <div class="table_structure_unified">
-        <div class="table_scroll_unified">
-          <table class="orders_table" id="shifts_table">
-            <thead>
-              <tr class="no_borer_bottom">
-                <th>اسم الكاشير</th>
-                <th>بداية الشيفت</th>
-                <th>نهاية الشيفت</th>
-                <th>عدد الطلبات</th>
-                <th>المبيعات</th>
-                <th>التاريخ (يوم العمل)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="6" style="text-align:center; padding:20px; opacity:0.5;">جاري التحميل...</td></tr>
-            </tbody>
-          </table>
+
+        <div class="shifts_table_heading">
+          <div><h2>سجل الشيفتات</h2><p id="shiftsTableCaption">كل شيفتات يوم العمل المحدد</p></div>
+          <div class="shifts_filters">
+            <select id="shiftsStatusFilter"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="closed">مغلق</option></select>
+            <select id="shiftsCashierFilter"><option value="all">كل الكاشيرين</option></select>
+          </div>
         </div>
+        <div class="table_structure_unified shifts_table_wrap">
+          <div class="table_scroll_unified">
+            <table class="orders_table" id="shifts_table">
+              <thead><tr><th>الحالة</th><th>الكاشير</th><th>المدة</th><th>البداية / النهاية</th><th>الطلبات</th><th>متوسط الطلب</th><th>المبيعات</th><th>التفاصيل</th></tr></thead>
+              <tbody><tr><td colspan="8" class="shift_empty_cell">جاري التحميل...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <div id="shiftDetailsDrawer" class="shift_drawer" aria-hidden="true">
+        <button id="closeShiftDrawer" class="shift_drawer_backdrop" type="button" aria-label="إغلاق"></button>
+        <aside><div class="shift_drawer_header"><div><p>تفاصيل الوردية</p><h2 id="drawerCashierName">—</h2></div><button id="closeShiftDrawerBtn" type="button">×</button></div><div id="shiftDrawerContent"></div><button id="printShiftBtn" class="print_shift_btn" type="button">طباعة تسليم الشيفت</button></aside>
       </div>
     </div>
 
@@ -707,10 +741,10 @@
     <script src="js/category.js"></script>
     <script src="js/delivery.js"></script>
     <script src="js/offer.js"></script>
-    <script src="js/shifts.js"></script>
+    <script src="js/shifts.js?v=20260820-shifts-control"></script>
 
     <script src="js/chart.js?v=20260820-report-print-all"></script>
-    <script src="js/orders_dashboard.js"></script>
+    <script src="js/orders_dashboard.js?v=20260820-operations-dashboard"></script>
     <script src="js/admin.js?v=20260820-cloud-only"></script>
     <script>
       // ===== عرض اسم المستخدم =====

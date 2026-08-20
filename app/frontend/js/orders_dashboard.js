@@ -5,6 +5,8 @@
   let ordersList = [];
   let socket = null;
   let reconnectTimer = null;
+  let latestStats = {};
+  let currentOrderFilter = "all";
 
   function displayOrderNumber(orderNumber, fallback = "---") {
     const value = orderNumber ?? fallback;
@@ -14,15 +16,16 @@
 
   let productCache = {};
 
+  async function loadDashboardStats() {
+    const statsRes = await apiFetch("/orders/dashboard/stats", { hideLoader: true });
+    if (statsRes.ok) updateStatsUI(await statsRes.json());
+  }
+
   // ===== INITIAL LOAD =====
   async function loadDashboardData() {
     try {
       // 1. Fetch Stats
-      const statsRes = await apiFetch("/orders/dashboard/stats", { hideLoader: true });
-      if (statsRes.ok) {
-        const stats = await statsRes.json();
-        updateStatsUI(stats);
-      }
+      await loadDashboardStats();
 
       // 2. Ensure Products are loaded for naming
       if (Object.keys(productCache).length === 0) {
@@ -39,6 +42,7 @@
         const data = await ordersRes.json();
         ordersList = data.orders || [];
         renderOrdersTable();
+        updateOperationalUI();
       }
     } catch (err) {
       console.error("Dashboard load failed:", err);
@@ -50,12 +54,22 @@
     const tbody = document.querySelector("#home_orders_table tbody");
     if (!tbody) return;
 
-    if (ordersList.length === 0) {
+    const filteredOrders = ordersList.filter((order) => {
+      if (currentOrderFilter === "active") return ["new", "confirmed"].includes(order.order_status);
+      if (currentOrderFilter === "completed") return ["completed", "delivered"].includes(order.order_status);
+      if (currentOrderFilter === "cancelled") return order.order_status === "cancelled";
+      return true;
+    }).slice(0, 15);
+
+    const caption = document.getElementById("ops_orders_caption");
+    if (caption) caption.textContent = `عرض ${filteredOrders.length} من ${ordersList.length} طلب في يوم العمل`;
+
+    if (filteredOrders.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px; opacity:0.5;">لا توجد طلبات لهذا اليوم حتى الآن</td></tr>';
       return;
     }
 
-    tbody.innerHTML = ordersList.map(order => {
+    tbody.innerHTML = filteredOrders.map(order => {
       const statusObj = getStatusInfo(order.order_status);
       const timeStr = formatOrderTime(order.created_at);
       let updatedTimeStr = "";
@@ -80,6 +94,7 @@
 
   // ===== UPDATE STATS =====
   function updateStatsUI(stats) {
+    latestStats = stats || {};
     const els = {
       total_orders: document.getElementById("stat_total_orders"),
       total_sales: document.getElementById("stat_total_sales"),
@@ -93,6 +108,68 @@
     if (els.completed)    els.completed.textContent = stats.completed_count;
     if (els.cancelled)    els.cancelled.textContent = stats.cancelled_count;
     if (els.active)       els.active.textContent = stats.active_count;
+    const successful = Number(stats.total_count || 0) - Number(stats.cancelled_count || 0);
+    const average = successful ? Number(stats.total_sales || 0) / successful : 0;
+    const successRate = stats.total_count ? successful / Number(stats.total_count) * 100 : 0;
+    const averageEl = document.getElementById("ops_average_order");
+    const successEl = document.getElementById("ops_success_rate");
+    const cancelEl = document.getElementById("ops_cancel_summary");
+    if (averageEl) averageEl.textContent = average.toLocaleString("ar-EG", { maximumFractionDigits: 2 }) + " ج.م";
+    if (successEl) successEl.textContent = successRate.toLocaleString("ar-EG", { maximumFractionDigits: 1 }) + "%";
+    if (cancelEl) cancelEl.textContent = `${Number(stats.cancelled_count || 0).toLocaleString("ar-EG")} طلب ملغي`;
+    updateOperationalUI();
+  }
+
+  function normalizeOrderType(value) {
+    const type = String(value || "").toUpperCase();
+    if (type.includes("HALL") || type.includes("DINE_IN")) return "صالة";
+    if (type.includes("TAKEAWAY") || type.includes("TAKE_AWAY")) return "تيك أواي";
+    if (type.includes("DELIVERY")) return "دليفري";
+    if (type.includes("ONLINE")) return "أون لاين";
+    return "أخرى";
+  }
+
+  function updateOperationalUI() {
+    const active = ordersList.filter((order) => ["new", "confirmed"].includes(order.order_status));
+    const newOrders = active.filter((order) => order.order_status === "new");
+    const confirmed = active.filter((order) => order.order_status === "confirmed");
+    const now = Date.now();
+    const delayed = active.map((order) => ({
+      order,
+      minutes: order.created_at ? Math.max(0, Math.floor((now - new Date(order.created_at).getTime()) / 60000)) : 0,
+    })).filter((entry) => entry.minutes >= 20).sort((a, b) => b.minutes - a.minutes);
+
+    const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    setText("ops_new_orders", newOrders.length.toLocaleString("ar-EG"));
+    setText("ops_confirmed_orders", confirmed.length.toLocaleString("ar-EG"));
+    setText("ops_orders_mix", `${Number(latestStats.completed_count || 0).toLocaleString("ar-EG")} مكتمل • ${active.length.toLocaleString("ar-EG")} نشط`);
+
+    const attention = document.getElementById("ops_attention");
+    if (attention) {
+      if (delayed.length) {
+        attention.className = "ops_attention is_warning";
+        attention.innerHTML = `<strong>${delayed.length.toLocaleString("ar-EG")} طلب متأخر</strong><span>أقدم طلب منتظر منذ ${delayed[0].minutes.toLocaleString("ar-EG")} دقيقة</span>`;
+      } else {
+        attention.className = "ops_attention is_clear";
+        attention.innerHTML = "<strong>التشغيل مستقر</strong><span>لا توجد طلبات متأخرة حاليًا</span>";
+      }
+    }
+
+    const channelCounts = {};
+    ordersList.forEach((order) => { const key = normalizeOrderType(order.order_type); channelCounts[key] = (channelCounts[key] || 0) + 1; });
+    const channels = ["صالة", "تيك أواي", "دليفري", "أون لاين"];
+    const maxChannel = Math.max(...channels.map((key) => channelCounts[key] || 0), 1);
+    const channelsEl = document.getElementById("ops_channels");
+    if (channelsEl) channelsEl.innerHTML = channels.map((label, index) => `<div><p><span>${label}</span><strong>${(channelCounts[label] || 0).toLocaleString("ar-EG")}</strong></p><i><b style="width:${(channelCounts[label] || 0) / maxChannel * 100}%;--channel-color:${["#f1c75b", "#4fb3bf", "#9b7de3", "#eb8f62"][index]}"></b></i></div>`).join("");
+
+    const cancelled = ordersList.filter((order) => order.order_status === "cancelled").slice(0, 3);
+    const alerts = [
+      ...delayed.slice(0, 4).map((entry) => ({ type: "warning", title: `طلب #${displayOrderNumber(entry.order.order_number, entry.order.id)} متأخر`, detail: `${entry.minutes} دقيقة انتظار` })),
+      ...cancelled.map((order) => ({ type: "danger", title: `تم إلغاء الطلب #${displayOrderNumber(order.order_number, order.id)}`, detail: formatOrderTime(order.updated_at || order.created_at) })),
+    ];
+    setText("ops_alerts_count", alerts.length.toLocaleString("ar-EG"));
+    const alertsEl = document.getElementById("ops_alerts");
+    if (alertsEl) alertsEl.innerHTML = alerts.length ? alerts.map((alert) => `<div class="ops_alert ${alert.type}"><i></i><div><strong>${alert.title}</strong><span>${alert.detail}</span></div></div>`).join("") : '<div class="ops_empty_state">لا توجد تنبيهات تحتاج تدخلك</div>';
   }
 
   function updateConnectionStatus(status) {
@@ -163,7 +240,8 @@
     if (type === "ORDER_SNAPSHOT") {
         ordersList = data.orders || [];
         renderOrdersTable();
-        setTimeout(loadDashboardData, 500); 
+        updateOperationalUI();
+        setTimeout(loadDashboardStats, 300);
         return;
     }
 
@@ -173,6 +251,7 @@
         if (!ordersList.find(o => o.id === data.id)) {
           ordersList.unshift(data);
           renderOrdersTable();
+          updateOperationalUI();
           highlightRow(data.id);
         }
       } else {
@@ -180,15 +259,14 @@
         if (idx !== -1) {
           ordersList[idx] = { ...ordersList[idx], ...data };
           renderOrdersTable();
+          updateOperationalUI();
           highlightRow(data.id);
         } else {
           setTimeout(loadDashboardData, 500);
         }
       }
       // Always refresh stats if something changed
-      if (document.getElementById("page-home")) {
-        setTimeout(loadDashboardData, 500);
-      }
+      if (document.getElementById("page-home")) setTimeout(loadDashboardStats, 300);
     }
 
     // Refresh Products Page
@@ -275,6 +353,25 @@
 
   // ===== INIT =====
   document.addEventListener("DOMContentLoaded", () => {
+    const clock = () => {
+      const now = new Date();
+      const timeEl = document.getElementById("ops_current_time");
+      const dateEl = document.getElementById("ops_business_date");
+      if (timeEl) timeEl.textContent = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+      if (dateEl) dateEl.textContent = now.toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    };
+    clock();
+    setInterval(clock, 30000);
+    document.querySelectorAll("[data-order-filter]").forEach((button) => button.addEventListener("click", () => {
+      document.querySelectorAll("[data-order-filter]").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      currentOrderFilter = button.dataset.orderFilter;
+      renderOrdersTable();
+    }));
+    document.querySelectorAll("[data-ops-page]").forEach((button) => button.addEventListener("click", () => {
+      if (typeof window.showPage === "function") window.showPage(button.dataset.opsPage);
+      else if (typeof showPage === "function") showPage(button.dataset.opsPage);
+    }));
     // Connect WebSocket globally
     setupWebSocket();
 
