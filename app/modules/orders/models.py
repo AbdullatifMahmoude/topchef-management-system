@@ -106,6 +106,7 @@ class Order(Base):
         Index('idx_order_created', 'created_at'),
         Index('idx_order_number_date', 'order_number', 'order_date', unique=True),
         Index('idx_order_date_source', 'order_date', 'order_source'),
+        Index('idx_order_date_created_at', 'order_date', 'created_at'),
         # Index مخصوص للتقارير - بيسرع الـ aggregation بتاعة الشهري والسنوي
         Index('idx_order_date_status', 'order_date', 'order_status'),
     )
@@ -126,7 +127,7 @@ class Order(Base):
 class OrderItem(Base):
     __tablename__ = "order_items"
     id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     quantity = Column(Integer, default=1, nullable=False)
     unit_price = Column(Numeric(10,2), nullable=False)

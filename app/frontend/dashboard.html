@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260820-sidebar-scroll-v3" />
+  <link rel="stylesheet" href="css/admin.css?v=20260820-header-margin-fix" />
 </head>
 
 <body>
@@ -363,135 +363,101 @@
 
     <!-- ===== صفحة التقارير ===== -->
     <div class="page-content" id="page-reports" style="display: none">
-      <div class="reports_btn" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-        <button id="yearlyBtn" class="filter-btn" data-period="year">
-          سنوي
-        </button>
-        <button id="monthlyBtn" class="filter-btn" data-period="month">
-          شهري
-        </button>
-        <button id="weeklyBtn" class="filter-btn" data-period="week">
-          أسبوعي
-        </button>
-        <button id="dailyBtn" class="filter-btn" data-period="day">
-          يومي
-        </button>
-        <div class="custom-date-filter" style="display: flex; gap: 10px; align-items: center; margin-right: auto; padding: 0 10px; border-radius: 15px; border: 1px solid var(--color-primary-border); height: 50px; backdrop-filter: blur(20px); background-color: transparent;">
-          <input type="date" id="customStartDate" style="background: transparent; color: var(--color-text); border: none; outline: none; font-size: 16px; font-weight: bold; cursor: pointer; color-scheme: dark;" />
-          <span style="color: var(--color-text); font-weight: bold; font-size: 18px;">إلى</span>
-          <input type="date" id="customEndDate" style="background: transparent; color: var(--color-text); border: none; outline: none; font-size: 16px; font-weight: bold; cursor: pointer; color-scheme: dark;" />
-          <button id="customDateBtn" style="background-color: var(--color-primary); color: white; border: 1px solid var(--color-primary-border); border-radius: 10px; padding: 5px 15px; font-weight: bold; cursor: pointer; height: 35px;">بحث</button>
+      <section class="reports_workspace" aria-labelledby="reports_heading">
+        <header class="reports_header">
+          <div class="reports_header_copy">
+            <p class="reports_eyebrow">لوحة التحليلات</p>
+            <h1 id="reports_heading">تقارير المبيعات</h1>
+            <p class="title_report">ملخص أداء يوم العمل الحالي</p>
+          </div>
+          <button id="printBtn" class="reports_print_btn" type="button">طباعة التقرير</button>
+        </header>
+
+        <div class="reports_filters">
+          <div class="reports_periods" aria-label="الفترة الزمنية">
+            <button id="dailyBtn" class="filter-btn active_report" data-period="day">يومي</button>
+            <button id="weeklyBtn" class="filter-btn" data-period="week">أسبوعي</button>
+            <button id="monthlyBtn" class="filter-btn" data-period="month">شهري</button>
+            <button id="yearlyBtn" class="filter-btn" data-period="year">سنوي</button>
+          </div>
+          <div class="custom-date-filter">
+            <label>من <input type="date" id="customStartDate" /></label>
+            <label>إلى <input type="date" id="customEndDate" /></label>
+            <button id="customDateBtn" type="button">تطبيق</button>
+          </div>
         </div>
-      </div>
-      <div class="container1_reports">
-        <div class="card_reports">
-          <h1>إجمالي المبيعات</h1>
-          <h2 id="total_revenue_value">0 ج.م</h2>
-          <span>25% من امس</span>
+
+        <div id="reportsLoading" class="reports_loading" role="status" hidden>جاري تحميل بيانات التقرير...</div>
+        <div id="reportsError" class="reports_error" role="alert" hidden></div>
+
+        <div class="reports_kpis">
+          <div class="report_kpi report_kpi_primary"><span>صافي المبيعات</span><strong id="total_revenue_value">0 ج.م</strong></div>
+          <div class="report_kpi"><span>إجمالي الطلبات</span><strong id="total_orders_value">0</strong></div>
+          <div class="report_kpi"><span>متوسط الطلب</span><strong id="average_order_value">0 ج.م</strong></div>
+          <div class="report_kpi"><span>نسبة الإتمام</span><strong id="completion_rate_value">0%</strong></div>
         </div>
-        <div class="card_reports">
-          <h1>إجمالي الطلبات</h1>
-          <h2 id="total_orders_value">0 طلب</h2>
-          <span>25% من امس</span>
+
+        <div class="reports_charts_grid">
+          <article class="report_chart report_chart_wide">
+            <div class="report_chart_heading"><div><span>اتجاه المبيعات</span><small>صافي قيمة الطلبات عبر الفترة</small></div><strong id="chart_revenue_total">0 ج.م</strong></div>
+            <div id="revenueTrendChart" class="report_chart_canvas" aria-label="رسم اتجاه المبيعات"></div>
+          </article>
+          <article class="report_chart">
+            <div class="report_chart_heading"><div><span>حالة الطلبات</span><small>مكتمل مقابل ملغي</small></div></div>
+            <div class="report_donut_layout">
+              <div id="ordersStatusChart" class="report_donut"><span id="donut_rate">0%</span><small>مكتمل</small></div>
+              <div class="report_legend">
+                <p><i class="legend_success"></i> مكتملة <strong id="successful_orders_value">0</strong></p>
+                <p><i class="legend_cancelled"></i> ملغية <strong id="cancelled_orders_value">0</strong></p>
+              </div>
+            </div>
+          </article>
+          <article class="report_chart">
+            <div class="report_chart_heading"><div><span>أنواع الطلبات</span><small>توزيع قنوات البيع</small></div></div>
+            <div id="orderTypesChart" class="report_bars" aria-label="رسم أنواع الطلبات"></div>
+          </article>
+          <article class="report_chart">
+            <div class="report_chart_heading"><div><span>تفاصيل الإيراد</span><small>المبيعات والخصومات ورسوم التوصيل</small></div></div>
+            <div id="financialBreakdownChart" class="report_bars report_bars_financial" aria-label="رسم تفاصيل الإيراد"></div>
+          </article>
+          <article class="report_chart">
+            <div class="report_chart_heading"><div><span>ساعات الذروة</span><small>أكثر أوقات اليوم استقبالًا للطلبات</small></div><strong id="peakHourLabel">—</strong></div>
+            <div id="peakHoursChart" class="report_bars" aria-label="رسم ساعات الذروة"></div>
+          </article>
+          <article class="report_chart report_chart_wide report_top_items">
+            <div class="report_chart_heading"><div><span>الأصناف الأكثر طلبًا</span><small>أعلى 5 أصناف بالكمية خلال الفترة</small></div></div>
+            <div id="topItemsChart" class="report_bars" aria-label="رسم الأصناف الأكثر طلبًا"></div>
+          </article>
         </div>
-        <div class="card_reports">
-          <h1>متوسط قيمة الطلب</h1>
-          <h2 id="average_order_value">0 ج.م</h2>
-          <span>50 طلب</span>
-        </div>
-      </div>
-      <div class="container2_reports">
-        <div class="card_reports">
-          <h1>عدد الطلبات الملغية</h1>
-          <h2 id="cancelled_orders_value">0 طلب</h2>
-        </div>
-        <div class="card_reports">
-          <h1>عدد الطلبات المكتملة</h1>
-          <h2 id="successful_orders_value">0 طلب</h2>
-          <span>5% من امس</span>
-        </div>
-        <div class="card_reports">
-          <h1>أكتر تصنف مبيعا</h1>
-          <h2>السندوتشات</h2>
-          <span>50 طلب</span>
-        </div>
-      </div>
-      <div class="container3_reports">
-        <div class="card_reports">
-          <h1>عدد طلبات الدليفري</h1>
-          <h2>50 طلب</h2>
-          <span>15% من امس</span>
-        </div>
-        <div class="card_reports">
-          <h1>عدد اقل الاصناف مبيعا</h1>
-          <h2>5 صنف</h2>
-        </div>
-        <div class="card_reports">
-          <h1>اقل التصنيفات مبيعا</h1>
-          <h2>1 تصنيف</h2>
-        </div>
-      </div>
-      <div class="reports_modal">
-        <div class="exit_reports_modal">
-          <img src="/assets/Export.png" alt="" />
-        </div>
-        <div class="title_report"></div>
-        <div class="logo_report">
-          <img src="/assets/توب شيف 1@2x.png" alt="" />
-        </div>
-        <!-- <div class="reports_modal_container">
-            <canvas id="itemsChart"></canvas>
-            <canvas id="categoriesChart"></canvas>
-          </div> -->
-        <div class="table_structure_reports">
-          <div class="reports_table_scroll">
-            <table class="orders_table_reports">
+
+        <section class="reports_orders_section">
+          <div class="reports_orders_header">
+            <div><h2>تفاصيل الطلبات</h2><p id="reports_orders_count">0 طلب في الفترة المحددة</p></div>
+          </div>
+          <div class="table_structure_reports">
+            <div class="reports_table_scroll">
+              <table class="orders_table_reports">
             <thead>
               <tr>
                 <th>رقم الطلب</th>
                 <th>نوع الطلب</th>
-                <th>الاصناف</th>
-                <th>المجموع</th>
+                <th>الحالة</th>
+                <th>الإجمالي</th>
+                <th>التاريخ</th>
                 <th>الوقت</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td>#5</td>
-                <td>صالة</td>
-                <td>2 كبدة , 3 كفته</td>
-                <td>200ج</td>
-                <td>10:30م</td>
-              </tr>
-              <tr>
-                <td>#5</td>
-                <td>دليفري</td>
-                <td>2 كبدة , 3 كفته</td>
-                <td>200ج</td>
-                <td>10:30م</td>
-              </tr>
-              <tr>
-                <td>#5</td>
-                <td>اون لاين</td>
-                <td>2 كبدة , 3 كفته</td>
-                <td>200ج</td>
-                <td>10:30م</td>
-              </tr>
-              <tr class="final_row">
-                <td>#4</td>
-                <td>دليفري</td>
-                <td>1 كبدة , 2 كفته</td>
-                <td>150ج</td>
-                <td>9:45م</td>
-              </tr>
-            </tbody>
-            </table>
+            <tbody><tr><td colspan="6" class="reports_empty">اختر فترة لعرض الطلبات</td></tr></tbody>
+              </table>
+            </div>
           </div>
-        </div>
-        <div class="printBtn">
-          <button id="printBtn">طباعة التقرير</button>
-        </div>
-      </div>
+          <div class="reports_pagination" aria-label="صفحات الطلبات">
+            <button id="reportsPrevPage" type="button" disabled>السابق</button>
+            <span id="reportsPageInfo">صفحة 1 من 1</span>
+            <button id="reportsNextPage" type="button" disabled>التالي</button>
+          </div>
+        </section>
+      </section>
     </div>
 
     <!-- ===== صفحة العروض ===== -->
@@ -743,7 +709,7 @@
     <script src="js/offer.js"></script>
     <script src="js/shifts.js"></script>
 
-    <script src="js/chart.js?v=20260712-reports-fix"></script>
+    <script src="js/chart.js?v=20260820-report-print-all"></script>
     <script src="js/orders_dashboard.js"></script>
     <script src="js/admin.js?v=20260820-cloud-only"></script>
     <script>

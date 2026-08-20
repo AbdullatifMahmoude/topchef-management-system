@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import date
 from decimal import Decimal
@@ -18,32 +18,52 @@ class OrderReportItem(BaseModel):
     order_type: str
     items_summary: str
     total_amount: Decimal
+    order_date: Optional[date] = None
     created_at_time: str
+    status: str = "completed"
 
-class DailyReportResponse(BaseModel):
-    report_date: date
+class TopSellingItem(BaseModel):
+    name: str
+    quantity: int
+    revenue: Decimal
+
+class RevenueTrendPoint(BaseModel):
+    period_date: date
+    revenue: Decimal
+
+class ActivityBreakdownPoint(BaseModel):
+    order_type: str
+    hour: int
+    count: int
+
+class ReportDataMixin(BaseModel):
     summary: ReportSummary
-    orders: List[OrderReportItem] = []
+    orders: List[OrderReportItem] = Field(default_factory=list)
+    orders_offset: int = 0
+    orders_limit: int = 50
+    top_items: List[TopSellingItem] = Field(default_factory=list)
+    revenue_trend: List[RevenueTrendPoint] = Field(default_factory=list)
+    activity_breakdown: List[ActivityBreakdownPoint] = Field(default_factory=list)
 
-class WeeklyReportResponse(BaseModel):
+class ReportOrdersPage(BaseModel):
+    orders: List[OrderReportItem] = Field(default_factory=list)
+    offset: int
+    limit: int
+
+class DailyReportResponse(ReportDataMixin):
+    report_date: date
+
+class WeeklyReportResponse(ReportDataMixin):
     start_date: date
     end_date: date
-    summary: ReportSummary
-    orders: List[OrderReportItem] = []
 
-class MonthlyReportResponse(BaseModel):
+class MonthlyReportResponse(ReportDataMixin):
     year: int
     month: int
-    summary: ReportSummary
-    orders: List[OrderReportItem] = []
 
-class YearlyReportResponse(BaseModel):
+class YearlyReportResponse(ReportDataMixin):
     year: int
-    summary: ReportSummary
-    orders: List[OrderReportItem] = []
 
-class CustomReportResponse(BaseModel):
+class CustomReportResponse(ReportDataMixin):
     start_date: date
     end_date: date
-    summary: ReportSummary
-    orders: List[OrderReportItem] = []
