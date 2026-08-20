@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 
 from app.modules.shifts.models import CashierShift
 from app.modules.orders.models import Order
-from app.core.enums import UserRole, OrderStatus, OrderStatus
+from app.core.enums import OrderStatus, PaymentMethod
 from app.core.logging import logger
 
 def get_business_date() -> date:
@@ -99,6 +99,7 @@ class ShiftsService:
             Order.total_amount,
             Order.delivery_fee,
             Order.discount_amount,
+            Order.payment_method,
         ).where(
             Order.created_at >= start_local,
             Order.created_at < end_local,
@@ -140,6 +141,21 @@ class ShiftsService:
             total_sales = sum((order.total_amount or 0) - (order.delivery_fee or 0) for order in successful)
             total_discount = sum((order.discount_amount or 0) for order in successful)
             total_delivery_fee = sum((order.delivery_fee or 0) for order in successful)
+            payment_sales = {
+                method.value: sum(
+                    (order.total_amount or 0)
+                    for order in successful
+                    if order.payment_method == method
+                )
+                for method in PaymentMethod
+            }
+            opening_cash = shift.opening_cash or 0
+            cash_expenses = shift.cash_expenses or 0
+            expected_cash = opening_cash + payment_sales[PaymentMethod.CASH.value] - cash_expenses
+            cash_difference = (
+                (shift.actual_closing_cash - expected_cash)
+                if shift.actual_closing_cash is not None else None
+            )
             duration_end = shift_time_to_local(shift.end_time) or datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
             duration_minutes = max(0, int((duration_end - shift_start_local).total_seconds() // 60))
             report.append({
@@ -155,6 +171,15 @@ class ShiftsService:
                 "average_order": float(total_sales / len(successful)) if successful else 0.0,
                 "total_discount": float(total_discount),
                 "total_delivery_fee": float(total_delivery_fee),
+                "cash_sales": float(payment_sales[PaymentMethod.CASH.value]),
+                "instapay_sales": float(payment_sales[PaymentMethod.INSTAPAY.value]),
+                "wallet_sales": float(payment_sales[PaymentMethod.WALLET.value]),
+                "opening_cash": float(opening_cash),
+                "cash_expenses": float(cash_expenses),
+                "expected_cash": float(expected_cash),
+                "actual_closing_cash": float(shift.actual_closing_cash) if shift.actual_closing_cash is not None else None,
+                "cash_difference": float(cash_difference) if cash_difference is not None else None,
+                "closing_note": shift.closing_note,
                 "duration_minutes": duration_minutes,
                 "status": "active" if shift.end_time is None else "closed",
                 "target_date": shift.target_date.isoformat()

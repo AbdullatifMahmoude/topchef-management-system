@@ -15,6 +15,8 @@
   let allUsers      = [];
   let currentEditId = null;
   let pendingDeleteId = null;
+  const currentUserId = Number(localStorage.getItem("user_id"));
+  const escapeUserText = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[char]);
 
   // ===== REAL-TIME VALIDATION =====
   fullNameInput.addEventListener("input", () => validateField(fullNameInput, "username"));
@@ -37,7 +39,8 @@
       if (!res.ok) { console.error("users error:", res.status); return; }
       const data = await res.json();
       allUsers = Array.isArray(data) ? data : (data.data ?? []);
-      renderTable(allUsers);
+      updateUsersSummary();
+      applyUsersFilters();
       // تحديث قائمة الدليفري عبر السيرفر يتم مباشرة عند الحاجة في لوحة الكاشير
     } catch (err) {
       console.error("فشل تحميل المستخدمين:", err);
@@ -86,19 +89,47 @@
   // ===== RENDER TABLE =====
   const roleNames = { admin: "ادمن", delivery: "دليفري", cashier: "كاشير", user: "كاشير" };
 
+  function updateUsersSummary() {
+    const roleCount = (role) => allUsers.filter((user) => user.role === role || (role === "cashier" && user.role === "user")).length;
+    const active = allUsers.filter((user) => user.is_active).length;
+    const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+    set("usersTotalCount", allUsers.length.toLocaleString("ar-EG"));
+    set("usersActiveSummary", `${active.toLocaleString("ar-EG")} حساب نشط`);
+    set("usersAdminCount", roleCount("admin").toLocaleString("ar-EG"));
+    set("usersCashierCount", roleCount("cashier").toLocaleString("ar-EG"));
+    set("usersDeliveryCount", roleCount("delivery").toLocaleString("ar-EG"));
+    set("usersPausedCount", (allUsers.length - active).toLocaleString("ar-EG"));
+  }
+
+  function applyUsersFilters() {
+    const query = document.getElementById("usersSearch")?.value.trim().toLowerCase() || "";
+    const role = document.getElementById("usersRoleFilter")?.value || "all";
+    const status = document.getElementById("usersStatusFilter")?.value || "all";
+    const filtered = allUsers.filter((user) => {
+      const text = `${user.full_name || ""} ${user.username || ""} ${user.phone || ""}`.toLowerCase();
+      const normalizedRole = user.role === "user" ? "cashier" : user.role;
+      return (!query || text.includes(query)) && (role === "all" || normalizedRole === role) && (status === "all" || (status === "active" ? user.is_active : !user.is_active));
+    });
+    renderTable(filtered);
+  }
+
   function renderTable(users) {
     const tbody = page.querySelector(".orders_table_delivery tbody");
     tbody.innerHTML = "";
+    document.getElementById("usersTableCaption").textContent = `عرض ${users.length.toLocaleString("ar-EG")} من ${allUsers.length.toLocaleString("ar-EG")} مستخدم`;
+    if (!users.length) { tbody.innerHTML = '<tr><td colspan="6" class="users_empty_cell">لا توجد حسابات مطابقة للفلاتر</td></tr>'; return; }
     users.forEach((u) => {
+      const isCurrent = Number(u.id) === currentUserId;
+      const initial = (u.full_name || u.username || "م").trim().charAt(0);
       const tr = document.createElement("tr");
       tr.innerHTML =
-        "<td>" + (u.full_name || "-") + "</td>" +
-        "<td>" + u.username + "</td>" +
-        "<td>" + u.phone + "</td>" +
-        "<td>" + (roleNames[u.role] || u.role) + "</td>" +
-        '<td><div class="switch_td"><div class="switch ' + (u.is_active ? "" : "active") + '" data-id="' + u.id + '"><div class="circle"></div></div></div></td>' +
+        '<td><div class="user_identity"><i>' + escapeUserText(initial) + '</i><div><strong>' + escapeUserText(u.full_name || u.username) + '</strong><small>' + (isCurrent ? "حسابك الحالي" : escapeUserText("@" + u.username)) + '</small></div></div></td>' +
+        "<td>" + escapeUserText(u.username) + "</td>" +
+        "<td dir=" + '"ltr"' + ">" + escapeUserText(u.phone) + "</td>" +
+        '<td><span class="user_role ' + u.role + '">' + escapeUserText(roleNames[u.role] || u.role) + "</span></td>" +
+        '<td><div class="switch_td"><span class="user_status ' + (u.is_active ? "is_active" : "is_paused") + '">' + (u.is_active ? "نشط" : "موقوف") + '</span><div class="switch ' + (u.is_active ? "" : "active") + ' ' + (isCurrent ? "is_locked" : "") + '" data-id="' + u.id + '"><div class="circle"></div></div></div></td>' +
         '<td><div class="event_icons">' +
-          '<img src="/assets/delete.png" alt="حذف" data-id="' + u.id + '" class="delete_icon" style="cursor:pointer"/>' +
+          (isCurrent ? '<span class="user_protected">محمي</span>' : '<img src="/assets/delete.png" alt="حذف" data-id="' + u.id + '" class="delete_icon" style="cursor:pointer"/>') +
           '<img src="/assets/Edit_light.png" alt="تعديل" data-id="' + u.id + '" class="edit_icon" style="cursor:pointer"/>' +
         '</div></td>';
       tbody.appendChild(tr);
@@ -116,6 +147,7 @@
     const sw = e.target.closest(".switch[data-id]");
     if (sw) {
       const id = sw.dataset.id;
+      if (Number(id) === currentUserId) { alert("لا يمكن إيقاف حسابك الحالي"); return; }
       const isActive = !sw.classList.contains("active");
       try {
         const res = await apiFetch(`/user/users/${id}/toggle`, {
@@ -124,7 +156,9 @@
           body: JSON.stringify({ is_active: isActive }),
         });
         if (res.ok) {
-          sw.classList.toggle("active");
+          const user = allUsers.find((item) => Number(item.id) === Number(id));
+          if (user) user.is_active = !user.is_active;
+          updateUsersSummary(); applyUsersFilters();
         } else {
           alert("فشل تغيير الحالة");
         }
@@ -226,6 +260,7 @@
 
   warningModal.querySelector(".warning_exit img").addEventListener("click", closeWarningModal);
   warningModal.querySelector(".confirm_btn").addEventListener("click", () => {
+    if (Number(pendingDeleteId) === currentUserId) return alert("لا يمكن حذف حسابك الحالي");
     if (pendingDeleteId) deleteUser(pendingDeleteId);
   });
 
@@ -244,6 +279,16 @@
 
   // ===== EXPOSE GLOBAL =====
   window.refreshUsers = loadUsers;
+
+  document.getElementById("usersSearch")?.addEventListener("input", applyUsersFilters);
+  document.getElementById("usersRoleFilter")?.addEventListener("change", applyUsersFilters);
+  document.getElementById("usersStatusFilter")?.addEventListener("change", applyUsersFilters);
+  document.getElementById("usersResetFilters")?.addEventListener("click", () => {
+    document.getElementById("usersSearch").value = "";
+    document.getElementById("usersRoleFilter").value = "all";
+    document.getElementById("usersStatusFilter").value = "all";
+    applyUsersFilters();
+  });
 
   // ===== INIT =====
   loadUsers();

@@ -141,11 +141,8 @@ function setFieldState(input, state, message) {
     }
   } else if (state === "success") {
     input.classList.add("input_success");
-    const hint = document.createElement("span");
-    hint.className = "field_hint hint_success";
-    hint.dataset.for = input.placeholder || "";
-    hint.textContent = "✓";
-    input.insertAdjacentElement("afterend", hint);
+    // The green border is the success indicator. Keeping the checkmark out of
+    // the layout prevents fields in horizontal rows from being pushed aside.
   }
 }
 

@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator, AliasChoices
 from decimal import Decimal
-from app.core.enums import OrderType, OrderSource, OrderStatus, DiscountType
+from app.core.enums import OrderType, OrderSource, OrderStatus, DiscountType, PaymentMethod
 from app.modules.customer.schemas import CustomerAddressResponse
 
 class OrderItemBase(BaseModel):
@@ -26,6 +26,7 @@ class OrderBase(BaseModel):
     source: OrderSource = Field(OrderSource.ONLINE, validation_alias=AliasChoices("source", "order_source"))
     customer_notes: Optional[str] = None
     internal_notes: Optional[str] = None
+    payment_method: PaymentMethod = PaymentMethod.CASH
 
 class OrderCreate(OrderBase):
     items: List[OrderItemCreate]
@@ -76,6 +77,7 @@ class OrderUpdateFull(BaseModel):
     manual_discount_type: Optional[DiscountType] = None
     manual_discount_value: Optional[Decimal] = None
     discount_reason: Optional[str] = None
+    payment_method: Optional[PaymentMethod] = None
 
     @field_validator('delivery_person_id', 'address_id', mode='before')
     @classmethod

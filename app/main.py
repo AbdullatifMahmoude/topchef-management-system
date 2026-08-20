@@ -45,6 +45,38 @@ async def lifespan(app: FastAPI):
     logger.info(f"[STARTUP] Initializing application [PID: {pid}]")
     try:
         async with engine.begin() as conn:
+                # Keep deployments compatible when application code reaches a
+                # replica before the release migration command is executed.
+                # The transaction-scoped advisory lock serializes concurrent
+                # replicas, while IF NOT EXISTS keeps this safe on every boot.
+                await conn.execute(text("SELECT pg_advisory_xact_lock(8202601)"))
+                await conn.execute(text("""
+                    DO $$ BEGIN
+                        CREATE TYPE paymentmethod AS ENUM ('CASH', 'INSTAPAY', 'WALLET');
+                    EXCEPTION WHEN duplicate_object THEN NULL;
+                    END $$
+                """))
+                await conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method paymentmethod NOT NULL DEFAULT 'CASH'"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_order_payment_method ON orders (payment_method)"))
+                await conn.execute(text("ALTER TABLE cashier_shifts ADD COLUMN IF NOT EXISTS opening_cash NUMERIC(12, 2) NOT NULL DEFAULT 0"))
+                await conn.execute(text("ALTER TABLE cashier_shifts ADD COLUMN IF NOT EXISTS cash_expenses NUMERIC(12, 2) NOT NULL DEFAULT 0"))
+                await conn.execute(text("ALTER TABLE cashier_shifts ADD COLUMN IF NOT EXISTS actual_closing_cash NUMERIC(12, 2)"))
+                await conn.execute(text("ALTER TABLE cashier_shifts ADD COLUMN IF NOT EXISTS closing_note TEXT"))
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS product_change_logs (
+                        id SERIAL PRIMARY KEY,
+                        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                        changed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                        change_type VARCHAR(30) NOT NULL,
+                        old_value TEXT,
+                        new_value TEXT,
+                        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+                    )
+                """))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_product_change_logs_product_id ON product_change_logs (product_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_product_change_logs_created_at ON product_change_logs (created_at)"))
+                logger.info("[DATABASE] Payment and shift reconciliation schema verified.")
+
                 # Discovery: List all existing constraints
                 try:
                     res = await conn.execute(text("""

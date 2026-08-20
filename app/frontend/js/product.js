@@ -8,16 +8,22 @@
   const catSelect = document.getElementById("cat_select");
   const sizeTypeSelect = document.getElementById("size_type");
   const singlePriceInput = document.getElementById("single_price");
+  const singlePriceField = document.querySelector("#page-items .product_single_price");
+  const sizesSectionHeading = document.getElementById("sizes_section_heading");
   const multiSizesContainer = document.getElementById("multi_sizes_container");
   const addSizeBtn = document.getElementById("add_size_btn");
   const warningModal = document.querySelector("#page-items .warning_modal");
 
   let allProducts = [];
+  let allCategories = [];
+  let productSales = new Map();
+  let productChanges = [];
   let currentEditId = null;
   let pendingDeleteId = null;
 
   // ===== INIT HIDE =====
-  singlePriceInput.style.display = "none";
+  singlePriceField.style.display = "none";
+  sizesSectionHeading.style.display = "none";
   addSizeBtn.style.display = "none";
   multiSizesContainer.style.display = "none";
 
@@ -28,16 +34,17 @@
   // ===== API FUNCTIONS =====
   async function loadProducts() {
     const tbody = document.querySelector(".orders_table_items tbody");
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;opacity:.6">جاري التحميل...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;opacity:.6">جاري التحميل...</td></tr>';
     try {
       const res = await apiFetch("/menu/products");
       if (!res.ok) { console.error("products error:", res.status); return; }
       const data = await res.json();
       allProducts = Array.isArray(data) ? data : (data.data ?? []);
-      renderTable(allProducts);
+      updateItemsSummary();
+      applyItemsFilters();
     } catch (err) {
       console.error("فشل تحميل الاصناف:", err);
-      document.querySelector(".orders_table_items tbody").innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:red">خطأ في جلب البيانات</td></tr>';
+      document.querySelector(".orders_table_items tbody").innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:red">خطأ في جلب البيانات</td></tr>';
     }
   }
 
@@ -47,6 +54,7 @@
       if (!res.ok) { console.error("categories error:", res.status); return; }
       const data = await res.json();
       const cats = Array.isArray(data) ? data : (data.data ?? []);
+      allCategories = cats;
       catSelect.innerHTML = '<option value="">اختر التصنيف</option>';
       cats.forEach((cat) => {
         const opt = document.createElement("option");
@@ -54,6 +62,8 @@
         opt.textContent = cat.cat_name;
         catSelect.appendChild(opt);
       });
+      const filter = document.getElementById("itemsCategoryFilter");
+      if (filter) filter.innerHTML = '<option value="all">كل التصنيفات</option>' + cats.map((cat) => `<option value="${cat.id}">${escapeItemsText(cat.cat_name)}</option>`).join("");
     } catch (err) {
       console.error("فشل تحميل التصنيفات:", err);
     }
@@ -117,6 +127,10 @@
       if (res.ok) {
         const data = await res.json();
         data.is_available ? switchEl.classList.remove("active") : switchEl.classList.add("active");
+        const product = allProducts.find((item) => Number(item.id) === Number(id));
+        if (product) product.is_available = data.is_available;
+        updateItemsSummary();
+        applyItemsFilters();
       }
     } catch (err) {
       console.error("خطا في toggle:", err);
@@ -128,6 +142,13 @@
     const tbody = document.querySelector(".orders_table_items tbody");
     tbody.innerHTML = "";
 
+    const caption = document.getElementById("itemsTableCaption");
+    if (caption) caption.textContent = `عرض ${products.length.toLocaleString("ar-EG")} من ${allProducts.length.toLocaleString("ar-EG")} صنف`;
+    if (!products.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="items_empty_cell">لا توجد أصناف مطابقة للفلاتر الحالية</td></tr>';
+      return;
+    }
+
     products.forEach((p) => {
       const catOption = catSelect.querySelector('option[value="' + p.cat_id + '"]');
       const catName = catOption ? catOption.textContent : p.cat_id;
@@ -137,9 +158,7 @@
         priceCell = parseFloat(p.variants[0].price).toFixed(0) + " ج.م";
       } else if (p.variants && p.variants.length > 1) {
         priceCell = p.variants.map((v) =>
-          '<span style="display:inline-block; background:#C9A84C ;color:#000000; border-radius:6px; padding:2px 8px; margin:2px; font-size:16px;">' +
-          v.name + ": " + parseFloat(v.price).toFixed(0) + " ج.م" +
-          '</span>'
+          `<span class="item_price_tag">${escapeItemsText(v.name)}: ${parseFloat(v.price).toFixed(0)} ج.م</span>`
         ).join("");
       } else {
         priceCell = "-";
@@ -148,10 +167,12 @@
       const tr = document.createElement("tr");
       tr.classList.add("no_borer_bottom");
       tr.innerHTML =
-        "<td>" + p.product_name + "</td>" +
-        "<td>" + catName + "</td>" +
+        '<td><div class="item_identity"><strong>' + escapeItemsText(p.product_name) + '</strong><small>' + escapeItemsText(p.description || "بدون وصف") + '</small></div></td>' +
+        '<td><span class="item_category_badge">' + escapeItemsText(catName) + "</span></td>" +
+        '<td><span class="item_type_badge">' + ((p.variants || []).length > 1 ? `${p.variants.length} أحجام` : "حجم واحد") + "</span></td>" +
         "<td>" + priceCell + "</td>" +
         '<td class="switch_td">' +
+          '<span class="item_availability ' + (p.is_available ? "available" : "paused") + '">' + (p.is_available ? "متاح" : "موقوف") + '</span>' +
           '<div class="switch ' + (p.is_available ? "" : "active") + '" data-id="' + p.id + '">' +
             '<div class="circle"></div>' +
           '</div>' +
@@ -162,6 +183,79 @@
         '</div></td>';
       tbody.appendChild(tr);
     });
+  }
+
+  async function loadProductOperations() {
+    try {
+      const response = await apiFetch("/menu/products/operations", { hideLoader: true });
+      if (!response.ok) throw new Error(`operations ${response.status}`);
+      const data = await response.json();
+      productSales = new Map((data.sales || []).map((entry) => [Number(entry.product_id), entry]));
+      productChanges = data.changes || [];
+      renderItemsInsights();
+    } catch (error) {
+      console.error("فشل تحميل أداء الأصناف:", error);
+      document.getElementById("itemsTopSelling").innerHTML = '<div class="items_empty_cell">تعذر تحميل الأداء</div>';
+      document.getElementById("itemsChangeLog").innerHTML = '<div class="items_empty_cell">تعذر تحميل السجل</div>';
+    }
+  }
+
+  function escapeItemsText(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  }
+
+  function renderItemsInsights() {
+    const ranked = allProducts.map((product) => ({ product, ...(productSales.get(Number(product.id)) || { units_sold: 0, sales: 0 }) })).filter((entry) => Number(entry.units_sold) > 0).sort((a, b) => Number(b.units_sold) - Number(a.units_sold)).slice(0, 5);
+    const max = Math.max(...ranked.map((entry) => Number(entry.units_sold)), 1);
+    document.getElementById("itemsTopSelling").innerHTML = ranked.length ? ranked.map((entry, index) => `<div class="items_top_row"><p><span><b>${index + 1}</b>${escapeItemsText(entry.product.product_name)}</span><strong>${Number(entry.units_sold).toLocaleString("ar-EG")} وحدة</strong></p><i><b style="width:${Number(entry.units_sold) / max * 100}%"></b></i><small>${Number(entry.sales || 0).toLocaleString("ar-EG", { maximumFractionDigits: 0 })} ج.م مبيعات</small></div>`).join("") : '<div class="items_empty_cell">لا توجد مبيعات خلال آخر 30 يوم</div>';
+    document.getElementById("itemsChangeLog").innerHTML = productChanges.length ? productChanges.slice(0, 8).map((change) => {
+      const availability = change.change_type === "availability";
+      const action = availability ? (change.new_value === "true" ? "فعّل الصنف" : "أوقف الصنف") : "عدّل الأسعار";
+      return `<div class="items_change_row"><i class="${availability ? "availability" : "price"}"></i><div><strong>${escapeItemsText(action)} — ${escapeItemsText(change.product_name)}</strong><span>${escapeItemsText(change.changed_by)} • ${new Date(change.created_at).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" })}</span></div></div>`;
+    }).join("") : '<div class="items_empty_cell">لا توجد تغييرات مسجلة بعد</div>';
+  }
+
+  function productMinimumPrice(product) {
+    const prices = (product.variants || []).map((variant) => Number(variant.price)).filter(Number.isFinite);
+    return prices.length ? Math.min(...prices) : 0;
+  }
+
+  function updateItemsSummary() {
+    const available = allProducts.filter((product) => product.is_available).length;
+    const variants = allProducts.reduce((sum, product) => sum + (product.variants || []).length, 0);
+    const multi = allProducts.filter((product) => (product.variants || []).length > 1).length;
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    set("itemsTotalCount", allProducts.length.toLocaleString("ar-EG"));
+    set("itemsCategoryCount", `${allCategories.length.toLocaleString("ar-EG")} تصنيف`);
+    set("itemsAvailableCount", available.toLocaleString("ar-EG"));
+    set("itemsPausedCount", (allProducts.length - available).toLocaleString("ar-EG"));
+    set("itemsAvailabilityRate", `${(allProducts.length ? available / allProducts.length * 100 : 0).toLocaleString("ar-EG", { maximumFractionDigits: 0 })}% من المنيو`);
+    set("itemsVariantsCount", variants.toLocaleString("ar-EG"));
+    set("itemsMultiSizeCount", `${multi.toLocaleString("ar-EG")} صنف متعدد الأحجام`);
+  }
+
+  function applyItemsFilters() {
+    const query = document.querySelector("#page-items .search-bar")?.value.trim().toLowerCase() || "";
+    const category = document.getElementById("itemsCategoryFilter")?.value || "all";
+    const status = document.getElementById("itemsStatusFilter")?.value || "all";
+    const type = document.getElementById("itemsTypeFilter")?.value || "all";
+    const sort = document.getElementById("itemsSortFilter")?.value || "name";
+    const categoryName = (product) => allCategories.find((cat) => Number(cat.id) === Number(product.cat_id))?.cat_name || "";
+    const filtered = allProducts.filter((product) => {
+      const matchesQuery = !query || product.product_name.toLowerCase().includes(query) || String(product.description || "").toLowerCase().includes(query);
+      const matchesCategory = category === "all" || Number(product.cat_id) === Number(category);
+      const matchesStatus = status === "all" || (status === "available" ? product.is_available : !product.is_available);
+      const isVariant = (product.variants || []).length > 1;
+      const matchesType = type === "all" || (type === "variant" ? isVariant : !isVariant);
+      return matchesQuery && matchesCategory && matchesStatus && matchesType;
+    });
+    filtered.sort((a, b) => {
+      if (sort === "price_asc") return productMinimumPrice(a) - productMinimumPrice(b);
+      if (sort === "price_desc") return productMinimumPrice(b) - productMinimumPrice(a);
+      if (sort === "category") return categoryName(a).localeCompare(categoryName(b), "ar");
+      return a.product_name.localeCompare(b.product_name, "ar");
+    });
+    renderTable(filtered);
   }
 
   // ===== EVENT DELEGATION =====
@@ -180,19 +274,22 @@
   sizeTypeSelect.addEventListener("change", () => {
     const val = sizeTypeSelect.value;
     if (val === "one") {
-      singlePriceInput.style.display = "block";
+      singlePriceField.style.display = "flex";
+      sizesSectionHeading.style.display = "none";
       multiSizesContainer.style.display = "none";
       addSizeBtn.style.display = "none";
       multiSizesContainer.innerHTML = "";
       clearFieldState(singlePriceInput);
     } else if (val === "many") {
-      singlePriceInput.style.display = "none";
+      singlePriceField.style.display = "none";
+      sizesSectionHeading.style.display = "flex";
       multiSizesContainer.style.display = "block";
       addSizeBtn.style.display = "block";
       clearFieldState(singlePriceInput);
       if (multiSizesContainer.children.length === 0) addSizeRow();
     } else {
-      singlePriceInput.style.display = "none";
+      singlePriceField.style.display = "none";
+      sizesSectionHeading.style.display = "none";
       multiSizesContainer.style.display = "none";
       addSizeBtn.style.display = "none";
     }
@@ -219,12 +316,13 @@
   addSizeBtn.addEventListener("click", () => addSizeRow());
 
   // ===== OPEN MODAL ADD =====
-  document.querySelector(".add_btn").addEventListener("click", () => {
+  document.querySelector("#page-items .add_btn").addEventListener("click", () => {
     currentEditId = null;
     modalTitle.textContent = "اضف صنف جديد";
     productForm.reset();
     multiSizesContainer.innerHTML = "";
-    singlePriceInput.style.display = "none";
+    singlePriceField.style.display = "none";
+    sizesSectionHeading.style.display = "none";
     multiSizesContainer.style.display = "none";
     addSizeBtn.style.display = "none";
     [productNameInput, singlePriceInput].forEach(clearFieldState);
@@ -238,7 +336,8 @@
     modalTitle.textContent = "تعديل الصنف";
     productForm.reset();
     multiSizesContainer.innerHTML = "";
-    singlePriceInput.style.display = "none";
+    singlePriceField.style.display = "none";
+    sizesSectionHeading.style.display = "none";
     multiSizesContainer.style.display = "none";
     addSizeBtn.style.display = "none";
     [productNameInput, singlePriceInput].forEach(clearFieldState);
@@ -255,12 +354,14 @@
 
       if (p.variants.length === 1) {
         sizeTypeSelect.value = "one";
-        singlePriceInput.style.display = "block";
+        singlePriceField.style.display = "flex";
+        sizesSectionHeading.style.display = "none";
         singlePriceInput.value = parseFloat(p.variants[0].price).toFixed(0);
         singlePriceInput.dataset.variantId = p.variants[0].id;
       } else {
         sizeTypeSelect.value = "many";
         multiSizesContainer.style.display = "block";
+        sizesSectionHeading.style.display = "flex";
         addSizeBtn.style.display = "block";
         p.variants.forEach((v) => addSizeRow(v.name, parseFloat(v.price).toFixed(0)));
         multiSizesContainer.querySelectorAll(".size_row").forEach((row, i) => {
@@ -345,7 +446,8 @@
     currentEditId = null;
     productForm.reset();
     multiSizesContainer.innerHTML = "";
-    singlePriceInput.style.display = "none";
+    singlePriceField.style.display = "none";
+    sizesSectionHeading.style.display = "none";
     multiSizesContainer.style.display = "none";
     addSizeBtn.style.display = "none";
     [productNameInput, singlePriceInput].forEach(clearFieldState);
@@ -368,12 +470,13 @@
   });
 
   // ===== SEARCH =====
-  document.querySelector(".search-bar").addEventListener("input", (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    const filtered = allProducts.filter((p) =>
-      p.product_name.toLowerCase().includes(q)
-    );
-    renderTable(filtered);
+  document.querySelector("#page-items .search-bar").addEventListener("input", applyItemsFilters);
+  ["itemsCategoryFilter", "itemsStatusFilter", "itemsTypeFilter", "itemsSortFilter"].forEach((id) => document.getElementById(id)?.addEventListener("change", applyItemsFilters));
+  document.getElementById("itemsResetFilters")?.addEventListener("click", () => {
+    document.querySelector("#page-items .search-bar").value = "";
+    ["itemsCategoryFilter", "itemsStatusFilter", "itemsTypeFilter"].forEach((id) => { document.getElementById(id).value = "all"; });
+    document.getElementById("itemsSortFilter").value = "name";
+    applyItemsFilters();
   });
 
   // ===== EXPOSE GLOBAL =====
@@ -381,5 +484,5 @@
   window.refreshCategories = loadCategories;
 
   // ===== INIT =====
-  loadCategories().then(() => loadProducts());
+  loadCategories().then(async () => { await loadProducts(); await loadProductOperations(); });
 })();

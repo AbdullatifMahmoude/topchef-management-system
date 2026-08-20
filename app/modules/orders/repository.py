@@ -309,10 +309,41 @@ class OrderRepository:
             models.Order.order_status.in_([OrderStatus.NEW, OrderStatus.CONFIRMED])
         )
         active_count = await self.db.scalar(active_query) or 0
+
+        # Compare like-for-like: yesterday from 5 AM up to the same elapsed
+        # point in its business day, rather than yesterday's completed day.
+        local_now = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+        today_start = datetime.combine(business_date, datetime.min.time()).replace(hour=5)
+        elapsed = max(timedelta(0), local_now - today_start)
+        yesterday_date = business_date - timedelta(days=1)
+        yesterday_start = today_start - timedelta(days=1)
+        yesterday_cutoff = yesterday_start + min(elapsed, timedelta(days=1))
+        yesterday_sales_query = select(
+            func.sum(models.Order.total_amount - models.Order.delivery_fee)
+        ).where(
+            models.Order.order_date == yesterday_date,
+            models.Order.created_at >= yesterday_start,
+            models.Order.created_at < yesterday_cutoff,
+            models.Order.is_deleted == False,
+            models.Order.order_status.in_([
+                OrderStatus.COMPLETED,
+                OrderStatus.DELIVERED,
+                OrderStatus.NEW,
+                OrderStatus.CONFIRMED,
+            ]),
+        )
+        yesterday_sales = float(await self.db.scalar(yesterday_sales_query) or 0)
+        today_sales = float(row["total_sales"] or 0)
+        sales_change_percent = (
+            ((today_sales - yesterday_sales) / yesterday_sales) * 100
+            if yesterday_sales > 0 else None
+        )
         
         return {
             "total_count": row["total_count"] or 0,
-            "total_sales": float(row["total_sales"] or 0),
+            "total_sales": today_sales,
+            "yesterday_sales": yesterday_sales,
+            "sales_change_percent": sales_change_percent,
             "completed_count": row["completed_count"] or 0,
             "cancelled_count": row["cancelled_count"] or 0,
             "active_count": active_count

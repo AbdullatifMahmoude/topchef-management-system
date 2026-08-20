@@ -20,6 +20,7 @@
   --color-warning: #c9a84c;
 }
 * {
+  box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -124,7 +125,14 @@ button:disabled {
 }
 body {
   background-image: url("/assets/Gemini_Generated_Image_hsee73hsee73hsee.png");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
   font-family: "Cairo", sans-serif;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 1px 20px 40px;
 }
 header h1 {
   font-size: 36px;
@@ -134,7 +142,7 @@ header h1 {
   margin-bottom: 0px;
 }
 .container {
-  max-width: 588px;
+  width: min(100%, 588px);
 
   display: flex;
 
@@ -153,6 +161,11 @@ header h1 {
   align-items: center;
   gap: 24px;
 }
+.logo_title img {
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+}
 .logo_title h1 {
   font-size: 27px;
   color: var(--color-primary);
@@ -162,6 +175,7 @@ header h1 {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: min(100%, 494px);
 }
 .signup_form input {
   padding: 10px;
@@ -172,7 +186,7 @@ header h1 {
   color: var(--color-text);
   background-color: transparent;
   justify-content: end;
-  width: 474px;
+  width: 100%;
   text-align: end;
 }
 .password_container {
@@ -208,7 +222,7 @@ header h1 {
 /* input wrapper للعين */
 .input_wrapper {
   position: relative;
-  width: 494px;
+  width: 100%;
 }
 .input_wrapper input {
   width: 100%;
@@ -269,4 +283,137 @@ input.input_success {
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* تابلت: تصغير متدرج يحافظ على الفورم كاملاً داخل الشاشة */
+@media (min-width: 601px) and (max-width: 1280px) {
+  body {
+    padding-inline: clamp(18px, 4vw, 48px);
+    padding-bottom: 24px;
+  }
+
+  header h1 {
+    font-size: clamp(24px, 3vw, 31px);
+    margin-top: clamp(20px, 4vh, 36px);
+  }
+
+  .container {
+    width: min(74vw, 500px);
+    gap: clamp(18px, 3vh, 28px);
+    padding: clamp(18px, 3vh, 24px) clamp(20px, 3vw, 30px);
+    margin-top: clamp(24px, 6vh, 48px);
+  }
+
+  .logo_title {
+    gap: 12px;
+  }
+
+  .logo_title img {
+    width: clamp(70px, 10vh, 92px);
+    height: clamp(70px, 10vh, 92px);
+  }
+
+  .logo_title h1 {
+    font-size: clamp(22px, 2.8vw, 25px);
+    margin-bottom: 0;
+  }
+
+  .signup_form {
+    gap: 13px;
+  }
+
+  .signup_form input {
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: clamp(16px, 2vw, 18px);
+  }
+
+  .forget_password {
+    font-size: 14px;
+  }
+
+  .login_btn {
+    min-height: 44px;
+    padding: 7px 12px;
+    font-size: 20px;
+  }
+}
+
+/* التابلت الأفقي والشاشات القصيرة */
+@media (min-width: 601px) and (max-width: 1280px) and (max-height: 700px) {
+  body {
+    padding-bottom: 14px;
+  }
+
+  header h1 {
+    font-size: 23px;
+    margin-top: 12px;
+  }
+
+  .container {
+    width: min(68vw, 460px);
+    gap: 12px;
+    padding: 14px 22px 16px;
+    margin-top: 14px;
+  }
+
+  .logo_title {
+    gap: 5px;
+  }
+
+  .logo_title img {
+    width: 58px;
+    height: 58px;
+  }
+
+  .logo_title h1 {
+    font-size: 20px;
+  }
+
+  .signup_form {
+    gap: 9px;
+  }
+
+  .password_container {
+    gap: 4px;
+  }
+
+  .signup_form input,
+  .login_btn {
+    min-height: 40px;
+  }
+
+  .forget_password {
+    font-size: 12px;
+  }
+
+  .login_btn {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 600px) {
+  body {
+    padding-inline: 14px;
+  }
+
+  header h1 {
+    font-size: clamp(23px, 7vw, 30px);
+    margin-top: 28px;
+  }
+
+  .container {
+    width: 100%;
+    gap: 24px;
+    margin-top: 38px;
+  }
+
+  .logo_title img {
+    width: 88px;
+    height: 88px;
+  }
+
+  .signup_form input {
+    font-size: 17px;
+  }
 }

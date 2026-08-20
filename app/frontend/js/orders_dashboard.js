@@ -114,9 +114,23 @@
     const averageEl = document.getElementById("ops_average_order");
     const successEl = document.getElementById("ops_success_rate");
     const cancelEl = document.getElementById("ops_cancel_summary");
+    const salesCompareEl = document.getElementById("ops_sales_vs_yesterday");
     if (averageEl) averageEl.textContent = average.toLocaleString("ar-EG", { maximumFractionDigits: 2 }) + " ج.م";
     if (successEl) successEl.textContent = successRate.toLocaleString("ar-EG", { maximumFractionDigits: 1 }) + "%";
     if (cancelEl) cancelEl.textContent = `${Number(stats.cancelled_count || 0).toLocaleString("ar-EG")} طلب ملغي`;
+    if (salesCompareEl) {
+      const change = stats.sales_change_percent;
+      salesCompareEl.className = "ops_sales_compare";
+      if (change == null) {
+        salesCompareEl.textContent = Number(stats.total_sales || 0) > 0 ? "لا توجد مبيعات للمقارنة أمس" : "مقارنة بنفس التوقيت أمس";
+      } else {
+        const numericChange = Number(change);
+        const direction = numericChange > 0 ? "up" : numericChange < 0 ? "down" : "flat";
+        salesCompareEl.classList.add(`is_${direction}`);
+        const arrow = direction === "up" ? "↑" : direction === "down" ? "↓" : "—";
+        salesCompareEl.textContent = `${arrow} ${Math.abs(numericChange).toLocaleString("ar-EG", { maximumFractionDigits: 1 })}% عن نفس التوقيت أمس`;
+      }
+    }
     updateOperationalUI();
   }
 

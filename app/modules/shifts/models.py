@@ -1,6 +1,7 @@
 from datetime import datetime, date
 from typing import Optional
-from sqlalchemy import Integer, DateTime, Date, ForeignKey, func
+from decimal import Decimal
+from sqlalchemy import Integer, DateTime, Date, ForeignKey, func, Numeric, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -13,6 +14,10 @@ class CashierShift(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     target_date: Mapped[date] = mapped_column(Date, index=True)
+    opening_cash: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    cash_expenses: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    actual_closing_cash: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    closing_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Closing/reopening a shift updates this timestamp.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

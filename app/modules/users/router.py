@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.core.redis import get_redis
 from app.core.enums import UserRole
 from app.modules.infrastructure.dependencies import require_role
+from app.core.exceptions import ValidationError
 
 
 router = APIRouter(prefix="/user", tags=['user'])
@@ -78,6 +79,8 @@ async def delete_user(
     redis = Depends(get_redis),
     _current_user=Depends(require_role(UserRole.ADMIN)),
 ):
+    if id == _current_user.id:
+        raise ValidationError("You cannot delete your current account")
     user_service = service.UserService(db, redis)
     deleteuser = await user_service.delete_user(id)
     return None
@@ -90,6 +93,8 @@ async def toggle_user(
     redis = Depends(get_redis),
     _current_user=Depends(require_role(UserRole.ADMIN)),
 ):
+    if id == _current_user.id:
+        raise ValidationError("You cannot disable your current account")
     user_service = service.UserService(db, redis)
     toggleuser = await user_service.toggle_user(id)
     return toggleuser

@@ -16,7 +16,7 @@ from sqlalchemy import (
     Sequence,
     Boolean,
 )
-from app.core.enums import OrderStatus, OrderType, OrderSource, DiscountType
+from app.core.enums import OrderStatus, OrderType, OrderSource, DiscountType, PaymentMethod
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base, DbEnum
@@ -54,6 +54,12 @@ class Order(Base):
     order_source = Column(
         DbEnum(OrderSource, name="ordersource"),
         nullable=False,
+    )
+    payment_method = Column(
+        DbEnum(PaymentMethod, name="paymentmethod"),
+        nullable=False,
+        default=PaymentMethod.CASH,
+        server_default="CASH",
     )
     
     subtotal = Column(Numeric(10, 2), nullable=False, default=0)
@@ -103,6 +109,7 @@ class Order(Base):
         Index('idx_order_status', 'order_status'),
         Index('idx_order_type', 'order_type'),
         Index('idx_order_source', 'order_source'),
+        Index('idx_order_payment_method', 'payment_method'),
         Index('idx_order_created', 'created_at'),
         Index('idx_order_number_date', 'order_number', 'order_date', unique=True),
         Index('idx_order_date_source', 'order_date', 'order_source'),

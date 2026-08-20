@@ -55,7 +55,7 @@
         </header>
 
         <div class="ops_kpis">
-          <article class="ops_kpi ops_kpi_primary"><span>صافي مبيعات اليوم</span><strong id="stat_total_sales">0 ج.م</strong><small>بدون رسوم التوصيل</small></article>
+          <article class="ops_kpi ops_kpi_primary"><span>صافي مبيعات اليوم</span><strong id="stat_total_sales">0 ج.م</strong><small id="ops_sales_vs_yesterday" class="ops_sales_compare">مقارنة بنفس التوقيت أمس</small></article>
           <article class="ops_kpi"><span>إجمالي الطلبات</span><strong id="stat_total_orders">0</strong><small id="ops_orders_mix">لا توجد طلبات بعد</small></article>
           <article class="ops_kpi"><span>متوسط قيمة الطلب</span><strong id="ops_average_order">0 ج.م</strong><small>للطلب غير الملغي</small></article>
           <article class="ops_kpi"><span>معدل نجاح الطلبات</span><strong id="ops_success_rate">0%</strong><small id="ops_cancel_summary">0 طلب ملغي</small></article>
@@ -128,24 +128,39 @@
 
     <!-- ===== صفحة إدارة الأصناف ===== -->
     <div class="page-content" id="page-items" style="display: none">
-      <div class="title_btn">
-        <div class="title">
-          <h1>قائمة الاصناف</h1>
-          <h2>إدارة جميع أصناف المطعم</h2>
-        </div>
-        <button class="add_btn">+ إضافه صنف</button>
+      <section class="items_workspace" aria-labelledby="items_page_title">
+      <header class="items_header">
+        <div><p>إدارة المنيو</p><h1 id="items_page_title">مركز تشغيل الأصناف</h1><span>تحكم سريع في الإتاحة والأسعار ونسخ البيع أثناء التشغيل</span></div>
+        <button class="add_btn">+ إضافة صنف جديد</button>
+      </header>
+      <div class="items_kpis">
+        <article><span>إجمالي الأصناف</span><strong id="itemsTotalCount">0</strong><small id="itemsCategoryCount">0 تصنيف</small></article>
+        <article class="is_available"><span>متاح للبيع</span><strong id="itemsAvailableCount">0</strong><small id="itemsAvailabilityRate">0% من المنيو</small></article>
+        <article class="is_paused"><span>موقوف مؤقتًا</span><strong id="itemsPausedCount">0</strong><small>لا يظهر للكاشير أو العميل</small></article>
+        <article><span>نسخ ومتغيرات البيع</span><strong id="itemsVariantsCount">0</strong><small id="itemsMultiSizeCount">0 صنف متعدد الأحجام</small></article>
       </div>
-      <div class="table_structure_unified">
-        <div class="search_unified_wrapper">
-          <input class="search-bar" type="text" placeholder="🔍 بحث عن صنف" />
-        </div>
+      <div class="items_insights_grid">
+        <article class="items_insight_panel"><div class="items_insight_heading"><div><h2>الأكثر طلبًا</h2><p>آخر 30 يوم</p></div><span>حسب الوحدات</span></div><div id="itemsTopSelling" class="items_top_selling"><div class="items_empty_cell">جاري تحميل الأداء...</div></div></article>
+        <article class="items_insight_panel"><div class="items_insight_heading"><div><h2>آخر تغييرات المنيو</h2><p>السعر والإتاحة والمسؤول</p></div><span>سجل رقابي</span></div><div id="itemsChangeLog" class="items_change_log"><div class="items_empty_cell">جاري تحميل السجل...</div></div></article>
+      </div>
+      <div class="items_control_bar">
+        <label class="items_search"><span>بحث</span><input class="search-bar" type="search" placeholder="ابحث باسم الصنف أو الوصف" /></label>
+        <label><span>التصنيف</span><select id="itemsCategoryFilter"><option value="all">كل التصنيفات</option></select></label>
+        <label><span>الحالة</span><select id="itemsStatusFilter"><option value="all">الكل</option><option value="available">متاح للبيع</option><option value="paused">موقوف</option></select></label>
+        <label><span>نسخة البيع</span><select id="itemsTypeFilter"><option value="all">كل النسخ</option><option value="simple">حجم واحد</option><option value="variant">متعدد الأحجام</option></select></label>
+        <label><span>الترتيب</span><select id="itemsSortFilter"><option value="name">الاسم</option><option value="category">التصنيف</option><option value="price_asc">السعر: الأقل</option><option value="price_desc">السعر: الأعلى</option></select></label>
+        <button id="itemsResetFilters" type="button">مسح الفلاتر</button>
+      </div>
+      <div class="items_table_heading"><div><h2>قائمة المنيو</h2><p id="itemsTableCaption">جاري تحميل الأصناف...</p></div><div class="items_legend"><span><i></i>متاح</span><span><i></i>موقوف</span></div></div>
+      <div class="table_structure_unified items_table_card">
         <div class="table_scroll_unified">
           <table class="orders_table_items">
             <thead>
               <tr class="no_borer_bottom">
                 <th>الصنف</th>
                 <th>التصنيف</th>
-                <th>السعر</th>
+                <th>نسخة البيع</th>
+                <th>الأسعار</th>
                 <th>الحالة</th>
                 <th>الإجراءات</th>
               </tr>
@@ -154,6 +169,7 @@
           </table>
         </div>
       </div>
+      </section>
       <div class="modal">
         <div class="modal_container">
           <div class="exit"><img src="/assets/Export.png" alt="" /></div>
@@ -163,19 +179,21 @@
           </div>
           <div class="form_modal">
             <form id="productForm">
-              <div class="name_desc">
+              <div class="product_form_intro"><strong>بيانات الصنف</strong><span>أدخل البيانات الأساسية التي ستظهر في المنيو</span></div>
+              <label class="product_field"><span>اسم الصنف</span>
                 <input class="inp" type="text" placeholder="اسم الصنف" />
-
-              </div>
-              <input class="inp" type="text" id="desc_input" placeholder="وصف الصنف" />
-
-              <select id="cat_select"></select>
-              <select id="size_type">
+              </label>
+              <label class="product_field"><span>وصف مختصر <small>اختياري</small></span><input class="inp" type="text" id="desc_input" placeholder="مثال: برجر لحم مع صوص خاص" /></label>
+              <div class="product_form_grid">
+              <label class="product_field"><span>التصنيف</span><select id="cat_select"></select></label>
+              <label class="product_field"><span>نسخة البيع</span><select id="size_type">
                 <option value="">نسخه البيع</option>
                 <option value="one">حجم واحد</option>
                 <option value="many">اكثر من حجم</option>
-              </select>
-              <input class="inp" type="text" placeholder="السعر" id="single_price" />
+              </select></label>
+              </div>
+              <label class="product_field product_single_price"><span>السعر</span><input class="inp" type="text" placeholder="السعر" id="single_price" /></label>
+              <div id="sizes_section_heading" class="sizes_section_heading"><strong>الأحجام والأسعار</strong><span>أضف نسخة بيع واحدة أو أكثر</span></div>
               <div id="multi_sizes_container"></div>
               <div class="bttns-form">
                 <button type="button" id="add_size_btn" style="display: none">
@@ -203,20 +221,20 @@
 
     <!-- ===== صفحة التصنيفات ===== -->
     <div class="page-content" id="page-categories" style="display: none">
-      <div class="title_btn">
-        <div class="title">
-          <h1>قائمة التصنيفات</h1>
-          <h2>إدارة جميع تصنيفات المطعم</h2>
-        </div>
-        <button class="add_category_btn">+ إضافه تصنيف</button>
-      </div>
-      <div class="table_structure_unified">
+      <section class="categories_workspace">
+      <header class="categories_header"><div><p>هيكلة المنيو</p><h1>مركز إدارة التصنيفات</h1><span>نظّم ظهور المنيو وتحكم في إتاحة مجموعات الأصناف</span></div><button class="add_category_btn">+ إضافة تصنيف</button></header>
+      <div class="categories_kpis"><article><span>إجمالي التصنيفات</span><strong id="categoriesTotalCount">0</strong><small id="categoriesProductsCount">0 صنف</small></article><article class="is_active"><span>نشط في المنيو</span><strong id="categoriesActiveCount">0</strong><small>ظاهر في نقاط البيع</small></article><article class="is_paused"><span>موقوف مؤقتًا</span><strong id="categoriesPausedCount">0</strong><small>أصنافه مخفية</small></article><article><span>تصنيفات فارغة</span><strong id="categoriesEmptyCount">0</strong><small>تحتاج إضافة أصناف</small></article></div>
+      <div class="categories_controls"><label class="categories_search"><span>بحث</span><input id="categoriesSearch" type="search" placeholder="ابحث باسم التصنيف"></label><label><span>الحالة</span><select id="categoriesStatusFilter"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="paused">موقوف</option></select></label><label><span>الترتيب</span><select id="categoriesSort"><option value="name">الاسم</option><option value="items_desc">الأكثر أصنافًا</option><option value="items_asc">الأقل أصنافًا</option></select></label><button id="categoriesResetFilters" type="button">مسح الفلاتر</button></div>
+      <div class="categories_table_heading"><div><h2>قائمة التصنيفات</h2><p id="categoriesTableCaption">جاري التحميل...</p></div><span>إيقاف التصنيف يخفي أصنافه من البيع دون حذفها</span></div>
+      <div class="table_structure_unified categories_table_card">
         <div class="table_scroll_unified">
-          <table class="orders_table">
+          <table class="orders_table categories_table">
             <thead>
               <tr class="no_borer_bottom">
                 <th>التصنيف</th>
-                <th>عدد الاصناف</th>
+                <th>إجمالي الأصناف</th>
+                <th>متاح</th>
+                <th>موقوف</th>
                 <th>الحالة</th>
                 <th>الإجراءات</th>
               </tr>
@@ -225,6 +243,8 @@
           </table>
         </div>
       </div>
+      </section>
+      <div id="categoryProductsDrawer" class="category_drawer" aria-hidden="true"><button class="category_drawer_backdrop" type="button" aria-label="إغلاق"></button><aside><div class="category_drawer_header"><div><p>أصناف التصنيف</p><h2 id="categoryDrawerTitle">—</h2></div><button id="closeCategoryDrawer" type="button">×</button></div><div id="categoryDrawerSummary"></div><div id="categoryDrawerProducts" class="category_drawer_products"></div></aside></div>
       <div class="category_modal">
         <div class="modal_container">
           <div class="category_exit">
@@ -263,14 +283,12 @@
 
     <!-- ===== صفحة المستخدمين ===== -->
     <div class="page-content" id="page-delivery" style="display: none">
-      <div class="title_btn">
-        <div class="title">
-          <h1>قائمة الدليفري</h1>
-          <h2>إدارة جميع المستخدمين</h2>
-        </div>
-        <button class="add_btn_delivery">+ إضافه مستخدم</button>
-      </div>
-      <div class="table_structure_unified">
+      <section class="users_workspace">
+      <header class="users_header"><div><p>إدارة فريق العمل</p><h1>مركز المستخدمين والصلاحيات</h1><span>إدارة الإدارة والكاشير وفريق التوصيل من مكان واحد</span></div><button class="add_btn_delivery">+ إضافة مستخدم</button></header>
+      <div class="users_kpis"><article><span>إجمالي الفريق</span><strong id="usersTotalCount">0</strong><small id="usersActiveSummary">0 نشط</small></article><article class="is_admin"><span>الإدارة</span><strong id="usersAdminCount">0</strong><small>حسابات بصلاحية كاملة</small></article><article><span>الكاشير</span><strong id="usersCashierCount">0</strong><small>تشغيل واستلام الطلبات</small></article><article><span>فريق التوصيل</span><strong id="usersDeliveryCount">0</strong><small>السائقون المسجلون</small></article><article class="is_paused"><span>حسابات موقوفة</span><strong id="usersPausedCount">0</strong><small>لا يمكنها تسجيل الدخول</small></article></div>
+      <div class="users_controls"><label class="users_search"><span>بحث</span><input id="usersSearch" type="search" placeholder="الاسم، المستخدم أو الهاتف"></label><label><span>الدور</span><select id="usersRoleFilter"><option value="all">كل الأدوار</option><option value="admin">الإدارة</option><option value="cashier">الكاشير</option><option value="delivery">التوصيل</option></select></label><label><span>الحالة</span><select id="usersStatusFilter"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="paused">موقوف</option></select></label><button id="usersResetFilters" type="button">مسح الفلاتر</button></div>
+      <div class="users_table_heading"><div><h2>فريق العمل</h2><p id="usersTableCaption">جاري التحميل...</p></div><span>حسابك الحالي محمي من الإيقاف أو الحذف</span></div>
+      <div class="table_structure_unified users_table_card">
         <div class="table_scroll_unified">
           <table class="orders_table_delivery">
             <thead>
@@ -323,7 +341,7 @@
               </div>
               <div class="bttns">
                 <button type="submit" class="save_delivery_btn">حفظ</button>
-                <button class="cancel_category_btn">إلغاء</button>
+                <button type="button" class="cancel_category_btn">إلغاء</button>
               </div>
             </form>
           </div>
@@ -393,6 +411,7 @@
         <button id="closeShiftDrawer" class="shift_drawer_backdrop" type="button" aria-label="إغلاق"></button>
         <aside><div class="shift_drawer_header"><div><p>تفاصيل الوردية</p><h2 id="drawerCashierName">—</h2></div><button id="closeShiftDrawerBtn" type="button">×</button></div><div id="shiftDrawerContent"></div><button id="printShiftBtn" class="print_shift_btn" type="button">طباعة تسليم الشيفت</button></aside>
       </div>
+      </section>
     </div>
 
     <!-- ===== صفحة التقارير ===== -->
@@ -736,15 +755,16 @@
     </script>
 
     <!-- ===== السكريبتات ===== -->
+    <script src="js/custom-select.js?v=20260820-global-select"></script>
     <script src="js/Validation.js"></script>
-    <script src="js/product.js"></script>
-    <script src="js/category.js"></script>
-    <script src="js/delivery.js"></script>
+    <script src="js/product.js?v=20260820-items-operations"></script>
+    <script src="js/category.js?v=20260820-categories-operations"></script>
+    <script src="js/delivery.js?v=20260820-users-operations"></script>
     <script src="js/offer.js"></script>
-    <script src="js/shifts.js?v=20260820-shifts-control"></script>
+    <script src="js/shifts.js?v=20260820-payment-reconciliation"></script>
 
     <script src="js/chart.js?v=20260820-report-print-all"></script>
-    <script src="js/orders_dashboard.js?v=20260820-operations-dashboard"></script>
+    <script src="js/orders_dashboard.js?v=20260820-sales-comparison"></script>
     <script src="js/admin.js?v=20260820-cloud-only"></script>
     <script>
       // ===== عرض اسم المستخدم =====

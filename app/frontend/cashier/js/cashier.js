@@ -445,6 +445,43 @@ function renderCart() {
   });
 }
 
+let selectedPaymentMethod = "cash";
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".payment_method_btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedPaymentMethod = button.dataset.paymentMethod || "cash";
+      document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item === button));
+    });
+  });
+});
+
+function openShiftCashModal() {
+  document.getElementById("shift_cash_modal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "shift_cash_modal";
+  modal.className = "shift_cash_modal";
+  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>سجّل حركة الدرج والنقد الفعلي. النظام سيحسب الفرق للمدير تلقائيًا.</p><div class="shift_cash_fields"><label>رصيد بداية الشيفت<input name="opening_cash" type="number" min="0" step="0.01" placeholder="0.00"></label><label>المصروفات أو المسحوبات<input name="cash_expenses" type="number" min="0" step="0.01" placeholder="0.00"></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري"></textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
+  document.body.appendChild(modal);
+  modal.querySelector(".shift_cash_cancel").onclick = () => modal.remove();
+  modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
+  modal.querySelector("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const payload = {};
+    ["opening_cash", "cash_expenses", "actual_closing_cash"].forEach((key) => {
+      const value = form.get(key);
+      if (value !== "") payload[key] = Number(value);
+    });
+    const note = String(form.get("closing_note") || "").trim();
+    if (note) payload.closing_note = note;
+    const response = await apiFetch("/shifts/current/cash", { method: "PATCH", body: JSON.stringify(payload) });
+    if (!response.ok) return showToast("تعذر حفظ تسوية الشيفت", "error");
+    modal.remove();
+    showToast("تم حفظ تسوية الشيفت", "success");
+  });
+}
+
 function confirmOrder() {
   if (cart.length === 0) return;
 
@@ -641,6 +678,7 @@ function showConfirmModal(orderData) {
         customer_name: deliveryCustomerInfo.name || null,
         order_type: mappedOrderType,
         source: "cashier",
+        payment_method: selectedPaymentMethod,
         customer_notes: customerNotes,
         internal_notes: null,
         items: items,
@@ -682,6 +720,8 @@ function showConfirmModal(orderData) {
       }
 
       const createdOrder = await res.json();
+      selectedPaymentMethod = "cash";
+      document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item.dataset.paymentMethod === "cash"));
 
       overlay.remove();
 

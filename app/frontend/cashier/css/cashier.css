@@ -1544,3 +1544,26 @@ nav {
   }
 }
 
+.payment_method_picker {
+  padding: 8px 14px;
+  border-top: 1px solid rgba(201, 168, 76, .2);
+  color: #fff;
+  font-family: Cairo, sans-serif;
+}
+.payment_method_picker > span { display:block; margin-bottom:7px; color:var(--color-subtext); font-size:12px; }
+.payment_method_picker > div { display:grid; grid-template-columns:repeat(3, 1fr); gap:7px; }
+.payment_method_btn { border:1px solid rgba(255,255,255,.15); border-radius:9px; padding:8px 5px; background:rgba(255,255,255,.04); color:#fff; font-family:inherit; cursor:pointer; }
+.payment_method_btn.active { background:var(--color-primary); border-color:var(--color-primary); color:#171208; font-weight:800; }
+.shift_cash_btn { background:rgba(201,168,76,.12); border:1px solid var(--color-primary-border); color:var(--color-primary); border-radius:8px; padding:7px 12px; font-family:Cairo,sans-serif; font-weight:700; cursor:pointer; }
+.shift_cash_modal { position:fixed; inset:0; z-index:10020; display:grid; place-items:center; padding:20px; background:rgba(0,0,0,.78); backdrop-filter:blur(7px); }
+.shift_cash_modal form { width:min(520px,100%); padding:24px; border:1px solid var(--color-primary-border); border-radius:18px; background:#17140e; box-shadow:0 22px 70px rgba(0,0,0,.6); direction:rtl; }
+.shift_cash_modal h2 { color:var(--color-primary); margin:0 0 4px; }
+.shift_cash_modal p { color:var(--color-subtext); margin:0 0 18px; font-size:13px; }
+.shift_cash_fields { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+.shift_cash_fields label { display:flex; flex-direction:column; gap:6px; color:#fff; font-size:12px; }
+.shift_cash_fields input,.shift_cash_fields textarea { box-sizing:border-box; width:100%; background:#0f0d09; border:1px solid rgba(255,255,255,.14); border-radius:9px; padding:10px; color:#fff; font-family:inherit; }
+.shift_cash_fields label:last-child { grid-column:1/-1; }
+.shift_cash_actions { display:flex; gap:10px; margin-top:18px; }
+.shift_cash_actions button { flex:1; border-radius:9px; padding:11px; font-family:inherit; font-weight:800; cursor:pointer; }
+.shift_cash_save { border:0; background:var(--color-primary); color:#171208; }
+.shift_cash_cancel { border:1px solid rgba(255,255,255,.16); background:transparent; color:#fff; }

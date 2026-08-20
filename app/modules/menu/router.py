@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.redis import get_redis
-from app.modules.menu import service, schemas
+from app.modules.menu import service, schemas, models
 from typing import List
 from app.modules.infrastructure.dependencies import (
     require_capability,
@@ -116,6 +116,47 @@ async def list_products(
     return await products_service.list_products(only_active=only_active)
 
 
+@router.get("/products/operations")
+async def get_products_operations(
+    db: AsyncSession = Depends(get_db),
+    _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
+):
+    """Last 30 days sales and recent auditable menu changes."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import select, func
+    from app.modules.orders.models import Order, OrderItem
+    from app.core.enums import OrderStatus
+    from app.modules.users.models import User
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    sales_result = await db.execute(
+        select(
+            OrderItem.product_id,
+            func.sum(OrderItem.quantity).label("units_sold"),
+            func.sum(OrderItem.total_price).label("sales"),
+        ).join(Order, Order.id == OrderItem.order_id).where(
+            Order.created_at >= cutoff,
+            Order.is_deleted == False,
+            OrderItem.is_deleted == False,
+            Order.order_status != OrderStatus.CANCELLED,
+        ).group_by(OrderItem.product_id)
+    )
+    logs_result = await db.execute(
+        select(models.ProductChangeLog, models.Product.product_name, User.full_name, User.username)
+        .join(models.Product, models.Product.id == models.ProductChangeLog.product_id)
+        .outerjoin(User, User.id == models.ProductChangeLog.changed_by_user_id)
+        .order_by(models.ProductChangeLog.created_at.desc()).limit(60)
+    )
+    return {
+        "period_days": 30,
+        "sales": [{"product_id": row.product_id, "units_sold": int(row.units_sold or 0), "sales": float(row.sales or 0)} for row in sales_result],
+        "changes": [{
+            "id": log.id, "product_id": log.product_id, "product_name": product_name,
+            "change_type": log.change_type, "old_value": log.old_value, "new_value": log.new_value,
+            "changed_by": full_name or username or "النظام", "created_at": log.created_at.isoformat(),
+        } for log, product_name, full_name, username in logs_result],
+    }
+
+
 @router.get("/products/{id}", response_model=schemas.ProductResponse)
 async def get_product(
     id: int,
@@ -157,7 +198,7 @@ async def update_product(
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
     products_service = service.ProductService(db, redis)
-    updateproduct = await products_service.update_product(id, product_data)
+    updateproduct = await products_service.update_product(id, product_data, actor_id=_current_user.id)
     return updateproduct
 
 
@@ -181,5 +222,5 @@ async def toggle_product(
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
     products_service = service.ProductService(db, redis)
-    toggle = await products_service.toggle_product(id)
+    toggle = await products_service.toggle_product(id, actor_id=_current_user.id)
     return toggle

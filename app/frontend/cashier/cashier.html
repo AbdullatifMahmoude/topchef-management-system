@@ -36,6 +36,7 @@
         <button id="tab_riders" class="nav_tab" onclick="switchMainTab('riders')">الدليفرية</button>
       </div>
       <div style="display: flex; align-items: center; gap: 12px">
+        <button type="button" class="shift_cash_btn" onclick="openShiftCashModal()">تسوية الشيفت</button>
         <span
           style="color: var(--color-text); font-size: 14px; font-weight: 600"
         >
@@ -168,6 +169,14 @@
           <div class="total_sum">
             <h1>الإجمالي</h1>
             <h2 id="total_price">0 ج.م</h2>
+          </div>
+          <div class="payment_method_picker" aria-label="طريقة الدفع">
+            <span>طريقة الدفع</span>
+            <div>
+              <button type="button" class="payment_method_btn active" data-payment-method="cash">نقدي</button>
+              <button type="button" class="payment_method_btn" data-payment-method="instapay">InstaPay</button>
+              <button type="button" class="payment_method_btn" data-payment-method="wallet">محفظة</button>
+            </div>
           </div>
           <div class="footer_btns">
             <button class="btn_confirm" onclick="confirmOrder()">
@@ -327,6 +336,7 @@
           }
         })();
       </script>
-    <script src="js/cashier.js?v=5-print-agent"></script>
+    <script src="../js/custom-select.js?v=20260820-global-select"></script>
+    <script src="js/cashier.js?v=20260820-payment-method"></script>
   </body>
 </html>

@@ -40,3 +40,8 @@ class OrderType(CaseInsensitiveEnum):
 class OrderSource(CaseInsensitiveEnum):
     CASHIER = "cashier"
     ONLINE = "online"
+
+class PaymentMethod(CaseInsensitiveEnum):
+    CASH = "cash"
+    INSTAPAY = "instapay"
+    WALLET = "wallet"
