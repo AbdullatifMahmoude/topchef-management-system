@@ -38,24 +38,6 @@ class OrderService:
             async with self.db.begin():
                 yield
 
-    def _record_outbox_event(self, event_type: str, data: dict):
-        """Records an event in the outbox queue to be synced to the cloud if running in desktop mode."""
-        import os
-        import json
-        if os.environ.get("RUNTIME_MODE") == "desktop":
-            from app.modules.orders.models import OutboxEvent, OutboxEventStatus
-            outbox_record = OutboxEvent(
-                event_type=event_type,
-                topic="orders.local",
-                payload=json.dumps(data),
-                status=OutboxEventStatus.PENDING
-            )
-            self.db.add(outbox_record)
-            
-            # Wake up the background sync loop immediately if in desktop mode
-            from app.core.events import get_outbox_sync_trigger
-            get_outbox_sync_trigger().set()
-
     async def _validate_order_items(self, items: List[schemas.OrderItemCreate]):
         """Validate products exist and are available."""
         from app.modules.menu.service import ProductService
@@ -126,12 +108,6 @@ class OrderService:
                         existing_cust.name = order_data.customer_name
                         self.db.add(existing_cust)
                         
-                        customer_service._record_outbox_event("CUSTOMER_CREATED", {
-                            "id": existing_cust.id,
-                            "name": existing_cust.name,
-                            "phone_number": existing_cust.phone_number,
-                            "created_at": existing_cust.created_at.isoformat() if existing_cust.created_at else None,
-                        })
                         
                 except NotFoundError:
                     # Phone not found — create new customer
@@ -236,11 +212,8 @@ class OrderService:
             # Record Outbox Event
             order_schema = schemas.OrderResponse.model_validate(order)
             payload_data = order_schema.model_dump(mode='json')
-            self._record_outbox_event("ORDER_CREATED", payload_data)
             
             # 8. Trigger Sync and Notify
-            from app.core.events import get_outbox_sync_trigger
-            get_outbox_sync_trigger().set()
             await order_events_manager.emit({
                 "type": "NEW_ORDER",
                 "event": "order.created",
@@ -301,10 +274,7 @@ class OrderService:
             completed_order = await self.get_order(updated_order.id)
             completed_schema = schemas.OrderResponse.model_validate(completed_order)
             payload_data = completed_schema.model_dump(mode='json')
-            self._record_outbox_event("ORDER_UPDATED", payload_data)
         
-        from app.core.events import get_outbox_sync_trigger
-        get_outbox_sync_trigger().set()
         await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
@@ -344,12 +314,6 @@ class OrderService:
                             existing_cust.name = target_name
                             self.db.add(existing_cust)
                             
-                            customer_service._record_outbox_event("CUSTOMER_CREATED", {
-                                "id": existing_cust.id,
-                                "name": existing_cust.name,
-                                "phone_number": existing_cust.phone_number,
-                                "created_at": existing_cust.created_at.isoformat() if existing_cust.created_at else None,
-                            })
                             
                     except NotFoundError:
                         # A changed phone number belongs to the customer already
@@ -361,18 +325,10 @@ class OrderService:
                         )
                         normalized_phone = normalize_egyptian_phone(target_phone) or target_phone.strip()
                         if linked_customer:
-                            previous_phone = linked_customer.phone_number
                             linked_customer.name = target_name
                             linked_customer.phone_number = normalized_phone
                             self.db.add(linked_customer)
                             update_data.customer_id = linked_customer.id
-                            customer_service._record_outbox_event("CUSTOMER_CREATED", {
-                                "id": linked_customer.id,
-                                "name": linked_customer.name,
-                                "phone_number": linked_customer.phone_number,
-                                "previous_phone_number": previous_phone,
-                                "created_at": linked_customer.created_at.isoformat() if linked_customer.created_at else None,
-                            })
                         else:
                             new_cust = await customer_service.create_customer(CustomerCreate(
                                 name=target_name,
@@ -479,9 +435,6 @@ class OrderService:
             completed_order = await self.get_order(updated_order.id)
             completed_schema = schemas.OrderResponse.model_validate(completed_order)
             payload_data = completed_schema.model_dump(mode='json')
-            self._record_outbox_event("ORDER_UPDATED", payload_data)
-        from app.core.events import get_outbox_sync_trigger
-        get_outbox_sync_trigger().set()
         await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",

@@ -1,9 +1,5 @@
-# Ignore Desktop App source and builds
-desktop/
 build/
 installer/
-requirements-desktop.txt
-topchef_desktop.spec
 
 # Ignore local database and logs
 *.db

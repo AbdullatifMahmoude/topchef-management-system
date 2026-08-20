@@ -121,7 +121,7 @@ async def get_rider_stats(
         business_day_start = business_day_start - timedelta(days=1)
     
     # `order_date` is set from the 5 AM business-day boundary when the order is
-    # created. It is authoritative on the desktop SQLite database too, unlike
+    # created. It is the authoritative order response.
     # browser/device timestamps or page-limited frontend lists.
     business_date = business_day_start.date()
     query = (

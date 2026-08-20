@@ -77,12 +77,6 @@ class RedisClient:
         if self.redis:
             return self.redis
 
-        if settings.RUNTIME_MODE == "desktop":
-            self.redis = InMemoryCache()
-            self.backend_name = "memory"
-            logger.info("Desktop mode cache initialized with in-memory backend")
-            return self.redis
-
         try:
             self.redis = redis.from_url(
                 settings.REDIS_URL,

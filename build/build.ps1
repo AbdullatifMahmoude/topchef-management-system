@@ -1,8 +1,8 @@
 <# 
 .SYNOPSIS
-    Build script for Top Chef Desktop POS
+    Build script for Top Chef Print Agent
 .DESCRIPTION
-    1. Installs desktop dependencies
+    1. Installs print agent dependencies
     2. Runs PyInstaller
     3. Copies runtime assets
     4. Optionally compiles Inno Setup installer
@@ -16,18 +16,18 @@ param(
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $BuildDir    = $PSScriptRoot
-$DistDir     = Join-Path $BuildDir "dist\TopChef"
+$DistDir     = Join-Path $BuildDir "dist\TopChefPrintAgent"
 
 Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "  Top Chef Desktop POS - Build Script" -ForegroundColor Cyan
+Write-Host "  Top Chef Print Agent - Build Script" -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
 Write-Host ""
 
 # 1. Install dependencies
 if (-not $SkipInstall) {
-    Write-Host "[1/4] Installing desktop dependencies ..." -ForegroundColor Yellow
+    Write-Host "[1/4] Installing print agent dependencies ..." -ForegroundColor Yellow
     Push-Location $ProjectRoot
-    pip install -r requirements-desktop.txt --quiet
+    pip install -r requirements-print-agent.txt --quiet
     Pop-Location
     Write-Host "      * Dependencies installed" -ForegroundColor Green
 } else {
@@ -42,7 +42,7 @@ Push-Location $BuildDir
 if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
 if (Test-Path "build_temp") { Remove-Item -Recurse -Force "build_temp" }
 
-pyinstaller topchef_desktop.spec --clean --workpath build_temp --distpath dist
+pyinstaller topchef_print_agent.spec --clean --noconfirm --workpath build_temp --distpath dist
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  ! PyInstaller failed!" -ForegroundColor Red
     Pop-Location
@@ -55,30 +55,17 @@ Write-Host "      * EXE built -> $DistDir" -ForegroundColor Green
 Write-Host "[3/4] Copying runtime files ..." -ForegroundColor Yellow
 
 # settings.json
-Copy-Item (Join-Path $ProjectRoot "desktop\settings.json") $DistDir -Force
-
-# .env (required for cloud SECRET_KEY so sync authentication works)
-$EnvFile = Join-Path $ProjectRoot ".env"
-if (Test-Path $EnvFile) {
-    Copy-Item $EnvFile $DistDir -Force
-    Write-Host "      * .env copied (cloud auth enabled)" -ForegroundColor Green
-} else {
-    Write-Host "      ! WARNING: No .env file found - cloud sync will use fallback key" -ForegroundColor Yellow
-}
-
-# version.txt
-Copy-Item (Join-Path $ProjectRoot "desktop\version.txt") $DistDir -Force
+Copy-Item (Join-Path $ProjectRoot "print_agent\settings.json") $DistDir -Force
 
 # assets folder
-$AssetsSource = Join-Path $ProjectRoot "desktop\assets"
+$AssetsSource = Join-Path $ProjectRoot "print_agent\assets"
 $AssetsDest   = Join-Path $DistDir "assets"
 if (-not (Test-Path $AssetsDest)) { New-Item -ItemType Directory -Path $AssetsDest -Force | Out-Null }
 if (Test-Path $AssetsSource) {
     Copy-Item "$AssetsSource\*" $AssetsDest -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# Create empty data/logs dirs
-if (-not (Test-Path (Join-Path $DistDir "data"))) { New-Item -ItemType Directory -Path (Join-Path $DistDir "data") -Force | Out-Null }
+# Create empty logs dir
 if (-not (Test-Path (Join-Path $DistDir "logs"))) { New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null }
 
 Write-Host "      * Runtime files copied" -ForegroundColor Green

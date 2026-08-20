@@ -1,11 +1,37 @@
 const API_BASE = window.location.origin;
-const IS_DESKTOP_RUNTIME = ["127.0.0.1", "localhost"].includes(
-  window.location.hostname,
-);
+const TOPCHEF_PRINT_AGENT_URL = "http://127.0.0.1:8199";
 
-// The persisted order number contains a device suffix so multiple offline
-// cashiers cannot collide. That identifier is infrastructure, not something
-// staff need to see on tickets or screens.
+// Print Agent bridge: sends invoice data to the native local service only.
+function printReceipt(orderData) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1800);
+
+  fetch(`${TOPCHEF_PRINT_AGENT_URL}/api/print`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order: orderData, receipt_type: "customer" }),
+    targetAddressSpace: "loopback",
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      clearTimeout(timeout);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || `Print Agent returned ${response.status}`);
+      }
+      console.log("Invoice queued in Top Chef Print Agent.");
+    })
+    .catch((error) => {
+      clearTimeout(timeout);
+      console.error("Top Chef Print Agent is unavailable.", error);
+      const message = "تطبيق Top Chef Print Agent غير مُشغّل أو لم يتم اختيار طابعة";
+      if (typeof showToast === "function") showToast(message, "error");
+      else alert(message);
+    });
+}
+// End Print Agent bridge.
+
+// Show the human-friendly sequence part of the order number.
 function displayOrderNumber(orderNumber, fallback = "---") {
   const value = orderNumber ?? fallback;
   const text = String(value);
@@ -704,7 +730,7 @@ function showConfirmModal(orderData) {
         printReceipt(printData);
       } else {
         console.error(
-          "Function printReceipt not found. ensure print.js is loaded.",
+          "Print Agent bridge is unavailable.",
         );
       }
 
@@ -1607,9 +1633,6 @@ async function renderRidersTab() {
   const body = document.getElementById("riders_table_body");
   if (!body) return;
 
-  // Always read the authoritative local API on desktop. The old approach
-  // merged paginated UI lists, which could miss older orders or count an
-  // online order twice when it appeared in both lists.
   body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
   try {
     const response = await apiFetch("/orders/riders/stats", { suppress401: true });
@@ -1878,18 +1901,6 @@ async function fetchAllOrdersServer(page = 1, silent = false) {
 async function fetchAllOrders(skipSync = false) {
   showGlobalLoader(true);
   try {
-    if (IS_DESKTOP_RUNTIME && !skipSync) {
-      try {
-        await apiFetch("/desktop-updates/trigger-pull", {
-          method: "POST",
-          suppress401: true,
-        });
-        await new Promise((resolve) => setTimeout(resolve, 800));
-      } catch (e) {
-        console.warn("Could not trigger background sync:", e);
-      }
-    }
-
     // Fetch first page of both and the badge count
     await Promise.all([
       fetchOnlineOrdersServer(1),
@@ -2451,7 +2462,7 @@ function handleSocketEvent(payload) {
       ? payload.data.orders
       : [];
     ordersSnapshotLoaded = true;
-    // Local (cashier) orders from snapshot are authoritative on desktop
+    // Split the live snapshot into cashier and online orders.
     const allFromSnapshot = orders.filter((o) => !isOnlineOrder(o));
     const onlineFromSnapshot = orders.filter(isOnlineOrder);
     // Respect pagination: only keep first page and set totals

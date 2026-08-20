@@ -11,7 +11,6 @@ from app.modules.customer.models import Customer, CustomerAddress
 from app.modules.comments.models import Comment
 from app.modules.settings.models import AppSetting
 from app.modules.shifts.models import CashierShift
-from app.modules.sync.models import SyncQuarantine
 
 # Alembic Config object
 config = context.config
@@ -24,7 +23,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # --------------------------------------------------------
-# Offline migrations
+# URL-based migrations
 # --------------------------------------------------------
 def run_migrations_offline() -> None:
     url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://").split("?")[0]

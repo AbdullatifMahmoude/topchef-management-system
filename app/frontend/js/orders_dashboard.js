@@ -218,7 +218,7 @@
        }
     }
     
-    // Global sync complete from desktop
+    // Global order refresh completed.
     if (type === "SYNC_COMPLETE") {
        console.log("Master sync complete, refreshing all...");
        loadDashboardData();

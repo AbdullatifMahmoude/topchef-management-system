@@ -181,19 +181,6 @@ class OrderRepository:
         business_date = self.get_business_date()
         prefix = settings.TERMINAL_ID
         
-        # Every desktop keeps its own SQLite counter while offline. Use the
-        # per-install device ID as the internal prefix; TERMINAL_ID is not
-        # needed for this workflow. Two cashiers can then create orders
-        # concurrently without a unique(order_number, date) collision once
-        # both queues reach the cloud.
-        if settings.RUNTIME_MODE == "desktop":
-            try:
-                from desktop.config import config as desktop_config
-                device_suffix = desktop_config.device_id[:4].upper()
-                prefix = device_suffix
-            except ImportError:
-                pass
-
         bind = self.db.bind
         if bind is not None and bind.dialect.name == "sqlite":
             count_query = select(func.count()).select_from(models.Order).where(

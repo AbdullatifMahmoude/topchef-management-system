@@ -53,8 +53,6 @@ Desktop.ini
 *.log
 *.db
 logs/
-desktop/logs/
-desktop/data/
 
 # ========================
 # Temporary & Cache

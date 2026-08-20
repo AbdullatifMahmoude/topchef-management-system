@@ -1,18 +1,18 @@
 ; ══════════════════════════════════════════════════════════════
-; Top Chef Desktop POS — Inno Setup Installer Script
+; Top Chef Print Agent — Inno Setup Installer Script
 ; ══════════════════════════════════════════════════════════════
 ; Compile with:  ISCC.exe topchef_setup.iss
 ; Requires:      Inno Setup 6+  (https://jrsoftware.org)
 ; ══════════════════════════════════════════════════════════════
 
-#define MyAppName      "TopChef"
+#define MyAppName      "Top Chef Print Agent"
 #define MyAppVersion   "1.0.0"
 #define MyAppPublisher "Top Chef"
-#define MyAppExeName   "TopChef.exe"
+#define MyAppExeName   "TopChefPrintAgent.exe"
 #define MyAppURL       "https://topchef-system.fastapicloud.dev"
 
 ; Path to PyInstaller output (relative to this .iss file)
-#define DistDir        "..\build\dist\TopChef"
+#define DistDir        "..\build\dist\TopChefPrintAgent"
 
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}}
@@ -26,7 +26,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=output
-OutputBaseFilename=TopChefSetup_{#MyAppVersion}
+OutputBaseFilename=TopChefPrintAgentSetup_{#MyAppVersion}
 SetupIconFile={#DistDir}\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -46,15 +46,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon";   Description: "{cm:CreateDesktopIcon}";   GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
-Name: "autostart";     Description: "تشغيل تلقائي عند بدء Windows / Start with Windows"; GroupDescription: "خيارات إضافية / Additional Options"; Flags: unchecked
 
 [Files]
 ; Main application files (from PyInstaller dist)
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; Ensure writable data directories exist
-Source: "{#DistDir}\data\*";   DestDir: "{app}\data";   Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
-Source: "{#DistDir}\logs\*";   DestDir: "{app}\logs";   Flags: ignoreversion recursesubdirs createallsubdirs; Permissions: users-modify
 
 [Icons]
 Name: "{group}\{#MyAppName}";                   Filename: "{app}\{#MyAppExeName}"
@@ -63,18 +58,15 @@ Name: "{autodesktop}\{#MyAppName}";             Filename: "{app}\{#MyAppExeName}
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
 
 [Registry]
-; Auto-start with Windows (optional task)
+; Remove the obsolete POS startup entry, then always start the Print Agent.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
-    ValueType: string; ValueName: "TopChefPOS"; ValueData: """{app}\{#MyAppExeName}"""; \
-    Flags: uninsdeletevalue; Tasks: autostart
+    ValueType: none; ValueName: "TopChefPOS"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+    ValueType: string; ValueName: "TopChefPrintAgent"; ValueData: """{app}\{#MyAppExeName}"""; \
+    Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
-[UninstallDelete]
-; Clean up user data on uninstall (optional — user may want to keep data)
-; Type: filesandordirs; Name: "{app}\data"
-; Type: filesandordirs; Name: "{app}\logs"
 
 [Code]
 // ── Pre-install: close running instance ──
@@ -85,17 +77,4 @@ begin
   // Try to close any running instance
   Exec('taskkill', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := True;
-end;
-
-// ── Post-install: set data folder permissions ──
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ResultCode: Integer;
-begin
-  if CurStep = ssPostInstall then
-  begin
-    // Grant users write access to data and logs folders
-    Exec('icacls', '"' + ExpandConstant('{app}\data') + '" /grant Users:(OI)(CI)F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec('icacls', '"' + ExpandConstant('{app}\logs') + '" /grant Users:(OI)(CI)F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end;
 end;

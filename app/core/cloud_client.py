@@ -98,14 +98,6 @@ class CloudSyncClient:
             )
             self.update_token(new_token)
 
-            # Also refresh the global _auth_header_cache in launcher so the
-            # middleware picks it up on the next local request.
-            try:
-                import desktop.launcher as _launcher
-                _launcher._auth_header_cache = f"Bearer {new_token}"
-            except Exception:
-                pass
-
             logger.info(
                 "🔑 Silent token renewal succeeded for user '%s' (role=%s)",
                 username, role,

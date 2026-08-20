@@ -1,5 +1,3 @@
-import json
-import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.modules.customer.repository import CustomerRepository
@@ -22,20 +20,6 @@ class CustomerService:
             async with self.db.begin():
                 yield
 
-    def _record_outbox_event(self, event_type: str, data: dict):
-        """Records an event in the outbox queue to be synced to the cloud if running in desktop mode."""
-        if os.environ.get("RUNTIME_MODE") == "desktop":
-            from app.modules.orders.models import OutboxEvent, OutboxEventStatus
-            outbox_record = OutboxEvent(
-                event_type=event_type,
-                topic="customers.local",
-                payload=json.dumps(data, default=str),
-                status=OutboxEventStatus.PENDING
-            )
-            self.db.add(outbox_record)
-            from app.core.events import get_outbox_sync_trigger
-            get_outbox_sync_trigger().set()
-
     async def create_customer(self, customer_data: schemas.CustomerCreate) -> models.Customer:
         """Atomic customer creation with phone uniqueness check."""
         async with self._transaction_scope():
@@ -55,13 +39,6 @@ class CustomerService:
             # 3. Save via Repository
             customer = await self.repository.save(new_customer)
             
-            # 4. Record outbox event for desktop → cloud sync (inside transaction so it persists atomically)
-            self._record_outbox_event("CUSTOMER_CREATED", {
-                "id": customer.id,
-                "name": customer.name,
-                "phone_number": customer.phone_number,
-                "created_at": customer.created_at.isoformat() if customer.created_at else None,
-            })
         
         # 5. Reload with eager loading after transaction commits
         reloaded_customer = await self.repository.get_by_id(customer.id)
@@ -148,15 +125,6 @@ class CustomerService:
             
             # 4. Save
             address = await self.repository.save(new_address)
-            
-            # 5. Record outbox event for desktop → cloud sync
-            self._record_outbox_event("ADDRESS_CREATED", {
-                "id": address.id,
-                "customer_id": customer_id,
-                "address": address_data.address,
-                "customer_phone": customer.phone_number,
-                "created_at": address.created_at.isoformat() if address.created_at else None,
-            })
             
             # 6. Emit real-time event for WebSocket subscribers
             try:

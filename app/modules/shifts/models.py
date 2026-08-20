@@ -13,7 +13,7 @@ class CashierShift(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     target_date: Mapped[date] = mapped_column(Date, index=True)
-    # Closing/reopening a shift must be visible to incremental desktop pulls.
+    # Closing/reopening a shift updates this timestamp.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,
