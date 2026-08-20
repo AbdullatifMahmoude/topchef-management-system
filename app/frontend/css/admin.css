@@ -3542,6 +3542,107 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .custom-date-filter label,.custom-date-filter input,.custom-date-filter button { width:100%!important; }
 }
 
+/* Admin sidebar visual system */
+.sidemenu {
+  box-sizing:border-box;
+  direction:rtl;
+  padding:18px 14px 14px !important;
+  border-inline-start:1px solid rgba(255,240,199,.20);
+  background:linear-gradient(180deg,#b9893e 0%,#976a2b 52%,#67451d 100%) !important;
+  box-shadow:-14px 0 42px rgba(0,0,0,.28);
+}
+.sidemenu .logo_title {
+  display:flex;
+  flex:0 0 auto;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+  box-sizing:border-box;
+  padding:2px 7px 15px;
+  border-bottom:1px solid rgba(36,25,12,.22);
+}
+.sidemenu .logo_title img { width:58px; height:58px; object-fit:contain; filter:drop-shadow(0 5px 8px rgba(0,0,0,.23)); }
+.sidebar_brand_copy { min-width:0; text-align:right; }
+.sidebar_brand_copy small { display:block; margin-bottom:3px; color:rgba(31,22,11,.58); font-size:8px; font-weight:800; }
+.sidemenu .logo_title h1 { margin:0; color:#161109; font-size:19px; line-height:1.3; white-space:nowrap; }
+.sidemenu .logo_title h1 span { color:#fff1d0; }
+.sidemenu .menu_btn {
+  box-sizing:border-box;
+  margin-top:10px;
+  padding:2px 4px 8px;
+  gap:4px;
+  scrollbar-gutter:stable;
+  scrollbar-color:rgba(29,21,12,.42) transparent;
+}
+.sidemenu .menu_btn::-webkit-scrollbar { width:4px; }
+.sidemenu .menu_btn::-webkit-scrollbar-thumb { background:rgba(29,21,12,.42); }
+.sidemenu .menu_btn button.side_btn {
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:11px;
+  box-sizing:border-box;
+  min-height:45px;
+  padding:8px 12px;
+  border:1px solid transparent;
+  border-radius:11px;
+  background:transparent;
+  color:rgba(255,246,224,.82);
+  font-size:14.5px;
+  font-weight:700;
+  text-align:right;
+  direction:rtl;
+  transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease;
+}
+.sidemenu .side_btn svg { width:18px; height:18px; flex:0 0 18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; opacity:.7; }
+.sidemenu .side_btn:hover { transform:translateX(-2px); border-color:rgba(255,255,255,.10) !important; background:rgba(255,244,215,.09) !important; color:#fff6df !important; }
+.sidemenu .side_btn.active {
+  border-color:rgba(255,222,135,.12) !important;
+  background:#17140f !important;
+  color:#f1ca61 !important;
+  box-shadow:0 7px 18px rgba(0,0,0,.22),inset 3px 0 0 #d8b44f;
+}
+.sidemenu .side_btn.active svg { opacity:1; filter:drop-shadow(0 0 6px rgba(216,180,79,.22)); }
+.sidemenu .logo_bottom.sidebar_account {
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr);
+  align-items:center;
+  gap:9px;
+  box-sizing:border-box;
+  margin:8px 0 0;
+  padding:10px 7px 0;
+  border-top:1px solid rgba(255,239,194,.14);
+  direction:rtl;
+}
+.sidebar_user_avatar { display:grid; width:34px; height:34px; place-items:center; border-radius:10px; background:#211a10; color:#e3bd54; font-size:12px; font-weight:900; box-shadow:0 4px 12px rgba(0,0,0,.18); }
+.sidemenu .sidebar_greeting { display:flex; min-width:0; flex-direction:column; gap:1px; margin:0; padding:0; text-align:right; line-height:1.25; }
+.sidemenu .sidebar_greeting small { color:rgba(255,241,207,.48); font-size:9px; font-weight:700; }
+.sidemenu .sidebar_greeting #admin_username { overflow:hidden; color:#fff3d3; font-size:12px; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
+.sidemenu .sidebar_logout_btn {
+  display:flex;
+  grid-column:1/-1;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  min-height:39px;
+  margin-top:3px !important;
+  padding:8px 10px !important;
+  border:1px solid rgba(255,142,122,.52);
+  border-radius:10px !important;
+  background:rgba(121,37,27,.22);
+  color:#ff9b88;
+  font-size:12px !important;
+}
+.sidemenu .sidebar_logout_btn svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.sidemenu .sidebar_logout_btn:hover { border-color:rgba(255,164,147,.72); background:rgba(145,42,31,.34); color:#ffb0a0; }
+@media (min-width:641px) and (max-width:1280px) {
+  .sidemenu .logo_title img { width:44px; height:44px; }
+  .sidemenu .logo_title h1 { font-size:15px; }
+  .sidemenu .menu_btn button.side_btn { min-height:40px; padding:7px 10px; font-size:12.5px; }
+  .sidemenu .side_btn svg { width:16px; height:16px; flex-basis:16px; }
+}
+
 /* Tablet tables: fill the card, and contain any extra columns inside the table. */
 @media (min-width: 641px) and (max-width: 1280px) {
   .table_structure_unified,
