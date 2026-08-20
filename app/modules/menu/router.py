@@ -157,6 +157,39 @@ async def get_products_operations(
     }
 
 
+@router.get("/products/popular")
+async def get_popular_products(
+    limit: int = 8,
+    db: AsyncSession = Depends(get_db),
+    _current_user=Depends(get_current_user),
+):
+    """Best-selling available products for the cashier quick-pick bar."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import select, func
+    from app.modules.orders.models import Order, OrderItem
+    from app.core.enums import OrderStatus
+
+    safe_limit = max(1, min(limit, 12))
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    result = await db.execute(
+        select(OrderItem.product_id, func.sum(OrderItem.quantity).label("units_sold"))
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(models.Product, models.Product.id == OrderItem.product_id)
+        .where(
+            Order.created_at >= cutoff,
+            Order.is_deleted == False,
+            OrderItem.is_deleted == False,
+            Order.order_status != OrderStatus.CANCELLED,
+            models.Product.is_available == True,
+            models.Product.is_deleted == False,
+        )
+        .group_by(OrderItem.product_id)
+        .order_by(func.sum(OrderItem.quantity).desc())
+        .limit(safe_limit)
+    )
+    return [{"product_id": row.product_id, "units_sold": int(row.units_sold or 0)} for row in result]
+
+
 @router.get("/products/{id}", response_model=schemas.ProductResponse)
 async def get_product(
     id: int,

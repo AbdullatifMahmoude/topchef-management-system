@@ -77,6 +77,7 @@ async function apiFetch(path, options = {}) {
 // ===================================================
 let categories = [];
 let products = [];
+let popularProducts = [];
 let activeCatId = null;
 let cart = [];
 
@@ -92,6 +93,10 @@ let lastNewOrdersCount = 0;
 let isNotificationSoundEnabled = true;
 let socket = null;
 let reconnectTimerId = null;
+let socketHeartbeatTimerId = null;
+let socketWatchdogTimerId = null;
+let socketReconnectAttempts = 0;
+let lastSocketActivityAt = 0;
 let ordersSnapshotLoaded = false;
 let lastSocketOrderUpdate = Date.now();
 
@@ -167,15 +172,17 @@ async function init() {
   showGlobalLoader(true);
 
   try {
-    const [catsRes, prodsRes] = await Promise.all([
+    const [catsRes, prodsRes, popularRes] = await Promise.all([
       apiFetch("/menu/categories"),
       apiFetch("/menu/products"),
+      apiFetch("/menu/products/popular?limit=8", { hideLoader: true }).catch(() => null),
     ]);
 
     if (!catsRes.ok || !prodsRes.ok) throw new Error("API error loading menu");
 
     categories = await catsRes.json();
     products = await prodsRes.json();
+    popularProducts = popularRes && popularRes.ok ? await popularRes.json() : [];
 
     categories = Array.isArray(categories)
       ? categories.filter((c) => c.is_active)
@@ -186,6 +193,7 @@ async function init() {
     }
 
     renderTabs();
+    renderPopularProducts();
     renderItems();
     initWebOrdersToggle();
 
@@ -227,8 +235,9 @@ function renderItems() {
   const grid = document.getElementById("items_grid");
   grid.innerHTML = "";
 
+  const searchTerm = String(window.localProductSearchTerm || "").trim().toLowerCase();
   const catProducts = products.filter(
-    (p) => p.cat_id === activeCatId && p.is_available,
+    (p) => p.cat_id === activeCatId && p.is_available && (!searchTerm || String(p.product_name || "").toLowerCase().includes(searchTerm) || String(p.description || p.desc || "").toLowerCase().includes(searchTerm)),
   );
 
   if (catProducts.length === 0) {
@@ -480,6 +489,47 @@ function openShiftCashModal() {
     modal.remove();
     showToast("تم حفظ تسوية الشيفت", "success");
   });
+}
+
+function getProductStartingPrice(product) {
+  const prices = (product?.variants || [])
+    .map((variant) => Number.parseFloat(variant.price))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  return prices.length ? Math.min(...prices) : 0;
+}
+
+function renderPopularProducts() {
+  const section = document.getElementById("popular_products_section");
+  const list = document.getElementById("popular_products_list");
+  if (!section || !list) return;
+
+  const ranked = (Array.isArray(popularProducts) ? popularProducts : [])
+    .map((entry) => ({
+      product: products.find((product) => Number(product.id) === Number(entry.product_id)),
+    }))
+    .filter(({ product }) => product && product.is_available)
+    .slice(0, 8);
+
+  section.hidden = ranked.length === 0;
+  list.innerHTML = "";
+  ranked.forEach(({ product }, index) => {
+    const price = getProductStartingPrice(product);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "popular_product_btn";
+    button.innerHTML = `
+      <b>${index + 1}</b>
+      <span><strong>${product.product_name}</strong><small>${(product.variants || []).length > 1 ? "يبدأ من " : ""}${price ? `${price} ج.م` : "اختر السعر"}</small></span>
+      <i aria-hidden="true">+</i>
+    `;
+    button.onclick = () => handleProductClick(product, price);
+    list.appendChild(button);
+  });
+}
+
+function filterLocalProducts(term) {
+  window.localProductSearchTerm = term || "";
+  renderItems();
 }
 
 function confirmOrder() {
@@ -2429,23 +2479,74 @@ function setupWebSocket() {
   const ws = new WebSocket(wsUrl);
   socket = ws;
 
-  // Safety Timeout: if it doesn't open in 5s, close and retry
+  // Hosted services may need a few seconds to wake up from idle.
   const connectTimeoutId = setTimeout(() => {
     if (ws.readyState === WebSocket.CONNECTING) {
-      console.warn("⚠️ WebSocket connection timed out (5s). Retrying...");
+      console.warn("⚠️ WebSocket connection timed out. Retrying...");
       ws.close();
     }
-  }, 5000);
+  }, 12000);
+
+  const stopSocketHealthChecks = () => {
+    if (socketHeartbeatTimerId) clearInterval(socketHeartbeatTimerId);
+    if (socketWatchdogTimerId) clearInterval(socketWatchdogTimerId);
+    socketHeartbeatTimerId = null;
+    socketWatchdogTimerId = null;
+  };
+
+  const startSocketHealthChecks = () => {
+    stopSocketHealthChecks();
+    lastSocketActivityAt = Date.now();
+    socketHeartbeatTimerId = setInterval(() => {
+      if (socket === ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "HEARTBEAT", sent_at: Date.now() }));
+      }
+    }, 15000);
+    socketWatchdogTimerId = setInterval(() => {
+      if (socket === ws && ws.readyState === WebSocket.OPEN && Date.now() - lastSocketActivityAt > 55000) {
+        console.warn("⚠️ WebSocket heartbeat timeout. Reconnecting...");
+        ws.close(4000, "heartbeat timeout");
+      }
+    }, 10000);
+  };
 
   ws.onopen = () => {
     clearTimeout(connectTimeoutId);
+    startSocketHealthChecks();
     console.log("✅ WebSocket connected successfully (Cashier)");
     updateConnectionStatus("connected");
+    setTimeout(() => {
+      if (socket === ws && ws.readyState === WebSocket.OPEN) socketReconnectAttempts = 0;
+    }, 30000);
+    // Fill any gap that may have happened during a restart/disconnection.
+    setTimeout(() => {
+      if (socket === ws && ws.readyState === WebSocket.OPEN) {
+        Promise.all([
+          fetchOnlineOrdersServer(1, true),
+          fetchAllOrdersServer(1, true),
+          refreshNewOrdersBadge(),
+        ]).then(() => {
+          ordersSnapshotLoaded = true;
+          updateOnlineStats();
+          const onlineLayout = document.getElementById("online_orders_layout");
+          const allLayout = document.getElementById("all_orders_layout");
+          if (onlineLayout && onlineLayout.style.display !== "none") renderOnlineOrders();
+          if (allLayout && allLayout.style.display !== "none") renderAllOrders();
+        }).catch((error) => console.warn("Post-reconnect order sync failed:", error));
+      }
+    }, 700);
   };
 
   ws.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data);
+      lastSocketActivityAt = Date.now();
+      if (payload.type === "HEARTBEAT") {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "HEARTBEAT_ACK", received_at: Date.now() }));
+        }
+        return;
+      }
       if (payload.type !== "HEARTBEAT" && payload.type !== "HEARTBEAT_ACK") {
         console.debug("📥 Received WS message:", payload.type);
       }
@@ -2457,6 +2558,7 @@ function setupWebSocket() {
 
   ws.onclose = (e) => {
     clearTimeout(connectTimeoutId);
+    stopSocketHealthChecks();
     if (socket !== ws) return;
     console.warn(
       `🔴 WebSocket disconnected. Code: ${e.code}, Reason: ${e.reason || "None"}`,
@@ -2464,12 +2566,14 @@ function setupWebSocket() {
     socket = null;
     updateConnectionStatus("disconnected");
 
-    // Exponential backoff or simple delay
+    socketReconnectAttempts += 1;
+    const baseDelay = e.code === 1012 ? 1000 : Math.min(15000, 1000 * (2 ** Math.min(socketReconnectAttempts - 1, 4)));
+    const reconnectDelay = baseDelay + Math.floor(Math.random() * 750);
     if (!reconnectTimerId) {
       reconnectTimerId = setTimeout(() => {
         reconnectTimerId = null;
-        setupWebSocket();
-      }, 3000);
+        if (navigator.onLine !== false) setupWebSocket();
+      }, reconnectDelay);
     }
   };
 
@@ -2479,6 +2583,11 @@ function setupWebSocket() {
     updateConnectionStatus("disconnected");
   };
 }
+
+window.addEventListener("online", () => setupWebSocket());
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && (!socket || socket.readyState === WebSocket.CLOSED)) setupWebSocket();
+});
 
 function handleSocketEvent(payload) {
   if (

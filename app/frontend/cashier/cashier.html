@@ -11,17 +11,17 @@
       href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/cashier.css" />
+    <link rel="stylesheet" href="css/cashier.css?v=20260820-navbar-palette" />
   </head>
   <body>
     <!-- ===== Navbar ===== -->
-    <nav>
+    <nav class="cashier_nav">
       <div class="nav_logo">
         <img src="/assets/توب شيف 1@2x.png" alt="logo" />
-        <div style="display: flex; flex-direction: column;">
-          <h1 style="margin-bottom: 2px;">مطعم توب شيف</h1>
-          <div id="ws_status_badge" style="display:flex; align-items:center; gap:6px; font-size: 10px; opacity: 0.8;">
-             <div id="ws_status_dot" style="width:7px; height:7px; border-radius:50%; background: #f1c40f;"></div>
+        <div class="nav_brand_copy">
+          <h1>مطعم توب شيف</h1>
+          <div id="ws_status_badge">
+             <div id="ws_status_dot"></div>
              <span id="ws_status_text">جاري الاتصال...</span>
           </div>
         </div>
@@ -35,55 +35,26 @@
         <button id="tab_all_orders" class="nav_tab" onclick="switchMainTab('all_orders')">كل الطلبات</button>
         <button id="tab_riders" class="nav_tab" onclick="switchMainTab('riders')">الدليفرية</button>
       </div>
-      <div style="display: flex; align-items: center; gap: 12px">
+      <div class="nav_account">
         <button type="button" class="shift_cash_btn" onclick="openShiftCashModal()">تسوية الشيفت</button>
-        <span
-          style="color: var(--color-text); font-size: 14px; font-weight: 600"
-        >
-          مرحباً:
-          <span id="cashier_username" style="color: var(--color-primary)"
-            >...</span
-          >
-        </span>
+        <div class="cashier_identity">
+          <span class="cashier_identity_label">الكاشير</span>
+          <span id="cashier_username">...</span>
+        </div>
         <button
           id="sound_toggle_btn"
+          class="nav_icon_btn"
           onclick="toggleSound()"
-          style="
-            background: rgba(61, 158, 107, 0.2);
-            border: 1px solid var(--color-accent, #3d9e6b);
-            border-radius: 8px;
-            padding: 7px 11px;
-            color: var(--color-accent, #3d9e6b);
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          "
           title="تفعيل/تعطيل صوت التنبيهات"
         >
           <svg id="sound_icon_on" style="display:block" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
           <svg id="sound_icon_off" style="display:none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
         </button>
         <button
+          class="nav_logout_btn"
           onclick="logout()"
-          style="
-            background: rgba(228, 4, 17, 0.12);
-            border: 1px solid rgba(228, 4, 17, 0.4);
-            border-radius: 8px;
-            padding: 7px 14px;
-            color: #fff;
-            font-size: 13px;
-            font-family: Cairo, sans-serif;
-            font-weight: 700;
-            cursor: pointer;
-            transition: background 0.2s;
-          "
-          onmouseover="this.style.background = 'rgba(228,4,17,0.25)'"
-          onmouseout="this.style.background = 'rgba(228,4,17,0.12)'"
         >
-          ⏻ خروج
+          <span aria-hidden="true">⏻</span><span class="logout_text">خروج</span>
         </button>
       </div>
     </nav>
@@ -92,6 +63,20 @@
     <div class="main_layout" id="local_orders_layout">
       <!-- === Right Section === -->
       <div class="right_section">
+        <header class="local_menu_header">
+          <div><p>نقطة البيع</p><h1>منيو الطلب</h1><span>اختر التصنيف ثم أضف الأصناف إلى الطلب الحالي</span></div>
+          <label class="local_product_search">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input id="localProductSearch" type="search" placeholder="ابحث عن صنف..." oninput="filterLocalProducts(this.value)" />
+          </label>
+        </header>
+        <section id="popular_products_section" class="popular_products_section" hidden>
+          <div class="popular_products_heading">
+            <div><strong>الأكثر طلبًا</strong><span>إضافة سريعة للطلب</span></div>
+            <small>آخر 30 يوم</small>
+          </div>
+          <div id="popular_products_list" class="popular_products_list"></div>
+        </section>
         <!-- تابز الكاتيجوري -->
         <div class="category_tabs" id="category_tabs"></div>
 
@@ -142,16 +127,16 @@
             <i class="fa-solid fa-tags"></i>
             <span>خصم إضافي</span>
           </div>
-          <div class="delivery_customer_card">
-            <div style="display:flex; gap:8px;">
-              <select id="discount_type" class="dcf_select" style="flex:1;" onchange="updatePricingPreview()">
+          <div class="delivery_customer_card discount_card">
+            <div class="discount_fields">
+              <label><span>نوع الخصم</span><select id="discount_type" class="dcf_select" onchange="updatePricingPreview()">
                 <option value="">بدون خصم</option>
                 <option value="fixed">مبلغ ثابت</option>
                 <option value="percentage">نسبة مئوية (%)</option>
-              </select>
-              <input type="number" id="discount_value" class="dcf_input" style="flex:1;" placeholder="القيمة" min="0" step="0.01" oninput="updatePricingPreview()">
+              </select></label>
+              <label><span>قيمة الخصم</span><input type="number" id="discount_value" class="dcf_input" placeholder="0.00" min="0" step="0.01" oninput="updatePricingPreview()"></label>
             </div>
-            <input type="text" id="discount_reason" class="dcf_input" placeholder="سبب الخصم (اختياري)">
+            <label class="discount_reason_field"><span>السبب (اختياري)</span><input type="text" id="discount_reason" class="dcf_input" placeholder="مثال: عميل دائم"></label>
           </div>
         </div>
 
@@ -365,6 +350,6 @@
         })();
       </script>
     <script src="../js/custom-select.js?v=20260820-global-select"></script>
-    <script src="js/cashier.js?v=20260820-payment-method"></script>
+    <script src="js/cashier.js?v=20260820-popular-products"></script>
   </body>
 </html>
