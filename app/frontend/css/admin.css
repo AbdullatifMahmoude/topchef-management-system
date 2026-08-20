@@ -3015,3 +3015,104 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   }
 }
 
+/* Sidebar sections: fixed header/footer with independently scrolling tabs. */
+.sidemenu {
+  overflow: hidden !important;
+}
+
+.sidemenu .menu_btn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  width: 100%;
+  min-height: 0;
+  margin-top: 14px;
+  padding: 2px 8px 10px;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 15, 15, 0.55) transparent;
+}
+
+.sidemenu .menu_btn::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidemenu .menu_btn::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.sidemenu .menu_btn::-webkit-scrollbar-thumb {
+  background: rgba(15, 15, 15, 0.55);
+  border-radius: 10px;
+}
+
+.sidemenu .menu_btn button {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 54px;
+  height: auto;
+  padding: 11px 14px;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.sidemenu .logo_bottom {
+  position: static;
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  margin: 10px 0 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.sidemenu .sidebar_greeting {
+  margin: 0 0 12px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.sidemenu .sidebar_logout_btn {
+  display: block;
+  width: 100% !important;
+  margin-top: 0 !important;
+  padding: 12px !important;
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  border: 1px solid rgba(231, 76, 60, 0.55);
+  border-radius: 12px !important;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 17px !important;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.sidemenu .sidebar_logout_btn:hover {
+  background: rgba(231, 76, 60, 0.3);
+  border-color: rgba(231, 76, 60, 0.8);
+}
+
+@media (max-width: 1280px) {
+  .sidemenu {
+    display: flex;
+    flex-direction: column;
+    padding: 16px 14px 18px;
+  }
+
+  .sidemenu .logo_title {
+    flex: 0 0 auto;
+  }
+}
+

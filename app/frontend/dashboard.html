@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260820-sidebar-tables" />
+  <link rel="stylesheet" href="css/admin.css?v=20260820-sidebar-scroll-v3" />
 </head>
 
 <body>
@@ -34,24 +34,11 @@
         <button class="side_btn" data-page="reports">التقارير</button>
         <button class="side_btn" data-page="offers">العروض</button>
       </div>
-      <div class="logo_bottom">
-        <h1>
+      <div class="logo_bottom sidebar_account">
+        <h1 class="sidebar_greeting">
           مرحبا: <span style="color: #ffe701" id="admin_username">...</span>
         </h1>
-        <button id="logout_btn" style="
-            margin-top: 12px;
-            width: 100%;
-            padding: 10px;
-            background: rgba(231,76,60,0.15);
-            color: #e74c3c;
-            border: 1px solid rgba(231,76,60,0.4);
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-family: inherit;
-            transition: background 0.2s;
-          " onmouseover="this.style.background='rgba(231,76,60,0.3)'"
-          onmouseout="this.style.background='rgba(231,76,60,0.15)'">
+        <button id="logout_btn" class="sidebar_logout_btn">
           ⏻ تسجيل الخروج
         </button>
       </div>
