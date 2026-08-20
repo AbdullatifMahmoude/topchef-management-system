@@ -390,59 +390,6 @@ body {
   font-weight: bold;
 }
 
-#device_stats_table {
-  min-width: 760px;
-  table-layout: fixed;
-}
-
-#device_stats_table th,
-#device_stats_table td {
-  vertical-align: middle;
-}
-
-#device_stats_table th:first-child,
-#device_stats_table td:first-child {
-  width: 34%;
-  direction: ltr;
-  text-align: center;
-}
-
-#device_stats_table th:nth-child(2),
-#device_stats_table td:nth-child(2) {
-  width: 22%;
-}
-
-#device_stats_table th:nth-child(3),
-#device_stats_table td:nth-child(3) {
-  width: 24%;
-}
-
-#device_stats_table th:nth-child(4),
-#device_stats_table td:nth-child(4) {
-  width: 20%;
-}
-
-#device_stats_table .status_completed,
-#device_stats_table .status_cancelled {
-  display: inline-flex;
-  min-width: 90px;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 12px;
-}
-
-#device_stats_table .status_completed {
-  background: rgba(46, 204, 113, 0.12);
-  border: 1px solid rgba(46, 204, 113, 0.35);
-}
-
-#device_stats_table .status_cancelled {
-  color: #e74c3c;
-  background: rgba(231, 76, 60, 0.12);
-  border: 1px solid rgba(231, 76, 60, 0.35);
-}
-
 /* ============================================
    Header & Title
    ============================================ */
@@ -2929,5 +2876,142 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
   cursor: pointer;
+}
+
+/* ============================================
+   Admin shell & wide-table containment
+   ============================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.page-content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.table_structure_unified,
+.table_structure_offers,
+.table_structure_reports {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.table_scroll_unified,
+.offers_table_scroll,
+.reports_table_scroll {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reports_table_scroll {
+  max-height: min(62vh, 520px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-primary) transparent;
+}
+
+.orders_table,
+.orders_table_delivery,
+.orders_table_items,
+.orders_table_offers,
+.orders_table_reports {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+}
+
+.orders_table th,
+.orders_table td,
+.orders_table_delivery th,
+.orders_table_delivery td,
+.orders_table_items th,
+.orders_table_items td,
+.orders_table_offers th,
+.orders_table_offers td,
+.orders_table_reports th,
+.orders_table_reports td {
+  white-space: nowrap;
+}
+
+@media (min-width: 1281px) {
+  body {
+    margin: 0;
+    overflow-x: hidden;
+  }
+
+  .layout {
+    display: block;
+    width: 100%;
+    min-height: 100vh;
+    padding-right: 260px;
+  }
+
+  .page-content {
+    width: 100%;
+    padding: 32px clamp(28px, 4vw, 64px) 48px;
+  }
+
+  .sidemenu {
+    width: 260px;
+    padding: 16px 14px 18px;
+    overflow: hidden;
+    box-shadow: -10px 0 32px rgba(0, 0, 0, 0.28);
+  }
+
+  .sidemenu .logo_title {
+    flex: 0 0 auto;
+    width: 100%;
+    justify-content: center;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(15, 15, 15, 0.2);
+  }
+
+  .sidemenu .menu_btn {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    margin-top: 14px;
+    padding: 0 2px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .sidemenu .menu_btn button {
+    width: 100%;
+    min-height: 48px;
+    height: auto;
+    font-size: 16px;
+  }
+
+  .sidemenu .logo_bottom {
+    position: static;
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    margin-top: 14px;
+    padding: 10px;
+  }
+
+  .sidemenu .logo_bottom h1 {
+    margin: 0;
+  }
+}
+
+@media (max-width: 1280px) {
+  .layout {
+    padding-right: 0;
+  }
+
+  .table_structure_reports {
+    width: 100% !important;
+  }
 }
 

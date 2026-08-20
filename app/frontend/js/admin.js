@@ -17,7 +17,6 @@ function normalizeArabic(text) {
     .replace(/[ًٌٍَُِّْ]/g, "")
     .trim();
 }
-
 // ============================================
 // نظام التنقل بين الصفحات - SPA Navigation
 // ============================================
@@ -35,10 +34,6 @@ function showPage(pageId) {
 
   if (pageId === "home") {
     if (typeof refreshDashboard === "function") refreshDashboard();
-  }
-
-  if (pageId === "events") {
-    if (typeof refreshSyncStatus === "function") refreshSyncStatus();
   }
 
   history.pushState({ page: pageId }, "", "#" + pageId);
@@ -114,12 +109,6 @@ document.addEventListener("DOMContentLoaded", function () {
       showPage(this.getAttribute("data-page"));
     });
   });
-
-  // --- زرار الأحداث ---
-  const eventsBtn = document.getElementById("goeventspage");
-  if (eventsBtn) {
-    eventsBtn.addEventListener("click", () => showPage("events"));
-  }
 
   // --- موديل الأصناف ---
   const itemModal = document.querySelector(".modal");
@@ -199,14 +188,3 @@ function filterTable(value, tbodySelector, emptyMessage) {
   }
   if (message) message.style.display = found ? "none" : "";
 }
-
-setInterval(() => {
-  const eventsPage = document.getElementById("page-events");
-  if (
-    eventsPage &&
-    eventsPage.style.display !== "none" &&
-    typeof refreshSyncStatus === "function"
-  ) {
-    refreshSyncStatus();
-  }
-}, 30000);
