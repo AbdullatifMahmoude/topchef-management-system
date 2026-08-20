@@ -103,12 +103,13 @@ async def get_rider_stats(
     db: AsyncSession = Depends(get_db),
     current_user: any = Depends(get_current_user)
 ):
-    """Get each rider's assigned, non-cancelled orders for the business day."""
+    """Return the live delivery desk snapshot for the current business day."""
     from datetime import datetime, timedelta, timezone
-    from sqlalchemy import select, and_
+    from sqlalchemy import select, and_, or_
+    from sqlalchemy.orm import selectinload
     from app.modules.orders.models import Order
     from app.modules.users.models import User
-    from app.core.enums import OrderStatus
+    from app.core.enums import OrderStatus, OrderType, UserRole, PaymentMethod
     
     # Calculate business day start (5 AM boundary)
     # Using Egypt timezone (UTC+3)
@@ -124,45 +125,97 @@ async def get_rider_stats(
     # created. It is the authoritative order response.
     # browser/device timestamps or page-limited frontend lists.
     business_date = business_day_start.date()
-    query = (
-        select(
-            User.id.label("rider_id"),
-            User.full_name.label("rider_name"),
-            User.username.label("username"),
-            Order.id.label("order_id"),
-            Order.order_number.label("order_number"),
-            Order.total_amount.label("total_amount"),
-        )
-        .join(Order, User.id == Order.delivery_person_id)
-        .where(
-            and_(
-                Order.order_date == business_date,
-                Order.delivery_person_id.isnot(None),
-                Order.is_deleted == False,
-                Order.order_status != OrderStatus.CANCELLED,
-            )
-        )
-        .order_by(User.full_name, Order.created_at)
+    users_result = await db.execute(
+        select(User)
+        .where(and_(User.role == UserRole.DELIVERY, User.is_active == True, User.is_deleted == False))
+        .order_by(User.full_name, User.username)
     )
-    
-    result = await db.execute(query)
-    riders: dict[int, dict] = {}
-    for row in result.all():
-        rider = riders.setdefault(row.rider_id, {
-            "id": row.rider_id,
-            "name": row.rider_name or row.username,
+    delivery_users = list(users_result.scalars().all())
+
+    orders_result = await db.execute(
+        select(Order).options(selectinload(Order.delivery_person), selectinload(Order.address))
+        .where(and_(
+            Order.order_date == business_date,
+            Order.is_deleted == False,
+            or_(Order.order_type == OrderType.DELIVERY, Order.delivery_person_id.isnot(None)),
+        ))
+        .order_by(Order.created_at.desc())
+    )
+    day_orders = list(orders_result.scalars().all())
+
+    riders: dict[int, dict] = {
+        user.id: {
+            "id": user.id,
+            "name": user.full_name or user.username,
+            "username": user.username,
+            "phone": user.phone,
+            "availability": "available",
+            "active_orders": 0,
+            "delivered_orders": 0,
             "total_orders": 0,
             "total_amount": 0.0,
+            "cash_amount": 0.0,
+            "digital_amount": 0.0,
+            "delivery_fees": 0.0,
             "order_numbers": [],
-        })
-        rider["total_orders"] += 1
-        rider["total_amount"] += float(row.total_amount or 0)
-        rider["order_numbers"].append(row.order_number or str(row.order_id))
+        }
+        for user in delivery_users
+    }
+
+    operational_orders = []
+    for order in day_orders:
+        if order.order_status == OrderStatus.CANCELLED:
+            continue
+        rider = riders.get(order.delivery_person_id)
+        if rider:
+            rider["total_orders"] += 1
+            rider["total_amount"] += float(order.total_amount or 0)
+            rider["delivery_fees"] += float(order.delivery_fee or 0)
+            rider["order_numbers"].append(order.order_number or str(order.id))
+            if order.order_status == OrderStatus.DELIVERED:
+                rider["delivered_orders"] += 1
+            elif order.order_status in [OrderStatus.CONFIRMED, OrderStatus.OUT_FOR_DELIVERY]:
+                rider["active_orders"] += 1
+                rider["availability"] = "busy"
+            if order.payment_method == PaymentMethod.CASH:
+                rider["cash_amount"] += max(0.0, float(order.total_amount or 0) - float(order.delivery_fee or 0))
+            else:
+                rider["digital_amount"] += float(order.total_amount or 0)
+
+        if order.order_status in [OrderStatus.CONFIRMED, OrderStatus.OUT_FOR_DELIVERY]:
+            age_minutes = max(0, int((now - order.created_at).total_seconds() // 60))
+            operational_orders.append({
+                "id": order.id,
+                "order_number": order.order_number or str(order.id),
+                "customer_name": order.customer_name or "عميل",
+                "customer_phone": order.customer_phone,
+                "customer_address": order.customer_address,
+                "status": order.order_status.value,
+                "payment_method": order.payment_method.value,
+                "total_amount": float(order.total_amount or 0),
+                "delivery_fee": float(order.delivery_fee or 0),
+                "rider_id": order.delivery_person_id,
+                "rider_name": order.delivery_person_name,
+                "created_at": order.created_at.isoformat(),
+                "age_minutes": age_minutes,
+            })
+
+    unassigned = sum(1 for order in operational_orders if not order["rider_id"])
+    out_for_delivery = sum(1 for order in operational_orders if order["status"] == OrderStatus.OUT_FOR_DELIVERY.value)
     
     return {
         "business_day_start": business_day_start.isoformat(),
         "business_date": business_date.isoformat(),
         "stats": list(riders.values()),
+        "orders": operational_orders,
+        "summary": {
+            "active_riders": sum(1 for rider in riders.values() if rider["availability"] == "busy"),
+            "available_riders": sum(1 for rider in riders.values() if rider["availability"] == "available"),
+            "unassigned_orders": unassigned,
+            "out_for_delivery": out_for_delivery,
+            "delivered_orders": sum(rider["delivered_orders"] for rider in riders.values()),
+            "cash_to_collect": sum(rider["cash_amount"] for rider in riders.values()),
+        },
     }
 
 @router.patch("/{order_id}", response_model=schemas.OrderResponse)

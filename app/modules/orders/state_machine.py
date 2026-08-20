@@ -26,7 +26,7 @@ class OrderStateMachine:
         allowed = []
         
         # Any state (except already CANCELLED) can transition to CANCELLED
-        if current_status != OrderStatus.CANCELLED and current_status != OrderStatus.COMPLETED and current_status != OrderStatus.DELIVERED:
+        if current_status not in [OrderStatus.CANCELLED, OrderStatus.COMPLETED, OrderStatus.DELIVERED]:
             allowed.append(OrderStatus.CANCELLED)
 
         # Logic for NEW
@@ -38,7 +38,10 @@ class OrderStateMachine:
             if order_type in [OrderType.HALL, OrderType.TAKEAWAY]:
                 allowed.append(OrderStatus.COMPLETED)
             elif order_type in [OrderType.DELIVERY, OrderType.ONLINE]:
-                allowed.append(OrderStatus.DELIVERED)
+                allowed.extend([OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED])
+
+        elif current_status == OrderStatus.OUT_FOR_DELIVERY:
+            allowed.append(OrderStatus.DELIVERED)
 
         return allowed
 

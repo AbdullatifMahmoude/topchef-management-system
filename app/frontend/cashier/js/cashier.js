@@ -1673,15 +1673,21 @@ async function renderRidersTab() {
   const body = document.getElementById("riders_table_body");
   if (!body) return;
 
-  body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
+  body.innerHTML = `<tr><td colspan="8" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
   try {
     const response = await apiFetch("/orders/riders/stats", { suppress401: true });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const riders = Array.isArray(data.stats) ? data.stats : [];
+    const summary = data.summary || {};
+    const setRiderText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    setRiderText("cashierRidersUnassigned", Number(summary.unassigned_orders || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersOnRoad", Number(summary.out_for_delivery || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersDelivered", Number(summary.delivered_orders || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersCash", `${Number(summary.cash_to_collect || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`);
 
     if (!riders.length) {
-      body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
+      body.innerHTML = `<tr><td colspan="8" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
       return;
     }
 
@@ -1689,13 +1695,18 @@ async function renderRidersTab() {
     body.innerHTML = riders.map((r) => `
       <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
         <td style="padding:15px; font-weight:700; color:#fff;">${r.name}</td>
+        <td style="padding:15px;"><span class="cashier_rider_state ${r.availability}">${r.availability === "busy" ? "مشغول" : "متاح"}</span></td>
+        <td style="padding:15px; font-weight:800;">${r.active_orders || 0}</td>
+        <td style="padding:15px; color:var(--color-accent); font-weight:800;">${r.delivered_orders || 0}</td>
+        <td style="padding:15px; font-weight:800;">${Number(r.cash_amount || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px; font-weight:800;">${Number(r.digital_amount || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px; font-weight:900; color:var(--color-primary);">${Number(r.delivery_fees || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px;">
           <button onclick='showRiderOrdersPopup("${String(r.name).replace(/"/g, "&quot;")}", ${JSON.stringify(r.order_numbers || [])})'
             style="background:rgba(61,158,107,.15); color:#3d9e6b; border:1px solid rgba(61,158,107,.3); padding:4px 12px; border-radius:6px; cursor:pointer; font-family:Cairo,sans-serif; font-weight:700;">
-            ${r.total_orders} طلبات
+            ${r.total_orders} طلب
           </button>
         </td>
-        <td style="padding:15px; font-weight:900; color:var(--color-primary);">${Number(r.total_amount || 0).toFixed(2)} ج.م</td>
       </tr>`).join("");
     return;
   } catch (error) {
@@ -1884,10 +1895,7 @@ async function fetchOnlineOrdersServer(page = 1, silent = false) {
   onlineOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=online`;
-    if (onlineOrdersFilter !== "all") {
-      url += `&status=${onlineOrdersFilter}`;
-    }
+    const url = `/orders/?page=1&page_size=500&source=online`;
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch online orders");
     const data = await res.json();
@@ -1913,10 +1921,7 @@ async function fetchAllOrdersServer(page = 1, silent = false) {
   allOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
-    if (allOrdersFilter !== "all") {
-      url += `&order_type=${allOrdersFilter}`;
-    }
+    const url = `/orders/?page=1&page_size=500&source=cashier`;
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch all orders");
     const data = await res.json();
@@ -1972,21 +1977,18 @@ function updateOnlineStats() {
   const newCount = onlineOrdersList.filter(
     (o) => o.order_status === "new",
   ).length;
-  //جاهز = confirmed, مكتمل = completed. For stats, let's show confirmed as ready in progress?
-  // User asked: "Ready" (جاهزة) stat box. Let's use confirmed + completed for now or just confirmed.
-  const readyCount = onlineOrdersList.filter(
-    (o) => o.order_status === "confirmed" || o.order_status === "completed",
+  const activeCount = onlineOrdersList.filter(
+    (o) => o.order_status === "confirmed",
+  ).length;
+  const onRoadCount = onlineOrdersList.filter(
+    (o) => o.order_status === "out_for_delivery",
   ).length;
   const cancelledCount = onlineOrdersList.filter(
     (o) => o.order_status === "cancelled",
   ).length;
 
-  const statBoxes = document.querySelectorAll(".stat_box h2");
-  if (statBoxes.length >= 3) {
-    statBoxes[0].textContent = newCount;
-    statBoxes[1].textContent = cancelledCount;
-    statBoxes[2].textContent = readyCount;
-  }
+  const values = { onlineNewCount: newCount, onlineActiveCount: activeCount, onlineOnRoadCount: onRoadCount, onlineCancelledCount: cancelledCount };
+  Object.entries(values).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.textContent = value.toLocaleString("ar-EG"); });
 }
 
 async function refreshNewOrdersBadge() {
@@ -2046,6 +2048,10 @@ function renderOnlineOrders() {
 
   const term = (onlineOrdersSearchTerm || "").toLowerCase();
   const filteredList = onlineOrdersList.filter(o => {
+    const matchesStatus = onlineOrdersFilter === "all" ||
+      (onlineOrdersFilter === "active" && ["confirmed", "out_for_delivery"].includes(o.order_status)) ||
+      o.order_status === onlineOrdersFilter;
+    if (!matchesStatus) return false;
     if (!term) return true;
     const oNum = String(o.order_number || o.id || "").toLowerCase();
     const phone = String(o.customer_phone || "").toLowerCase();
@@ -2063,6 +2069,7 @@ function renderOnlineOrders() {
   const statusMap = {
     new: { label: "جديد", cls: "badge_new" },
     confirmed: { label: "مؤكد", cls: "badge_ready" },
+    out_for_delivery: { label: "خرج للتوصيل", cls: "badge_ready" },
     completed: { label: "مكتمل", cls: "badge_ready" },
     cancelled: { label: "ملغي", cls: "badge_canceled" },
     delivered: { label: "تم التوصيل", cls: "badge_ready" },
@@ -2165,12 +2172,12 @@ function renderOnlineOrders() {
             : ""
         }
         ${
-          order.order_status === "confirmed"
+          order.order_status === "confirmed" || order.order_status === "out_for_delivery"
             ? `
           ${
             order.order_type === "delivery"
               ? `
-            <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'delivered')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التوصيل</button>
+            <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, '${order.order_status === "confirmed" ? "out_for_delivery" : "delivered"}')" style="background:${order.order_status === "confirmed" ? "#b58d31" : "#1d5c2b"}; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">${order.order_status === "confirmed" ? "خرج للتوصيل" : "تم التوصيل"}</button>
           `
               : `
             <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'completed')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التجهيز</button>
@@ -2180,7 +2187,7 @@ function renderOnlineOrders() {
             : ""
         }
         ${
-          order.order_status === "new" || order.order_status === "confirmed"
+          order.order_status === "new" || order.order_status === "confirmed" || order.order_status === "out_for_delivery"
             ? `
           <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'cancelled')" style="background:#e40411; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">إلغاء</button>
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'online')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تعديل</button>
@@ -2958,12 +2965,25 @@ function renderAllOrders() {
 
   const term = (allOrdersSearchTerm || "").toLowerCase();
   const filteredList = allOrdersList.filter(o => {
+    if (allOrdersFilter !== "all" && o.order_type !== allOrdersFilter) return false;
     if (!term) return true;
     const oNum = String(o.order_number || o.id || "").toLowerCase();
     const phone = String(o.customer_phone || "").toLowerCase();
     const name = String(o.customer_name || "").toLowerCase();
     return oNum.includes(term) || phone.includes(term) || name.includes(term);
   });
+
+  const validOrders = allOrdersList.filter((order) => order.order_status !== "cancelled");
+  const completedOrders = allOrdersList.filter((order) => ["completed", "delivered"].includes(order.order_status));
+  const kpis = {
+    allOrdersTotalKpi: allOrdersList.length.toLocaleString("ar-EG"),
+    allOrdersDeliveryKpi: allOrdersList.filter((order) => order.order_type === "delivery").length.toLocaleString("ar-EG"),
+    allOrdersCompletedKpi: completedOrders.length.toLocaleString("ar-EG"),
+    allOrdersValueKpi: `${validOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`,
+  };
+  Object.entries(kpis).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.textContent = value; });
+  const resultCount = document.getElementById("allOrdersResultCount");
+  if (resultCount) resultCount.textContent = `${filteredList.length.toLocaleString("ar-EG")} طلب`;
 
   if (filteredList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات</p>`;
@@ -2977,6 +2997,7 @@ function renderAllOrders() {
     completed: { label: "مكتمل", cls: "badge_ready" },
     cancelled: { label: "ملغي", cls: "badge_canceled" },
     confirmed: { label: "مؤكد", cls: "badge_ready" },
+    out_for_delivery: { label: "خرج للتوصيل", cls: "badge_ready" },
     delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
 
@@ -3015,10 +3036,10 @@ function renderAllOrders() {
 
     let actionsHtml = "";
 
-    if (order.order_status === "confirmed") {
+    if (order.order_status === "confirmed" || order.order_status === "out_for_delivery") {
       const isDelivery = order.order_type === "delivery";
-      const completeLabel = isDelivery ? "تم التوصيل" : "مكتمل";
-      const completeStatus = isDelivery ? "delivered" : "completed";
+      const completeLabel = isDelivery ? (order.order_status === "confirmed" ? "خرج للتوصيل" : "تم التوصيل") : "مكتمل";
+      const completeStatus = isDelivery ? (order.order_status === "confirmed" ? "out_for_delivery" : "delivered") : "completed";
 
       actionsHtml = `
           <button onclick="event.stopPropagation(); printOrderFromList(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">طباعة</button>
@@ -3274,6 +3295,7 @@ async function changeOrderStatus(orderId, status) {
     delivered: "تم التوصيل",
     cancelled: "ملغي",
     confirmed: "مؤكد",
+    out_for_delivery: "خرج للتوصيل",
   };
   const confirmed = await showCustomActionConfirm(
     `هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`,
@@ -3447,6 +3469,7 @@ function openOrderDetails(orderId, source) {
     completed: { label: "مكتمل", cls: "badge_ready" },
     cancelled: { label: "ملغي", cls: "badge_canceled" },
     confirmed: { label: "مؤكد", cls: "badge_ready" },
+    out_for_delivery: { label: "خرج للتوصيل", cls: "badge_ready" },
     delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
   const statusObj = statusMap[order.order_status] || {
@@ -3536,14 +3559,14 @@ function openOrderDetails(orderId, source) {
     : "";
 
   overlay.innerHTML = `
-    <div style="background:var(--color-bg); border:1px solid var(--color-primary); border-radius:16px; width:680px; max-width:95vw; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.5); position:relative; overflow:hidden;">
-      <button onclick="document.getElementById('order_detail_overlay').remove()" style="position:absolute; left:20px; top:20px; background:none; border:none; color:var(--color-subtext); font-size:24px; cursor:pointer; z-index:10;">&times;</button>
+    <div class="order_detail_modal" style="background:var(--color-bg); border:1px solid var(--color-primary); border-radius:16px; width:680px; max-width:95vw; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.5); position:relative; overflow:hidden;">
+      <button class="order_detail_close" onclick="document.getElementById('order_detail_overlay').remove()" style="position:absolute; left:20px; top:20px; background:none; border:none; color:var(--color-subtext); font-size:24px; cursor:pointer; z-index:10;">&times;</button>
       
-      <div style="padding:32px; overflow-y:auto; scrollbar-gutter:stable;">
-        <div style="text-align:center; margin-bottom:24px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:16px;">
+      <div class="order_detail_scroll" style="padding:32px; overflow-y:auto; scrollbar-gutter:stable;">
+        <div class="order_detail_heading" style="text-align:center; margin-bottom:24px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:16px;">
           <h2 style="color:var(--color-primary); margin-bottom:8px;">تفاصيل الطلب #${displayOrderNumber(order.order_number, order.id)}</h2>
           <span class="order_status ${statusObj.cls}">${statusObj.label}</span>
-          <div style="display:flex; justify-content:center; gap:20px; margin-top:12px; font-size:12px;">
+          <div class="order_detail_timeline" style="display:flex; justify-content:center; gap:20px; margin-top:12px; font-size:12px;">
             <div style="color:var(--color-subtext);">
               <span style="opacity:0.7;">تاريخ الإنشاء:</span>
               <span style="font-weight:700; margin-right:4px;">${createdAtStr}</span>
@@ -3662,7 +3685,7 @@ function openOrderDetails(orderId, source) {
 
 
 
-        <div style="margin-top:24px; display:flex; flex-direction:column; gap:12px;">
+        <div class="order_detail_actions" style="margin-top:24px; display:flex; flex-direction:column; gap:12px;">
           <div style="display:flex; justify-content:center; gap:12px;">
             ${
               order.order_status === "new"

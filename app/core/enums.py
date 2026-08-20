@@ -26,6 +26,7 @@ class DiscountType(CaseInsensitiveEnum):
 class OrderStatus(CaseInsensitiveEnum):
     NEW = "new"
     CONFIRMED = "confirmed"
+    OUT_FOR_DELIVERY = "out_for_delivery"
     COMPLETED = "completed"
     DELIVERED = "delivered"
     CANCELLED = "cancelled"

@@ -193,20 +193,28 @@
     <!-- ===== Online Orders Layout ===== -->
     <div id="online_orders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
       <div class="online_orders_container">
+        <header class="online_page_header">
+          <div><p>التشغيل المباشر</p><h1>طلبات الأونلاين</h1><span>استلام الطلبات ومتابعة التجهيز والتوصيل خلال يوم العمل</span></div>
+          <div class="online_live_badge"><i></i><span>تحديث لحظي</span></div>
+        </header>
         
         <!-- Stats Section -->
         <div class="online_stats">
           <div class="stat_box">
-            <h2>0</h2>
+            <h2 id="onlineNewCount">0</h2>
             <p>طلبات جديدة</p>
           </div>
           <div class="stat_box">
-            <h2>0</h2>
-            <p>ملغي</p>
+            <h2 id="onlineActiveCount">0</h2>
+            <p>طلبات نشطة</p>
           </div>
           <div class="stat_box">
-            <h2>0</h2>
-            <p>جاهزة</p>
+            <h2 id="onlineOnRoadCount">0</h2>
+            <p>خرجت للتوصيل</p>
+          </div>
+          <div class="stat_box">
+            <h2 id="onlineCancelledCount">0</h2>
+            <p>ملغية</p>
           </div>
         </div>
 
@@ -222,9 +230,9 @@
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               جديد
             </button>
-            <button class="filter_btn" onclick="setOnlineOrdersFilter('ready', this)">
+            <button class="filter_btn" onclick="setOnlineOrdersFilter('active', this)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              جاهز
+              نشطة
             </button>
             <button class="filter_btn" onclick="setOnlineOrdersFilter('cancelled', this)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
@@ -263,8 +271,19 @@
     <!-- ===== All Orders Layout ===== -->
     <div id="all_orders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
       <div class="online_orders_container">
+        <header class="all_orders_page_header">
+          <div><p>سجل يوم العمل</p><h1>كل الطلبات</h1><span>متابعة طلبات الكاشير والبحث والتصفية من مكان واحد</span></div>
+          <button class="all_orders_refresh" type="button" onclick="fetchAllOrders()">تحديث البيانات</button>
+        </header>
+
+        <div class="all_orders_kpis">
+          <article><span>إجمالي الطلبات</span><strong id="allOrdersTotalKpi">0</strong><small>طلبات يوم العمل</small></article>
+          <article><span>طلبات الدليفري</span><strong id="allOrdersDeliveryKpi">0</strong><small>المسجلة من الكاشير</small></article>
+          <article><span>مكتملة</span><strong id="allOrdersCompletedKpi">0</strong><small>تم إنهاؤها بنجاح</small></article>
+          <article><span>إجمالي القيمة</span><strong id="allOrdersValueKpi">0 ج.م</strong><small>بدون الطلبات الملغية</small></article>
+        </div>
         
-        <div class="online_actions_row" style="justify-content: space-between;">
+        <div class="online_actions_row all_orders_actions" style="justify-content: space-between;">
           <div class="filters_group" id="all_orders_filters">
             <button class="filter_btn active" onclick="setAllOrdersFilter('all', this)">الكل</button>
             <button class="filter_btn" onclick="setAllOrdersFilter('delivery', this)">دليفري</button>
@@ -280,10 +299,7 @@
             <input type="text" id="all_orders_search" class="online_search_input" placeholder="بحث برقم الطلب او النوع..." oninput="handleAllOrdersSearch(this.value)" />
           </div>
 
-          <button class="filter_btn active" onclick="fetchAllOrders()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><path d="M9 21H3v-6"></path><polyline points="21 3 14 10"></polyline><polyline points="3 21 10 14"></polyline></svg>
-            تحديث
-          </button>
+          <span class="all_orders_result_count" id="allOrdersResultCount">0 طلب</span>
         </div>
 
         <!-- Orders Grid -->
@@ -297,11 +313,18 @@
     <div id="riders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
       <div class="online_orders_container">
         <div class="online_actions_row" style="justify-content: space-between; margin-bottom: 24px;">
-          <h2 style="color: var(--color-primary); margin: 0; font-size: 20px;">أداء المناديب</h2>
+          <div><h2 style="color: var(--color-primary); margin: 0; font-size: 20px;">تشغيل الدليفرية</h2><p style="margin:4px 0 0;color:var(--color-subtext);font-size:11px">متابعة سريعة للطلبات والمناديب خلال يوم العمل</p></div>
           <button class="filter_btn active" onclick="fetchAllOrders()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
             تحديث البيانات
           </button>
+        </div>
+
+        <div class="cashier_riders_kpis">
+          <article><span>بدون مندوب</span><strong id="cashierRidersUnassigned">0</strong></article>
+          <article><span>خرج للتوصيل</span><strong id="cashierRidersOnRoad">0</strong></article>
+          <article><span>تم التسليم</span><strong id="cashierRidersDelivered">0</strong></article>
+          <article><span>النقدي المتوقع</span><strong id="cashierRidersCash">0 ج.م</strong></article>
         </div>
 
         <div class="riders_table_wrapper" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden;">
@@ -309,8 +332,13 @@
             <thead>
               <tr style="background: rgba(201, 168, 76, 0.15); color: var(--color-primary);">
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">اسم المندوب</th>
-                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">عدد الطلبات</th>
-                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">إجمالي المبالغ</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">الحالة</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">طلبات نشطة</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">تم التسليم</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">نقدي</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">تحويل</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">رسوم التوصيل</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">الطلبات</th>
               </tr>
             </thead>
             <tbody id="riders_table_body">

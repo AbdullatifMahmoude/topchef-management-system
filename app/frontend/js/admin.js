@@ -35,6 +35,9 @@ function showPage(pageId) {
   if (pageId === "home") {
     if (typeof refreshDashboard === "function") refreshDashboard();
   }
+  if (pageId === "delivery-ops" && typeof window.refreshDeliveryOperations === "function") {
+    window.refreshDeliveryOperations();
+  }
 
   history.pushState({ page: pageId }, "", "#" + pageId);
 }
@@ -155,7 +158,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // --- تحديد الصفحة الأولى ---
   const hash = window.location.hash.replace("#", "");
-  const validPages = ["home", "items", "categories", "delivery", "shifts", "reports", "offers", "events"];
+  const validPages = ["home", "items", "categories", "delivery", "delivery-ops", "shifts", "reports", "offers", "events"];
   showPage(validPages.includes(hash) ? hash : "home");
 
   // --- Back/Forward ---

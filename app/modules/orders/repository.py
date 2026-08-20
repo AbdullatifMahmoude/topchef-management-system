@@ -93,8 +93,7 @@ class OrderRepository:
             query = query.where(
                 or_(
                     and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
-                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id.is_(None)),
-                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id == cashier_id)
+                    models.Order.order_source == OrderSource.ONLINE,
                 )
             )
 
@@ -115,8 +114,7 @@ class OrderRepository:
             count_query = count_query.where(
                 or_(
                     and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
-                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id.is_(None)),
-                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id == cashier_id)
+                    models.Order.order_source == OrderSource.ONLINE,
                 )
             )
             
@@ -157,8 +155,7 @@ class OrderRepository:
             query = query.where(
                 or_(
                     and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
-                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id.is_(None)),
-                    and_(models.Order.order_source == OrderSource.ONLINE, models.Order.created_by_user_id == cashier_id)
+                    models.Order.order_source == OrderSource.ONLINE,
                 )
             )
 

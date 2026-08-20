@@ -30,6 +30,7 @@
         <button class="side_btn" data-page="items">إدارة الأصناف</button>
         <button class="side_btn" data-page="categories">التصنيفات</button>
         <button class="side_btn" data-page="delivery">المستخدمين</button>
+        <button class="side_btn" data-page="delivery-ops">إدارة التوصيل</button>
         <button class="side_btn" data-page="shifts">الشيفتات</button>
         <button class="side_btn" data-page="offers">العروض</button>
         <button class="side_btn" data-page="reports">التقارير</button>
@@ -359,6 +360,35 @@
           <div class="bttns"><button class="confirm_btn">موافق</button></div>
         </div>
       </div>
+    </div>
+
+    <!-- ===== صفحة تشغيل التوصيل ===== -->
+    <div class="page-content" id="page-delivery-ops" style="display: none">
+      <section class="delivery_ops_workspace" aria-labelledby="delivery_ops_title">
+        <header class="delivery_ops_header">
+          <div><p>متابعة التشغيل المباشر</p><h1 id="delivery_ops_title">إدارة التوصيل</h1><span>إسناد الطلبات ومتابعة المناديب والتحصيل خلال يوم العمل</span></div>
+          <button id="deliveryOpsRefresh" type="button">تحديث البيانات</button>
+        </header>
+
+        <div class="delivery_ops_kpis">
+          <article class="is_alert"><span>بدون مندوب</span><strong id="deliveryUnassignedCount">0</strong><small>تحتاج إسنادًا الآن</small></article>
+          <article class="is_route"><span>خرجت للتوصيل</span><strong id="deliveryOnRoadCount">0</strong><small>طلبات مع المناديب</small></article>
+          <article class="is_success"><span>تم تسليمها</span><strong id="deliveryDeliveredCount">0</strong><small>خلال يوم العمل</small></article>
+          <article><span>المناديب المتاحة</span><strong id="deliveryAvailableRiders">0</strong><small id="deliveryBusyRiders">0 مشغول</small></article>
+          <article><span>النقدي المتوقع</span><strong id="deliveryCashExpected">0 ج.م</strong><small>طلبات الدليفري اليوم</small></article>
+        </div>
+
+        <div class="delivery_ops_grid">
+          <article class="delivery_ops_panel delivery_orders_panel">
+            <div class="delivery_panel_heading"><div><h2>حركة الطلبات</h2><p>الأولوية للطلبات غير المسندة والمتأخرة</p></div><select id="deliveryOrdersFilter"><option value="active">الطلبات النشطة</option><option value="unassigned">بدون مندوب</option><option value="out_for_delivery">خرجت للتوصيل</option></select></div>
+            <div id="deliveryOrdersList" class="delivery_orders_list"><div class="delivery_empty">جاري تحميل الطلبات...</div></div>
+          </article>
+          <article class="delivery_ops_panel delivery_riders_panel">
+            <div class="delivery_panel_heading"><div><h2>حالة المناديب</h2><p>الحمل الحالي والتحصيل لكل مندوب</p></div></div>
+            <div id="deliveryRidersList" class="delivery_riders_list"><div class="delivery_empty">جاري تحميل المناديب...</div></div>
+          </article>
+        </div>
+      </section>
     </div>
 
     <!-- ===== صفحة الشيفتات ===== -->
@@ -760,6 +790,7 @@
     <script src="js/product.js?v=20260820-items-operations"></script>
     <script src="js/category.js?v=20260820-categories-operations"></script>
     <script src="js/delivery.js?v=20260820-users-operations"></script>
+    <script src="js/delivery-operations.js?v=20260820-delivery-desk"></script>
     <script src="js/offer.js"></script>
     <script src="js/shifts.js?v=20260820-payment-reconciliation"></script>
 

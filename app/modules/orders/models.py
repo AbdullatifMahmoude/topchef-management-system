@@ -123,7 +123,8 @@ class Order(Base):
         """Domain logic for state transitions."""
         allowed_transitions = {
             OrderStatus.NEW: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
-            OrderStatus.CONFIRMED: [OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+            OrderStatus.CONFIRMED: [OrderStatus.COMPLETED, OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+            OrderStatus.OUT_FOR_DELIVERY: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
             OrderStatus.DELIVERED: [],
             OrderStatus.COMPLETED: [],
             OrderStatus.CANCELLED: []

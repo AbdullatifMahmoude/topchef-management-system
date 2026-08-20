@@ -261,6 +261,8 @@ class OrderService:
         async with self._transaction_scope():
             order = await self.get_order(order_id)
             if update_data.order_status and order.order_status != update_data.order_status:
+                if update_data.order_status == OrderStatus.OUT_FOR_DELIVERY and not (update_data.delivery_person_id or order.delivery_person_id):
+                    raise ValidationError("A delivery rider must be assigned before dispatch")
                 if not order.can_transition_to(update_data.order_status):
                     raise ValidationError(f"Invalid status transition from {order.order_status} to {update_data.order_status}")
                 
