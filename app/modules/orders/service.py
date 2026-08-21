@@ -13,6 +13,7 @@ from decimal import Decimal
 from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore
 from app.core.events import order_events_manager
 from app.core.enums import OrderStatus, OrderSource, OrderType, UserRole
+from app.core.business_calendar import get_current_business_date, is_weekly_holiday
 
 
 class OrderService:
@@ -79,6 +80,9 @@ class OrderService:
 
     async def _create_order_inner(self, order_data: schemas.OrderCreate, current_user_id: Optional[int] = None) -> models.Order:
         async with self._transaction_scope():
+            if is_weekly_holiday(get_current_business_date()):
+                raise ValidationError("المطعم مغلق يوم الجمعة للإجازة الأسبوعية ولا يمكن إنشاء طلبات جديدة")
+
             # Check if online orders are enabled
             if order_data.source == models.OrderSource.ONLINE:
                 if not await self.settings_service.get_web_orders_status():

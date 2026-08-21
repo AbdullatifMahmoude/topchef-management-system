@@ -1964,6 +1964,28 @@ function escapeExpenseText(value) {
 
 let expensesLoadController = null;
 let expensesRequestSequence = 0;
+let currentShiftExpenses = [];
+let currentShiftExpensesTotal = 0;
+
+function renderShiftExpenses() {
+  const list = document.getElementById("expenses_list");
+  if (!list) return;
+  const total = document.getElementById("expenses_total_value");
+  const count = document.getElementById("expenses_count");
+  if (total) {
+    total.textContent = expenseMoney(currentShiftExpensesTotal);
+    total.classList.remove("is_updating");
+    void total.offsetWidth;
+    total.classList.add("is_updating");
+  }
+  if (count) count.textContent = `${currentShiftExpenses.length.toLocaleString("ar-EG")} عملية`;
+  list.innerHTML = currentShiftExpenses.length ? currentShiftExpenses.map((item) => `
+    <article class="expense_row${item._pending ? " is_pending" : ""}">
+      <div><strong>${escapeExpenseText(item.title)}</strong><span>${escapeExpenseText(item.note || "بدون ملاحظة")}</span></div>
+      <div><b>${expenseMoney(item.amount)}</b><small>${item._pending ? "جاري الحفظ..." : new Date(item.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</small></div>
+      <button type="button" ${item._pending ? "disabled" : `onclick="deleteShiftExpense(${item.id})"`} title="${item._pending ? "جاري الحفظ" : "حذف المصروف"}">${item._pending ? "…" : "×"}</button>
+    </article>`).join("") : '<div class="expenses_empty">لا توجد مصروفات مسجلة في الشيفت الحالي</div>';
+}
 
 async function loadShiftExpenses() {
   const list = document.getElementById("expenses_list");
@@ -1977,17 +1999,9 @@ async function loadShiftExpenses() {
     if (!response.ok) throw new Error(`expenses ${response.status}`);
     const data = await response.json();
     if (requestSequence !== expensesRequestSequence) return;
-    const items = data.items || [];
-    const total = document.getElementById("expenses_total_value");
-    const count = document.getElementById("expenses_count");
-    if (total) total.textContent = expenseMoney(data.total);
-    if (count) count.textContent = `${items.length.toLocaleString("ar-EG")} عملية`;
-    list.innerHTML = items.length ? items.map((item) => `
-      <article class="expense_row">
-        <div><strong>${escapeExpenseText(item.title)}</strong><span>${escapeExpenseText(item.note || "بدون ملاحظة")}</span></div>
-        <div><b>${expenseMoney(item.amount)}</b><small>${new Date(item.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</small></div>
-        <button type="button" onclick="deleteShiftExpense(${item.id})" title="حذف المصروف">×</button>
-      </article>`).join("") : '<div class="expenses_empty">لا توجد مصروفات مسجلة في الشيفت الحالي</div>';
+    currentShiftExpenses = data.items || [];
+    currentShiftExpensesTotal = Number(data.total || 0);
+    renderShiftExpenses();
   } catch (error) {
     if (error?.name === "AbortError" || requestSequence !== expensesRequestSequence) return;
     console.error(error);
@@ -1996,28 +2010,39 @@ async function loadShiftExpenses() {
 }
 
 async function deleteShiftExpense(expenseId) {
-  const button = document.querySelector(`.expense_row button[onclick="deleteShiftExpense(${expenseId})"]`);
-  if (button?.disabled) return;
-  if (button) button.disabled = true;
+  expensesLoadController?.abort();
+  expensesRequestSequence += 1;
+  const itemIndex = currentShiftExpenses.findIndex((item) => Number(item.id) === Number(expenseId));
+  if (itemIndex < 0) return;
+  const removedItem = currentShiftExpenses[itemIndex];
+  currentShiftExpenses.splice(itemIndex, 1);
+  currentShiftExpensesTotal = Math.max(0, currentShiftExpensesTotal - Number(removedItem.amount || 0));
+  renderShiftExpenses();
   try {
     const response = await apiFetch(`/shifts/current/expenses/${expenseId}`, { method: "DELETE" });
-    if (!response.ok) return showToast("تعذر حذف المصروف", "error");
+    if (!response.ok) throw new Error("تعذر حذف المصروف");
+    const result = await response.json();
+    if (Number.isFinite(Number(result.shift_total))) {
+      currentShiftExpensesTotal = Number(result.shift_total);
+      renderShiftExpenses();
+    }
     showToast("تم حذف المصروف", "success");
-    await loadShiftExpenses();
   } catch (error) {
     console.error(error);
+    currentShiftExpenses.splice(itemIndex, 0, removedItem);
+    currentShiftExpensesTotal += Number(removedItem.amount || 0);
+    renderShiftExpenses();
     showToast("تعذر الاتصال أثناء حذف المصروف", "error");
-  } finally {
-    if (button?.isConnected) button.disabled = false;
   }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("expense_form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+    const expenseForm = event.currentTarget;
+    const submitButton = expenseForm.querySelector('button[type="submit"]');
     if (submitButton?.disabled) return;
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(expenseForm);
     const payload = { title: String(form.get("title") || "").trim(), amount: Number(form.get("amount")), note: String(form.get("note") || "").trim() || null };
     if (payload.title.length < 2 || !Number.isFinite(payload.amount) || payload.amount <= 0) {
       return showToast("راجع بند المصروف والمبلغ", "error");
@@ -2027,18 +2052,23 @@ document.addEventListener("DOMContentLoaded", () => {
       submitButton.disabled = true;
       submitButton.textContent = "جاري الحفظ...";
     }
+    expensesLoadController?.abort();
+    expensesRequestSequence += 1;
     try {
       const response = await apiFetch("/shifts/current/expenses", { method: "POST", body: JSON.stringify(payload) });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        return showToast(error.detail || "تعذر حفظ المصروف", "error");
+        throw new Error(error.detail || "تعذر حفظ المصروف");
       }
-      event.currentTarget.reset();
+      const savedExpense = await response.json();
+      currentShiftExpenses.unshift(savedExpense);
+      if (Number.isFinite(Number(savedExpense.shift_total))) currentShiftExpensesTotal = Number(savedExpense.shift_total);
+      expenseForm.reset();
+      renderShiftExpenses();
       showToast("تم تسجيل المصروف", "success");
-      await loadShiftExpenses();
     } catch (error) {
       console.error(error);
-      showToast("تعذر الاتصال أثناء حفظ المصروف", "error");
+      showToast(error.message || "تعذر الاتصال أثناء حفظ المصروف", "error");
     } finally {
       if (submitButton) {
         submitButton.disabled = false;

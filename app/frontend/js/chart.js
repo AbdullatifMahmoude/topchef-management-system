@@ -119,6 +119,24 @@ document.addEventListener("DOMContentLoaded", () => {
     }).join("");
   }
 
+  function renderExpenses(expenses, summary) {
+    const rows = expenses || [];
+    const tbody = page.querySelector(".reports_expenses_table tbody");
+    document.getElementById("reports_expenses_count").textContent = `${number(rows.length)} مصروف في الفترة المحددة`;
+    document.getElementById("reports_expenses_sum").textContent = money(summary.total_expenses);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="reports_empty">لا توجد مصروفات في هذه الفترة</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((expense) => {
+      const createdAt = expense.created_at ? new Date(expense.created_at) : null;
+      const time = createdAt && !Number.isNaN(createdAt.getTime())
+        ? createdAt.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })
+        : "—";
+      return `<tr><td><strong class="report_expense_title">${escapeHtml(expense.title || "—")}</strong></td><td><strong class="report_expense_amount">${escapeHtml(money(expense.amount))}</strong></td><td>${escapeHtml(expense.cashier_name || "كاشير")}</td><td class="report_expense_note">${escapeHtml(expense.note || "بدون ملاحظة")}</td><td>${escapeHtml(dateLabel(expense.target_date))}</td><td dir="ltr">${escapeHtml(time)}</td></tr>`;
+    }).join("");
+  }
+
   function updateReport(data, type) {
     const summary = data.summary || {}, orders = data.orders || [];
     currentPageOrders = orders;
@@ -149,6 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
       { label: "صافي الربح", value: Number(summary.net_profit || 0), color: "#58cf91" },
     ], money);
     renderTable(orders, summary, Number(data.orders_offset || 0), Number(data.orders_limit || pageSize));
+    renderExpenses(data.expenses, summary);
   }
 
   async function loadReport(baseUrl, type, offset = 0) {

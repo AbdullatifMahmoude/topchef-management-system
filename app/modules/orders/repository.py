@@ -5,6 +5,7 @@ from datetime import date, timedelta, datetime, timezone
 from typing import Optional, List, Tuple
 from app.modules.orders import models, schemas
 from app.core.enums import OrderSource, OrderStatus, OrderType
+from app.core.business_calendar import holiday_name, is_weekly_holiday, previous_business_date
 
 class OrderRepository:
     def __init__(self, db: AsyncSession):
@@ -312,15 +313,15 @@ class OrderRepository:
         local_now = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
         today_start = datetime.combine(business_date, datetime.min.time()).replace(hour=5)
         elapsed = max(timedelta(0), local_now - today_start)
-        yesterday_date = business_date - timedelta(days=1)
-        yesterday_start = today_start - timedelta(days=1)
-        yesterday_cutoff = yesterday_start + min(elapsed, timedelta(days=1))
+        comparison_date = previous_business_date(business_date)
+        comparison_start = datetime.combine(comparison_date, datetime.min.time()).replace(hour=5)
+        comparison_cutoff = comparison_start + min(elapsed, timedelta(days=1))
         yesterday_sales_query = select(
             func.sum(models.Order.total_amount - models.Order.delivery_fee)
         ).where(
-            models.Order.order_date == yesterday_date,
-            models.Order.created_at >= yesterday_start,
-            models.Order.created_at < yesterday_cutoff,
+            models.Order.order_date == comparison_date,
+            models.Order.created_at >= comparison_start,
+            models.Order.created_at < comparison_cutoff,
             models.Order.is_deleted == False,
             models.Order.order_status.in_([
                 OrderStatus.COMPLETED,
@@ -349,7 +350,11 @@ class OrderRepository:
             "net_profit": today_sales - today_expenses,
             "yesterday_sales": yesterday_sales,
             "sales_change_percent": sales_change_percent,
+            "comparison_date": comparison_date.isoformat(),
+            "comparison_label": "آخر يوم تشغيل" if comparison_date != business_date - timedelta(days=1) else "أمس",
             "completed_count": row["completed_count"] or 0,
             "cancelled_count": row["cancelled_count"] or 0,
-            "active_count": active_count
+            "active_count": active_count,
+            "is_holiday": is_weekly_holiday(business_date),
+            "holiday_name": holiday_name(business_date),
         }

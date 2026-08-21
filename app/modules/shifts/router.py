@@ -1,3 +1,4 @@
+import asyncio
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -32,6 +33,18 @@ async def _current_shift(db: AsyncSession, user_id: int):
         CashierShift.end_time.is_(None),
     ).order_by(desc(CashierShift.id)))
     return result.scalars().first()
+
+async def _expense_totals(db: AsyncSession, shift_id: int, target_date: date) -> tuple[Decimal, Decimal]:
+    from app.modules.shifts.models import ShiftExpense
+    shift_total = await db.scalar(select(func.sum(ShiftExpense.amount)).where(
+        ShiftExpense.shift_id == shift_id,
+        ShiftExpense.is_deleted == False,
+    )) or Decimal("0")
+    day_total = await db.scalar(select(func.sum(ShiftExpense.amount)).where(
+        ShiftExpense.target_date == target_date,
+        ShiftExpense.is_deleted == False,
+    )) or Decimal("0")
+    return shift_total, day_total
 
 @router.get("/current/cash")
 async def get_current_shift_cash(
@@ -110,9 +123,18 @@ async def create_current_expense(
     db.add(expense)
     await db.commit()
     await db.refresh(expense)
+    shift_total, day_total = await _expense_totals(db, shift.id, shift.target_date)
     from app.core.events import order_events_manager
-    await order_events_manager.emit({"type": "EXPENSE_UPDATED", "data": {"shift_id": shift.id, "target_date": shift.target_date.isoformat()}})
-    return {"id": expense.id, "message": "Expense saved"}
+    asyncio.create_task(order_events_manager.emit({"type": "EXPENSE_UPDATED", "data": {"shift_id": shift.id, "target_date": shift.target_date.isoformat(), "shift_total": float(shift_total), "day_total": float(day_total)}}))
+    return {
+        "id": expense.id,
+        "title": expense.title,
+        "amount": float(expense.amount),
+        "note": expense.note,
+        "created_at": expense.created_at.isoformat(),
+        "shift_total": float(shift_total),
+        "day_total": float(day_total),
+    }
 
 @router.delete("/current/expenses/{expense_id}")
 async def delete_current_expense(
@@ -129,9 +151,10 @@ async def delete_current_expense(
         raise NotFoundError("Expense")
     expense.is_deleted = True
     await db.commit()
+    shift_total, day_total = await _expense_totals(db, expense.shift_id, expense.target_date)
     from app.core.events import order_events_manager
-    await order_events_manager.emit({"type": "EXPENSE_UPDATED", "data": {"shift_id": expense.shift_id, "target_date": expense.target_date.isoformat()}})
-    return {"message": "Expense deleted"}
+    asyncio.create_task(order_events_manager.emit({"type": "EXPENSE_UPDATED", "data": {"shift_id": expense.shift_id, "target_date": expense.target_date.isoformat(), "shift_total": float(shift_total), "day_total": float(day_total)}}))
+    return {"message": "Expense deleted", "shift_total": float(shift_total), "day_total": float(day_total)}
 
 @router.get("")
 async def get_shifts(

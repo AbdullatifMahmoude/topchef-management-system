@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260820-font-scale-final" />
+  <link rel="stylesheet" href="css/admin.css?v=20260821-expenses-holiday" />
 </head>
 
 <body>
@@ -516,6 +516,21 @@
           </article>
         </div>
 
+        <section class="reports_expenses_section">
+          <div class="reports_orders_header reports_expenses_header">
+            <div><h2>سجل المصروفات</h2><p id="reports_expenses_count">0 مصروف في الفترة المحددة</p></div>
+            <strong id="reports_expenses_sum">0 ج.م</strong>
+          </div>
+          <div class="table_structure_reports reports_expenses_card">
+            <div class="reports_table_scroll reports_expenses_scroll">
+              <table class="orders_table_reports reports_expenses_table">
+                <thead><tr><th>البند</th><th>المبلغ</th><th>الكاشير</th><th>الملاحظة</th><th>التاريخ</th><th>الوقت</th></tr></thead>
+                <tbody><tr><td colspan="6" class="reports_empty">اختر فترة لعرض المصروفات</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <section class="reports_orders_section">
           <div class="reports_orders_header">
             <div><h2>تفاصيل الطلبات</h2><p id="reports_orders_count">0 طلب في الفترة المحددة</p></div>
@@ -797,8 +812,8 @@
     <script src="js/offer.js"></script>
     <script src="js/shifts.js?v=20260820-payment-reconciliation"></script>
 
-    <script src="js/chart.js?v=20260820-expenses-profit"></script>
-    <script src="js/orders_dashboard.js?v=20260820-live-heartbeat"></script>
+    <script src="js/chart.js?v=20260821-expenses-register"></script>
+    <script src="js/orders_dashboard.js?v=20260821-expenses-total-live"></script>
     <script src="js/admin.js?v=20260820-cloud-only"></script>
     <script>
       // ===== عرض اسم المستخدم =====

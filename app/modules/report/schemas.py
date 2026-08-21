@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 class ReportSummary(BaseModel):
@@ -38,6 +38,15 @@ class ActivityBreakdownPoint(BaseModel):
     hour: int
     count: int
 
+class ExpenseReportItem(BaseModel):
+    id: int
+    title: str
+    amount: Decimal
+    note: Optional[str] = None
+    cashier_name: str
+    target_date: date
+    created_at: datetime
+
 class ReportDataMixin(BaseModel):
     summary: ReportSummary
     orders: List[OrderReportItem] = Field(default_factory=list)
@@ -46,6 +55,7 @@ class ReportDataMixin(BaseModel):
     top_items: List[TopSellingItem] = Field(default_factory=list)
     revenue_trend: List[RevenueTrendPoint] = Field(default_factory=list)
     activity_breakdown: List[ActivityBreakdownPoint] = Field(default_factory=list)
+    expenses: List[ExpenseReportItem] = Field(default_factory=list)
 
 class ReportOrdersPage(BaseModel):
     orders: List[OrderReportItem] = Field(default_factory=list)

@@ -125,16 +125,23 @@
     if (successEl) successEl.textContent = successRate.toLocaleString("ar-EG", { maximumFractionDigits: 1 }) + "%";
     if (cancelEl) cancelEl.textContent = `${Number(stats.cancelled_count || 0).toLocaleString("ar-EG")} طلب ملغي`;
     if (salesCompareEl) {
+      if (stats.is_holiday) {
+        salesCompareEl.className = "ops_sales_compare is_holiday";
+        salesCompareEl.textContent = stats.holiday_name || "اليوم إجازة أسبوعية";
+        updateOperationalUI();
+        return;
+      }
       const change = stats.sales_change_percent;
+      const comparisonLabel = stats.comparison_label || "أمس";
       salesCompareEl.className = "ops_sales_compare";
       if (change == null) {
-        salesCompareEl.textContent = Number(stats.total_sales || 0) > 0 ? "لا توجد مبيعات للمقارنة أمس" : "مقارنة بنفس التوقيت أمس";
+        salesCompareEl.textContent = Number(stats.total_sales || 0) > 0 ? `لا توجد مبيعات للمقارنة مع ${comparisonLabel}` : `مقارنة بنفس التوقيت مع ${comparisonLabel}`;
       } else {
         const numericChange = Number(change);
         const direction = numericChange > 0 ? "up" : numericChange < 0 ? "down" : "flat";
         salesCompareEl.classList.add(`is_${direction}`);
         const arrow = direction === "up" ? "↑" : direction === "down" ? "↓" : "—";
-        salesCompareEl.textContent = `${arrow} ${Math.abs(numericChange).toLocaleString("ar-EG", { maximumFractionDigits: 1 })}% عن نفس التوقيت أمس`;
+        salesCompareEl.textContent = `${arrow} ${Math.abs(numericChange).toLocaleString("ar-EG", { maximumFractionDigits: 1 })}% عن نفس التوقيت مع ${comparisonLabel}`;
       }
     }
     updateOperationalUI();
@@ -301,7 +308,12 @@
     }
 
     if (type === "EXPENSE_UPDATED") {
-      loadDashboardStats();
+      const liveDayTotal = Number(data?.day_total);
+      if (Number.isFinite(liveDayTotal)) {
+        latestStats = { ...latestStats, total_expenses: liveDayTotal, net_profit: Number(latestStats.total_sales || 0) - liveDayTotal };
+        updateStatsUI(latestStats);
+      }
+      setTimeout(loadDashboardStats, 250);
       if (typeof window.refreshShifts === "function") window.refreshShifts();
     }
 

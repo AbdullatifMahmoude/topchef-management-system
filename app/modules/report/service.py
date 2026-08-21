@@ -200,12 +200,51 @@ async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: d
     ]
 
 
+async def get_report_expenses(db: AsyncSession, start_date: date, end_date: date) -> List[schemas.ExpenseReportItem]:
+    from app.modules.shifts.models import ShiftExpense
+    from app.modules.users.models import User
+
+    stmt = (
+        select(
+            ShiftExpense.id,
+            ShiftExpense.title,
+            ShiftExpense.amount,
+            ShiftExpense.note,
+            ShiftExpense.target_date,
+            ShiftExpense.created_at,
+            User.full_name,
+            User.username,
+        )
+        .join(User, User.id == ShiftExpense.user_id)
+        .where(
+            ShiftExpense.target_date >= start_date,
+            ShiftExpense.target_date <= end_date,
+            ShiftExpense.is_deleted == False,
+        )
+        .order_by(ShiftExpense.target_date.desc(), ShiftExpense.created_at.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return [
+        schemas.ExpenseReportItem(
+            id=row.id,
+            title=row.title,
+            amount=row.amount or Decimal("0.00"),
+            note=row.note,
+            cashier_name=row.full_name or row.username or "كاشير",
+            target_date=row.target_date,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+
+
 async def get_report_data(db: AsyncSession, start_date: date, end_date: date, limit: int, offset: int):
     summary = await get_report_summary(db, start_date, end_date)
     orders = await get_report_orders(db, start_date, end_date, limit=limit, offset=offset)
     top_items = await get_top_selling_items(db, start_date, end_date)
     revenue_trend = await get_revenue_trend(db, start_date, end_date)
     activity_breakdown = await get_activity_breakdown(db, start_date, end_date)
+    expenses = await get_report_expenses(db, start_date, end_date)
     return {
         "summary": summary,
         "orders": orders,
@@ -214,6 +253,7 @@ async def get_report_data(db: AsyncSession, start_date: date, end_date: date, li
         "top_items": top_items,
         "revenue_trend": revenue_trend,
         "activity_breakdown": activity_breakdown,
+        "expenses": expenses,
     }
 
 

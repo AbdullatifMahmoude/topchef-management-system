@@ -5,6 +5,7 @@ from app.core.redis import get_redis
 from app.modules.settings import schemas, service
 from app.modules.infrastructure.dependencies import require_role
 from app.core.enums import UserRole
+from app.core.business_calendar import is_weekly_holiday
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
@@ -14,6 +15,8 @@ async def get_web_orders_status(
     redis = Depends(get_redis)
 ):
     """Check if web orders are currently enabled."""
+    if is_weekly_holiday():
+        return False
     settings_service = service.SettingsService(db, redis)
     return await settings_service.get_web_orders_status()
 
