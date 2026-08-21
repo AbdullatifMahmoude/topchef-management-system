@@ -3647,6 +3647,30 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .ops_kpis { grid-template-columns:repeat(6,minmax(0,1fr)); }
 .ops_kpi_profit strong,.report_kpi_profit strong { color:#58cf91 !important; }
 .ops_kpi_profit strong.is_negative,.report_kpi_profit strong.is_negative { color:#ef6f6c !important; text-shadow:0 0 18px rgba(239,111,108,.14); }
+
+/* Keep every delete warning action inside its card. */
+.warning_modal .modal_container_warning,
+.offers_warning_modal .modal_container_warning {
+  box-sizing:border-box;
+  width:min(450px,calc(100vw - 32px));
+  max-width:450px;
+  height:auto;
+  min-height:0;
+  padding:28px 28px 24px;
+  gap:22px;
+  overflow:hidden;
+}
+.warning_modal .warning_container,
+.offers_warning_modal .warning_container { width:100%; gap:12px; }
+.warning_modal .warning_container h1,
+.warning_modal .warning_container p,
+.offers_warning_modal .warning_container h1,
+.offers_warning_modal .warning_container p { margin:0; }
+.warning_modal .modal_container_warning>.bttns,
+.offers_warning_modal .modal_container_warning>.bttns { flex:0 0 auto; width:100%; max-width:none; margin:0; }
+.warning_modal .modal_container_warning .confirm_btn,
+.offers_warning_modal .modal_container_warning .offers_confirm_delete_btn { box-sizing:border-box; width:100%!important; max-width:none; height:56px!important; margin:0; flex:none; }
+@media(max-width:560px){.warning_modal .modal_container_warning,.offers_warning_modal .modal_container_warning{padding:25px 18px 20px;gap:18px}.warning_modal .modal_container_warning .confirm_btn,.offers_warning_modal .modal_container_warning .offers_confirm_delete_btn{height:50px!important}}
 .ops_kpi_expense strong,.report_kpi_expense strong { color:#ef8a75 !important; }
 .reports_kpis { grid-template-columns:repeat(6,minmax(0,1fr)); }
 @media(max-width:1280px){.ops_kpis,.reports_kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}

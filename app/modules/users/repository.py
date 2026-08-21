@@ -3,6 +3,16 @@ from sqlalchemy.future import select
 from app.modules.users import models, schemas
 
 
+def deleted_username(user_id: int) -> str:
+    """Unique tombstone that always fits the username VARCHAR(200)."""
+    return f"deleted_user_{user_id}"
+
+
+def deleted_phone(user_id: int) -> str:
+    """Unique tombstone that always fits the phone VARCHAR(15)."""
+    return f"D{user_id:014d}"
+
+
 class UserRepository:
     def __init__(self, db:AsyncSession):
         self.db = db
@@ -55,11 +65,9 @@ class UserRepository:
         return user
 
     async def delete_user(self, user: models.User):
-        import time
-        ts = int(time.time())
         user.is_deleted = True
-        user.username = f"{user.username}_deleted_{ts}"
-        user.phone = f"{user.phone}_deleted_{ts}"
+        user.username = deleted_username(user.id)
+        user.phone = deleted_phone(user.id)
     
     async def toggle_user(self, user: models.User):
         user.toggle_active()
