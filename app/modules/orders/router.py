@@ -127,7 +127,7 @@ async def get_rider_stats(
     business_date = business_day_start.date()
     users_result = await db.execute(
         select(User)
-        .where(and_(User.role == UserRole.DELIVERY, User.is_active == True, User.is_deleted == False))
+        .where(and_(User.role == UserRole.DELIVERY, User.is_deleted == False))
         .order_by(User.full_name, User.username)
     )
     delivery_users = list(users_result.scalars().all())
@@ -154,6 +154,7 @@ async def get_rider_stats(
             "delivered_orders": 0,
             "total_orders": 0,
             "total_amount": 0.0,
+            "order_value": 0.0,
             "cash_amount": 0.0,
             "digital_amount": 0.0,
             "delivery_fees": 0.0,
@@ -167,9 +168,21 @@ async def get_rider_stats(
         if order.order_status == OrderStatus.CANCELLED:
             continue
         rider = riders.get(order.delivery_person_id)
+        if not rider and order.delivery_person_id:
+            rider = {
+                "id": order.delivery_person_id,
+                "name": order.delivery_person_name or "مندوب غير نشط",
+                "username": "", "phone": "", "availability": "available",
+                "active_orders": 0, "delivered_orders": 0, "total_orders": 0,
+                "total_amount": 0.0, "order_value": 0.0, "cash_amount": 0.0,
+                "digital_amount": 0.0, "delivery_fees": 0.0, "order_numbers": [],
+            }
+            riders[order.delivery_person_id] = rider
         if rider:
+            order_value = max(0.0, float(order.total_amount or 0) - float(order.delivery_fee or 0))
             rider["total_orders"] += 1
             rider["total_amount"] += float(order.total_amount or 0)
+            rider["order_value"] += order_value
             rider["delivery_fees"] += float(order.delivery_fee or 0)
             rider["order_numbers"].append(order.order_number or str(order.id))
             if order.order_status == OrderStatus.DELIVERED:
@@ -178,9 +191,9 @@ async def get_rider_stats(
                 rider["active_orders"] += 1
                 rider["availability"] = "busy"
             if order.payment_method == PaymentMethod.CASH:
-                rider["cash_amount"] += max(0.0, float(order.total_amount or 0) - float(order.delivery_fee or 0))
+                rider["cash_amount"] += order_value
             else:
-                rider["digital_amount"] += float(order.total_amount or 0)
+                rider["digital_amount"] += order_value
 
         if order.order_status in [OrderStatus.CONFIRMED, OrderStatus.OUT_FOR_DELIVERY]:
             age_minutes = max(0, int((now - order.created_at).total_seconds() // 60))
@@ -200,7 +213,9 @@ async def get_rider_stats(
                 "age_minutes": age_minutes,
             })
 
-    unassigned = sum(1 for order in operational_orders if not order["rider_id"])
+    non_cancelled_delivery_orders = [order for order in day_orders if order.order_status != OrderStatus.CANCELLED]
+    unassigned = sum(1 for order in non_cancelled_delivery_orders if not order.delivery_person_id)
+    assigned = sum(1 for order in non_cancelled_delivery_orders if order.delivery_person_id)
     out_for_delivery = sum(1 for order in operational_orders if order["status"] == OrderStatus.OUT_FOR_DELIVERY.value)
     
     return {
@@ -212,6 +227,10 @@ async def get_rider_stats(
             "active_riders": sum(1 for rider in riders.values() if rider["availability"] == "busy"),
             "available_riders": sum(1 for rider in riders.values() if rider["availability"] == "available"),
             "unassigned_orders": unassigned,
+            "assigned_orders": assigned,
+            "total_delivery_orders": len(non_cancelled_delivery_orders),
+            "cancelled_delivery_orders": sum(1 for order in day_orders if order.order_status == OrderStatus.CANCELLED),
+            "orders_value": sum(max(0.0, float(order.total_amount or 0) - float(order.delivery_fee or 0)) for order in non_cancelled_delivery_orders),
             "out_for_delivery": out_for_delivery,
             "delivered_orders": sum(rider["delivered_orders"] for rider in riders.values()),
             "cash_to_collect": sum(rider["cash_amount"] for rider in riders.values()),

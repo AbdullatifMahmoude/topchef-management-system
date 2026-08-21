@@ -12,6 +12,8 @@ class ReportSummary(BaseModel):
     total_subtotal: Decimal
     total_discount: Decimal
     total_delivery_fee: Decimal
+    total_expenses: Decimal
+    net_profit: Decimal
 
 class OrderReportItem(BaseModel):
     order_number: str

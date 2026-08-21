@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260820-sidebar-fonts" />
+  <link rel="stylesheet" href="css/admin.css?v=20260820-font-scale-final" />
 </head>
 
 <body>
@@ -56,6 +56,8 @@
 
         <div class="ops_kpis">
           <article class="ops_kpi ops_kpi_primary"><span>صافي مبيعات اليوم</span><strong id="stat_total_sales">0 ج.م</strong><small id="ops_sales_vs_yesterday" class="ops_sales_compare">مقارنة بنفس التوقيت أمس</small></article>
+          <article class="ops_kpi ops_kpi_profit"><span>صافي الربح التشغيلي</span><strong id="ops_net_profit">0 ج.م</strong><small>بعد خصم المصروفات</small></article>
+          <article class="ops_kpi ops_kpi_expense"><span>مصروفات اليوم</span><strong id="ops_total_expenses">0 ج.م</strong><small>مسجلة من الكاشير</small></article>
           <article class="ops_kpi"><span>إجمالي الطلبات</span><strong id="stat_total_orders">0</strong><small id="ops_orders_mix">لا توجد طلبات بعد</small></article>
           <article class="ops_kpi"><span>متوسط قيمة الطلب</span><strong id="ops_average_order">0 ج.م</strong><small>للطلب غير الملغي</small></article>
           <article class="ops_kpi"><span>معدل نجاح الطلبات</span><strong id="ops_success_rate">0%</strong><small id="ops_cancel_summary">0 طلب ملغي</small></article>
@@ -474,6 +476,8 @@
 
         <div class="reports_kpis">
           <div class="report_kpi report_kpi_primary"><span>صافي المبيعات</span><strong id="total_revenue_value">0 ج.م</strong></div>
+          <div class="report_kpi report_kpi_profit"><span>صافي الربح</span><strong id="net_profit_value">0 ج.م</strong></div>
+          <div class="report_kpi report_kpi_expense"><span>المصروفات</span><strong id="total_expenses_value">0 ج.م</strong></div>
           <div class="report_kpi"><span>إجمالي الطلبات</span><strong id="total_orders_value">0</strong></div>
           <div class="report_kpi"><span>متوسط الطلب</span><strong id="average_order_value">0 ج.م</strong></div>
           <div class="report_kpi"><span>نسبة الإتمام</span><strong id="completion_rate_value">0%</strong></div>
@@ -499,7 +503,7 @@
             <div id="orderTypesChart" class="report_bars" aria-label="رسم أنواع الطلبات"></div>
           </article>
           <article class="report_chart">
-            <div class="report_chart_heading"><div><span>تفاصيل الإيراد</span><small>المبيعات والخصومات ورسوم التوصيل</small></div></div>
+            <div class="report_chart_heading"><div><span>تفاصيل الإيراد</span><small>المبيعات والمصروفات وصافي الربح</small></div></div>
             <div id="financialBreakdownChart" class="report_bars report_bars_financial" aria-label="رسم تفاصيل الإيراد"></div>
           </article>
           <article class="report_chart">
@@ -793,8 +797,8 @@
     <script src="js/offer.js"></script>
     <script src="js/shifts.js?v=20260820-payment-reconciliation"></script>
 
-    <script src="js/chart.js?v=20260820-report-print-all"></script>
-    <script src="js/orders_dashboard.js?v=20260820-sales-comparison"></script>
+    <script src="js/chart.js?v=20260820-expenses-profit"></script>
+    <script src="js/orders_dashboard.js?v=20260820-live-heartbeat"></script>
     <script src="js/admin.js?v=20260820-cloud-only"></script>
     <script>
       // ===== عرض اسم المستخدم =====

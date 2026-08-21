@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from typing import Optional
 from decimal import Decimal
-from sqlalchemy import Integer, DateTime, Date, ForeignKey, func, Numeric, Text
+from sqlalchemy import Integer, DateTime, Date, ForeignKey, func, Numeric, Text, String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -31,3 +31,20 @@ class CashierShift(Base):
     # but we can also just compute dynamically in the API.
     
     user = relationship("User", backref="shifts")
+
+
+class ShiftExpense(Base):
+    __tablename__ = "shift_expenses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    shift_id: Mapped[int] = mapped_column(Integer, ForeignKey("cashier_shifts.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    target_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, server_default=func.now(), nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    shift = relationship("CashierShift", backref="expenses")
+    user = relationship("User")

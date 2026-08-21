@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore
 from app.core.events import order_events_manager
-from app.core.enums import OrderStatus, OrderSource
+from app.core.enums import OrderStatus, OrderSource, OrderType, UserRole
 
 
 class OrderService:
@@ -83,6 +83,16 @@ class OrderService:
             if order_data.source == models.OrderSource.ONLINE:
                 if not await self.settings_service.get_web_orders_status():
                     raise ValidationError("Online ordering is currently disabled.")
+
+            # A cashier-created delivery is operational immediately, so it
+            # must never enter the database without an active delivery rider.
+            if order_data.order_type == OrderType.DELIVERY and order_data.source == OrderSource.CASHIER:
+                if not order_data.delivery_person_id:
+                    raise ValidationError("يجب اختيار مندوب قبل إنشاء طلب الدليفري")
+                from app.modules.users.models import User
+                rider = await self.db.get(User, order_data.delivery_person_id)
+                if not rider or rider.role != UserRole.DELIVERY or not rider.is_active or rider.is_deleted:
+                    raise ValidationError("المندوب المختار غير متاح")
 
             # Validate items
             await self._validate_order_items(order_data.items)
@@ -261,7 +271,19 @@ class OrderService:
         async with self._transaction_scope():
             order = await self.get_order(order_id)
             if update_data.order_status and order.order_status != update_data.order_status:
-                if update_data.order_status == OrderStatus.OUT_FOR_DELIVERY and not (update_data.delivery_person_id or order.delivery_person_id):
+                target_rider_id = update_data.delivery_person_id or order.delivery_person_id
+                if (
+                    update_data.order_status == OrderStatus.CONFIRMED
+                    and order.order_type == OrderType.DELIVERY
+                    and not target_rider_id
+                ):
+                    raise ValidationError("يجب إسناد مندوب قبل قبول طلب الدليفري")
+                if order.order_type == OrderType.DELIVERY and target_rider_id:
+                    from app.modules.users.models import User
+                    rider = await self.db.get(User, target_rider_id)
+                    if not rider or rider.role != UserRole.DELIVERY or not rider.is_active or rider.is_deleted:
+                        raise ValidationError("المندوب المختار غير متاح")
+                if update_data.order_status == OrderStatus.OUT_FOR_DELIVERY and not target_rider_id:
                     raise ValidationError("A delivery rider must be assigned before dispatch")
                 if not order.can_transition_to(update_data.order_status):
                     raise ValidationError(f"Invalid status transition from {order.order_status} to {update_data.order_status}")

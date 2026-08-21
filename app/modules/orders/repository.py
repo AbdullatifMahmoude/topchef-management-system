@@ -287,7 +287,7 @@ class OrderRepository:
             # Dashboard sales use the same net-sales definition as reports and
             # cashier shifts: delivery fees are excluded.
             func.sum(models.Order.total_amount - models.Order.delivery_fee).filter(
-                models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.NEW, OrderStatus.CONFIRMED])
+                models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.NEW, OrderStatus.CONFIRMED, OrderStatus.OUT_FOR_DELIVERY])
             ).label("total_sales"),
             func.count(models.Order.id).filter(models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED])).label("completed_count"),
             func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.CANCELLED).label("cancelled_count"),
@@ -327,10 +327,16 @@ class OrderRepository:
                 OrderStatus.DELIVERED,
                 OrderStatus.NEW,
                 OrderStatus.CONFIRMED,
+                OrderStatus.OUT_FOR_DELIVERY,
             ]),
         )
         yesterday_sales = float(await self.db.scalar(yesterday_sales_query) or 0)
         today_sales = float(row["total_sales"] or 0)
+        from app.modules.shifts.models import ShiftExpense
+        today_expenses = float(await self.db.scalar(select(func.sum(ShiftExpense.amount)).where(
+            ShiftExpense.target_date == business_date,
+            ShiftExpense.is_deleted == False,
+        )) or 0)
         sales_change_percent = (
             ((today_sales - yesterday_sales) / yesterday_sales) * 100
             if yesterday_sales > 0 else None
@@ -339,6 +345,8 @@ class OrderRepository:
         return {
             "total_count": row["total_count"] or 0,
             "total_sales": today_sales,
+            "total_expenses": today_expenses,
+            "net_profit": today_sales - today_expenses,
             "yesterday_sales": yesterday_sales,
             "sales_change_percent": sales_change_percent,
             "completed_count": row["completed_count"] or 0,

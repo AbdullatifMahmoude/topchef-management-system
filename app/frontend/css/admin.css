@@ -3643,6 +3643,49 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .sidemenu .side_btn svg { width:16px; height:16px; flex-basis:16px; }
 }
 
+/* Expenses and operational profit */
+.ops_kpis { grid-template-columns:repeat(6,minmax(0,1fr)); }
+.ops_kpi_profit strong,.report_kpi_profit strong { color:#58cf91 !important; }
+.ops_kpi_expense strong,.report_kpi_expense strong { color:#ef8a75 !important; }
+.reports_kpis { grid-template-columns:repeat(6,minmax(0,1fr)); }
+@media(max-width:1280px){.ops_kpis,.reports_kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.ops_kpis,.reports_kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Comfortable admin reading scale for large operational screens. */
+@media(min-width:1400px) {
+  .page-content { font-size:16px; }
+  .ops_header h1,.items_header h1,.categories_header h1,.users_header h1,.shifts_header h1,.reports_header h1,.delivery_ops_header h1 { font-size:42px !important; }
+  .ops_header p,.items_header p,.categories_header p,.users_header p,.shifts_header p,.reports_header p,.delivery_ops_header p { font-size:13px !important; }
+  .ops_header span,.items_header span,.categories_header span,.users_header span,.shifts_header span,.reports_header span,.delivery_ops_header span { font-size:13px !important; }
+  .ops_kpi,.report_kpi,.items_kpi,.categories_kpis article,.users_kpis article,.shifts_kpis article,.delivery_ops_kpis article { padding:21px 22px !important; }
+  .ops_kpi>span,.report_kpi>span,.items_kpi>span,.categories_kpis span,.users_kpis span,.shifts_kpis span,.delivery_ops_kpis span { font-size:12px !important; }
+  .ops_kpi>strong,.report_kpi>strong,.items_kpi>strong,.categories_kpis strong,.users_kpis strong,.shifts_kpis strong,.delivery_ops_kpis strong { font-size:29px !important; }
+  .ops_kpi>small,.report_kpi>small,.items_kpi>small,.categories_kpis small,.users_kpis small,.shifts_kpis small,.delivery_ops_kpis small { font-size:10px !important; }
+  .ops_panel h2,.items_insight_heading h2,.categories_table_heading h2,.users_table_heading h2,.shifts_table_heading h2,.report_chart_heading span { font-size:19px !important; }
+  .ops_panel p,.ops_panel span,.items_insight_heading p,.categories_table_heading p,.users_table_heading p,.shifts_table_heading p,.report_chart_heading small { font-size:11px !important; }
+  .page-content table th { font-size:13px !important; }
+  .page-content table td { font-size:12px !important; }
+  .page-content button { font-size:13px; }
+  .page-content input,.page-content select,.page-content textarea { font-size:13px !important; }
+  .side_btn span { font-size:15px; }
+}
+
+/* Readable admin scale on tablets and compact laptops. */
+@media(min-width:641px) and (max-width:1399px) {
+  .ops_header h1,.items_header h1,.categories_header h1,.users_header h1,.shifts_header h1,.reports_header h1,.delivery_ops_header h1 { font-size:clamp(28px,3.4vw,36px) !important; }
+  .ops_header p,.items_header p,.categories_header p,.users_header p,.shifts_header p,.reports_header p,.delivery_ops_header p { font-size:11px !important; }
+  .ops_header span,.items_header span,.categories_header span,.users_header span,.shifts_header span,.reports_header span,.delivery_ops_header span { font-size:11px !important; }
+  .ops_kpi>span,.report_kpi>span,.items_kpi>span,.categories_kpis span,.users_kpis span,.shifts_kpis span,.delivery_ops_kpis span { font-size:10px !important; }
+  .ops_kpi>strong,.report_kpi>strong,.items_kpi>strong,.categories_kpis strong,.users_kpis strong,.shifts_kpis strong,.delivery_ops_kpis strong { font-size:clamp(22px,2.8vw,27px) !important; }
+  .ops_kpi>small,.report_kpi>small,.items_kpi>small,.categories_kpis small,.users_kpis small,.shifts_kpis small,.delivery_ops_kpis small { font-size:9px !important; }
+  .ops_panel h2,.items_insight_heading h2,.categories_table_heading h2,.users_table_heading h2,.shifts_table_heading h2,.report_chart_heading span { font-size:16px !important; }
+  .ops_panel p,.ops_panel span,.items_insight_heading p,.categories_table_heading p,.users_table_heading p,.shifts_table_heading p,.report_chart_heading small { font-size:10px !important; }
+  .page-content table th { font-size:11px !important; }.page-content table td { font-size:10.5px !important; }
+  .page-content button,.page-content input,.page-content select,.page-content textarea { font-size:11px !important; }
+  .sidemenu .menu_btn button.side_btn { font-size:14px !important; }
+  .sidemenu .sidebar_greeting #admin_username { font-size:12px !important; }
+}
+
 /* Tablet tables: fill the card, and contain any extra columns inside the table. */
 @media (min-width: 641px) and (max-width: 1280px) {
   .table_structure_unified,
@@ -3860,5 +3903,26 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .ops_order_filters { display: grid; grid-template-columns: repeat(4,1fr); }
   .ops_order_filters button { padding-inline: 5px; }
   .ops_now_stats strong { font-size: 22px; }
+}
+
+/* Final font scale override: must stay at the end of the admin stylesheet. */
+@media (min-width: 641px) {
+  .page-content h1 { font-size:clamp(32px,3.2vw,44px) !important; }
+  .page-content h2 { font-size:clamp(18px,1.7vw,22px) !important; }
+  .ops_header p,.items_header p,.categories_header p,.users_header p,.shifts_header p,.reports_header p,.delivery_ops_header p { font-size:13px !important; }
+  .ops_header span,.items_header span,.categories_header span,.users_header span,.shifts_header span,.reports_header span,.delivery_ops_header span { font-size:12px !important; }
+  .ops_kpi>span,.report_kpi>span,.items_kpi>span,.categories_kpis span,.users_kpis span,.shifts_kpis span,.delivery_ops_kpis span { font-size:12px !important; }
+  .ops_kpi>strong,.report_kpi>strong,.items_kpi>strong,.categories_kpis strong,.users_kpis strong,.shifts_kpis strong,.delivery_ops_kpis strong { font-size:clamp(25px,2.6vw,31px) !important; }
+  .ops_kpi>small,.report_kpi>small,.items_kpi>small,.categories_kpis small,.users_kpis small,.shifts_kpis small,.delivery_ops_kpis small { font-size:10px !important; }
+  .ops_panel_header h2,.delivery_panel_heading h2,.items_insight_heading h2,.categories_table_heading h2,.users_table_heading h2,.shifts_table_heading h2,.report_chart_heading span { font-size:19px !important; }
+  .ops_panel_header p,.delivery_panel_heading p,.items_insight_heading p,.categories_table_heading p,.users_table_heading p,.shifts_table_heading p,.report_chart_heading small { font-size:11px !important; }
+  .ops_now_stats strong { font-size:29px !important; }.ops_now_stats span,.ops_channels p,.ops_attention span { font-size:12px !important; }
+  .ops_quick_actions span { font-size:14px !important; }.ops_quick_actions small { font-size:11px !important; }
+  .delivery_order_top strong,.delivery_rider_identity strong { font-size:13px !important; }
+  .delivery_address,.delivery_order_meta span,.delivery_rider_identity span,.delivery_rider_metrics small,.delivery_rider_metrics strong { font-size:10px !important; }
+  .page-content table th { font-size:13px !important; }.page-content table td { font-size:12px !important; }
+  .page-content button,.page-content input,.page-content select,.page-content textarea { font-size:13px !important; }
+  .sidemenu .menu_btn button.side_btn { font-size:15px !important; }
+  .sidemenu .sidebar_greeting #admin_username { font-size:13px !important; }
 }
 

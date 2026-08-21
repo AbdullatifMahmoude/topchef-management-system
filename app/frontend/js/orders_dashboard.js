@@ -5,6 +5,8 @@
   let ordersList = [];
   let socket = null;
   let reconnectTimer = null;
+  let heartbeatTimer = null;
+  let fallbackRefreshTimer = null;
   let latestStats = {};
   let currentOrderFilter = "all";
 
@@ -105,6 +107,10 @@
 
     if (els.total_orders) els.total_orders.textContent = stats.total_count;
     if (els.total_sales)  els.total_sales.textContent = stats.total_sales.toFixed(2) + " ج.م";
+    const expensesEl = document.getElementById("ops_total_expenses");
+    const profitEl = document.getElementById("ops_net_profit");
+    if (expensesEl) expensesEl.textContent = Number(stats.total_expenses || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ج.م";
+    if (profitEl) profitEl.textContent = Number(stats.net_profit || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ج.م";
     if (els.completed)    els.completed.textContent = stats.completed_count;
     if (els.cancelled)    els.cancelled.textContent = stats.cancelled_count;
     if (els.active)       els.active.textContent = stats.active_count;
@@ -224,11 +230,20 @@
         reconnectTimer = null;
       }
       loadDashboardData();
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = setInterval(() => {
+        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "HEARTBEAT" }));
+      }, 20000);
     };
 
     socket.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
+        if (payload.type === "HEARTBEAT") {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "HEARTBEAT" }));
+          return;
+        }
+        if (payload.type === "HEARTBEAT_ACK") return;
         handleSocketEvent(payload);
       } catch (err) {
         console.error("WS Message Error:", err);
@@ -237,6 +252,8 @@
 
     socket.onclose = () => {
       updateConnectionStatus("disconnected");
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
       socket = null;
       if (!reconnectTimer) {
         reconnectTimer = setInterval(setupWebSocket, 5000);
@@ -281,6 +298,11 @@
       }
       // Always refresh stats if something changed
       if (document.getElementById("page-home")) setTimeout(loadDashboardStats, 300);
+    }
+
+    if (type === "EXPENSE_UPDATED") {
+      loadDashboardStats();
+      if (typeof window.refreshShifts === "function") window.refreshShifts();
     }
 
     // Refresh Products Page
@@ -388,6 +410,13 @@
     }));
     // Connect WebSocket globally
     setupWebSocket();
+    clearInterval(fallbackRefreshTimer);
+    fallbackRefreshTimer = setInterval(() => {
+      const home = document.getElementById("page-home");
+      if (document.visibilityState === "visible" && home && getComputedStyle(home).display !== "none") {
+        loadDashboardData();
+      }
+    }, 30000);
 
     // Only load initial dashboard data if on home page
     if (document.getElementById("page-home")) {

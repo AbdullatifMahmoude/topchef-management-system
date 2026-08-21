@@ -465,12 +465,19 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-function openShiftCashModal() {
+async function openShiftCashModal() {
   document.getElementById("shift_cash_modal")?.remove();
+  let saved = { opening_cash: 0, actual_closing_cash: null, closing_note: "", expenses_total: 0 };
+  try {
+    const savedResponse = await apiFetch("/shifts/current/cash", { hideLoader: true });
+    if (savedResponse.ok) saved = { ...saved, ...(await savedResponse.json()) };
+  } catch (error) {
+    console.warn("Could not load saved shift cash data", error);
+  }
   const modal = document.createElement("div");
   modal.id = "shift_cash_modal";
   modal.className = "shift_cash_modal";
-  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>سجّل حركة الدرج والنقد الفعلي. النظام سيحسب الفرق للمدير تلقائيًا.</p><div class="shift_cash_fields"><label>رصيد بداية الشيفت<input name="opening_cash" type="number" min="0" step="0.01" placeholder="0.00"></label><label>المصروفات أو المسحوبات<input name="cash_expenses" type="number" min="0" step="0.01" placeholder="0.00"></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري"></textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
+  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديلها ثم الحفظ مرة أخرى.</p><div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>رصيد بداية الشيفت<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00"></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
   document.body.appendChild(modal);
   modal.querySelector(".shift_cash_cancel").onclick = () => modal.remove();
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
@@ -478,7 +485,7 @@ function openShiftCashModal() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const payload = {};
-    ["opening_cash", "cash_expenses", "actual_closing_cash"].forEach((key) => {
+    ["opening_cash", "actual_closing_cash"].forEach((key) => {
       const value = form.get(key);
       if (value !== "") payload[key] = Number(value);
     });
@@ -1723,7 +1730,7 @@ async function renderRidersTab() {
   const body = document.getElementById("riders_table_body");
   if (!body) return;
 
-  body.innerHTML = `<tr><td colspan="8" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
+  body.innerHTML = `<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
   try {
     const response = await apiFetch("/orders/riders/stats", { suppress401: true });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1731,13 +1738,15 @@ async function renderRidersTab() {
     const riders = Array.isArray(data.stats) ? data.stats : [];
     const summary = data.summary || {};
     const setRiderText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    setRiderText("cashierRidersTotal", Number(summary.total_delivery_orders || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersAssigned", Number(summary.assigned_orders || 0).toLocaleString("ar-EG"));
     setRiderText("cashierRidersUnassigned", Number(summary.unassigned_orders || 0).toLocaleString("ar-EG"));
     setRiderText("cashierRidersOnRoad", Number(summary.out_for_delivery || 0).toLocaleString("ar-EG"));
     setRiderText("cashierRidersDelivered", Number(summary.delivered_orders || 0).toLocaleString("ar-EG"));
-    setRiderText("cashierRidersCash", `${Number(summary.cash_to_collect || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`);
+    setRiderText("cashierRidersValue", `${Number(summary.orders_value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`);
 
     if (!riders.length) {
-      body.innerHTML = `<tr><td colspan="8" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
+      body.innerHTML = `<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
       return;
     }
 
@@ -1751,6 +1760,7 @@ async function renderRidersTab() {
         <td style="padding:15px; font-weight:800;">${Number(r.cash_amount || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px; font-weight:800;">${Number(r.digital_amount || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px; font-weight:900; color:var(--color-primary);">${Number(r.delivery_fees || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px; font-weight:900; color:#fff0d0;">${Number(r.order_value || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px;">
           <button onclick='showRiderOrdersPopup("${String(r.name).replace(/"/g, "&quot;")}", ${JSON.stringify(r.order_numbers || [])})'
             style="background:rgba(61,158,107,.15); color:#3d9e6b; border:1px solid rgba(61,158,107,.3); padding:4px 12px; border-radius:6px; cursor:pointer; font-family:Cairo,sans-serif; font-weight:700;">
@@ -1890,10 +1900,12 @@ function switchMainTab(tab) {
   const tabOnline = document.getElementById("tab_online");
   const tabAllOrders = document.getElementById("tab_all_orders");
   const tabRiders = document.getElementById("tab_riders");
+  const tabExpenses = document.getElementById("tab_expenses");
   const layoutLocal = document.getElementById("local_orders_layout");
   const layoutOnline = document.getElementById("online_orders_layout");
   const layoutAllOrders = document.getElementById("all_orders_layout");
   const layoutRiders = document.getElementById("riders_layout");
+  const layoutExpenses = document.getElementById("expenses_layout");
 
   if (!tabLocal || !tabOnline) return;
 
@@ -1902,12 +1914,14 @@ function switchMainTab(tab) {
   tabOnline.classList.remove("active");
   if (tabAllOrders) tabAllOrders.classList.remove("active");
   if (tabRiders) tabRiders.classList.remove("active");
+  if (tabExpenses) tabExpenses.classList.remove("active");
 
   // Reset layouts
   if (layoutLocal) layoutLocal.style.display = "none";
   if (layoutOnline) layoutOnline.style.display = "none";
   if (layoutAllOrders) layoutAllOrders.style.display = "none";
   if (layoutRiders) layoutRiders.style.display = "none";
+  if (layoutExpenses) layoutExpenses.style.display = "none";
 
   if (tab === "local") {
     tabLocal.classList.add("active");
@@ -1927,8 +1941,112 @@ function switchMainTab(tab) {
     if (tabRiders) tabRiders.classList.add("active");
     if (layoutRiders) layoutRiders.style.display = "block";
     renderRidersTab();
+  } else if (tab === "expenses") {
+    if (tabExpenses) tabExpenses.classList.add("active");
+    if (layoutExpenses) layoutExpenses.style.display = "block";
+    loadShiftExpenses();
+  }
+
+  if (orderType === "delivery" && !selectedDelivery) {
+    showToast("لا يمكن إنشاء طلب دليفري بدون اختيار مندوب", "error");
+    renderDeliveryCustomerForm();
+    return;
   }
 }
+
+function expenseMoney(value) {
+  return `${Number(value || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+}
+
+function escapeExpenseText(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+}
+
+let expensesLoadController = null;
+let expensesRequestSequence = 0;
+
+async function loadShiftExpenses() {
+  const list = document.getElementById("expenses_list");
+  if (!list) return;
+  const requestSequence = ++expensesRequestSequence;
+  expensesLoadController?.abort();
+  expensesLoadController = new AbortController();
+  list.innerHTML = '<div class="expenses_empty">جاري تحميل المصروفات...</div>';
+  try {
+    const response = await apiFetch("/shifts/current/expenses", { hideLoader: true, signal: expensesLoadController.signal });
+    if (!response.ok) throw new Error(`expenses ${response.status}`);
+    const data = await response.json();
+    if (requestSequence !== expensesRequestSequence) return;
+    const items = data.items || [];
+    const total = document.getElementById("expenses_total_value");
+    const count = document.getElementById("expenses_count");
+    if (total) total.textContent = expenseMoney(data.total);
+    if (count) count.textContent = `${items.length.toLocaleString("ar-EG")} عملية`;
+    list.innerHTML = items.length ? items.map((item) => `
+      <article class="expense_row">
+        <div><strong>${escapeExpenseText(item.title)}</strong><span>${escapeExpenseText(item.note || "بدون ملاحظة")}</span></div>
+        <div><b>${expenseMoney(item.amount)}</b><small>${new Date(item.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</small></div>
+        <button type="button" onclick="deleteShiftExpense(${item.id})" title="حذف المصروف">×</button>
+      </article>`).join("") : '<div class="expenses_empty">لا توجد مصروفات مسجلة في الشيفت الحالي</div>';
+  } catch (error) {
+    if (error?.name === "AbortError" || requestSequence !== expensesRequestSequence) return;
+    console.error(error);
+    list.innerHTML = '<div class="expenses_empty is_error">تعذر تحميل المصروفات</div>';
+  }
+}
+
+async function deleteShiftExpense(expenseId) {
+  const button = document.querySelector(`.expense_row button[onclick="deleteShiftExpense(${expenseId})"]`);
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
+  try {
+    const response = await apiFetch(`/shifts/current/expenses/${expenseId}`, { method: "DELETE" });
+    if (!response.ok) return showToast("تعذر حذف المصروف", "error");
+    showToast("تم حذف المصروف", "success");
+    await loadShiftExpenses();
+  } catch (error) {
+    console.error(error);
+    showToast("تعذر الاتصال أثناء حذف المصروف", "error");
+  } finally {
+    if (button?.isConnected) button.disabled = false;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("expense_form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+    if (submitButton?.disabled) return;
+    const form = new FormData(event.currentTarget);
+    const payload = { title: String(form.get("title") || "").trim(), amount: Number(form.get("amount")), note: String(form.get("note") || "").trim() || null };
+    if (payload.title.length < 2 || !Number.isFinite(payload.amount) || payload.amount <= 0) {
+      return showToast("راجع بند المصروف والمبلغ", "error");
+    }
+    const originalText = submitButton?.textContent;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "جاري الحفظ...";
+    }
+    try {
+      const response = await apiFetch("/shifts/current/expenses", { method: "POST", body: JSON.stringify(payload) });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return showToast(error.detail || "تعذر حفظ المصروف", "error");
+      }
+      event.currentTarget.reset();
+      showToast("تم تسجيل المصروف", "success");
+      await loadShiftExpenses();
+    } catch (error) {
+      console.error(error);
+      showToast("تعذر الاتصال أثناء حفظ المصروف", "error");
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
+      }
+    }
+  });
+});
 
 // ===================================================
 //  Online Orders (Website Orders)
@@ -3855,7 +3973,10 @@ async function acceptOrderFromModal(orderId, source) {
       body: JSON.stringify({ order_status: "confirmed" }),
     });
 
-    if (!res.ok) throw new Error("فشل تحديث الحالة");
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || "فشل تحديث الحالة");
+    }
 
     // ✅ تحديث الـ badge داخل المودال
     const statusBadge = document.querySelector(
@@ -3911,7 +4032,7 @@ async function acceptOrderFromModal(orderId, source) {
       </svg>
       قبول الطلب
     `;
-    showToast("حدث خطأ أثناء قبول الطلب", "error");
+    showToast(err.message || "حدث خطأ أثناء قبول الطلب", "error");
   }
 }
 

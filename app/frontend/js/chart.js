@@ -132,6 +132,8 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (data.year) currentRange = { start: `${data.year}-01-01`, end: `${data.year}-12-31` };
     title.textContent = reportTitle(type, data);
     document.getElementById("total_revenue_value").textContent = money(summary.total_revenue);
+    document.getElementById("total_expenses_value").textContent = money(summary.total_expenses);
+    document.getElementById("net_profit_value").textContent = money(summary.net_profit);
     document.getElementById("chart_revenue_total").textContent = money(summary.total_revenue);
     document.getElementById("total_orders_value").textContent = number(summary.total_orders);
     document.getElementById("average_order_value").textContent = money(summary.average_order_value);
@@ -143,6 +145,8 @@ document.addEventListener("DOMContentLoaded", () => {
       { label: "قبل الخصم", value: Number(summary.total_subtotal || 0), color: "#4fb3bf" },
       { label: "الخصومات", value: Number(summary.total_discount || 0), color: "#eb6a67" },
       { label: "رسوم التوصيل", value: Number(summary.total_delivery_fee || 0), color: "#9b7de3" },
+      { label: "المصروفات", value: Number(summary.total_expenses || 0), color: "#ef8a75" },
+      { label: "صافي الربح", value: Number(summary.net_profit || 0), color: "#58cf91" },
     ], money);
     renderTable(orders, summary, Number(data.orders_offset || 0), Number(data.orders_limit || pageSize));
   }

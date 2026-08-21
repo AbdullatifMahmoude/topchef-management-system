@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/cashier.css?v=20260820-navbar-palette" />
+    <link rel="stylesheet" href="css/cashier.css?v=20260821-expenses-stability" />
   </head>
   <body>
     <!-- ===== Navbar ===== -->
@@ -34,6 +34,7 @@
         </button>
         <button id="tab_all_orders" class="nav_tab" onclick="switchMainTab('all_orders')">كل الطلبات</button>
         <button id="tab_riders" class="nav_tab" onclick="switchMainTab('riders')">الدليفرية</button>
+        <button id="tab_expenses" class="nav_tab" onclick="switchMainTab('expenses')">المصروفات</button>
       </div>
       <div class="nav_account">
         <button type="button" class="shift_cash_btn" onclick="openShiftCashModal()">تسوية الشيفت</button>
@@ -70,6 +71,13 @@
             <input id="localProductSearch" type="search" placeholder="ابحث عن صنف..." oninput="filterLocalProducts(this.value)" />
           </label>
         </header>
+        <!-- تابز الكاتيجوري -->
+        <div class="category_tabs" id="category_tabs"></div>
+
+        <!-- شبكة الأصناف -->
+        <div class="items_grid" id="items_grid"></div>
+
+        <!-- اختصارات الطلب السريع في أسفل المنيو -->
         <section id="popular_products_section" class="popular_products_section" hidden>
           <div class="popular_products_heading">
             <div><strong>الأكثر طلبًا</strong><span>إضافة سريعة للطلب</span></div>
@@ -77,11 +85,6 @@
           </div>
           <div id="popular_products_list" class="popular_products_list"></div>
         </section>
-        <!-- تابز الكاتيجوري -->
-        <div class="category_tabs" id="category_tabs"></div>
-
-        <!-- شبكة الأصناف -->
-        <div class="items_grid" id="items_grid"></div>
       </div>
 
       <!-- === Cart === -->
@@ -306,10 +309,12 @@
         </div>
 
         <div class="cashier_riders_kpis">
+          <article><span>إجمالي دليفري اليوم</span><strong id="cashierRidersTotal">0</strong></article>
+          <article><span>طلبات مسندة</span><strong id="cashierRidersAssigned">0</strong></article>
           <article><span>بدون مندوب</span><strong id="cashierRidersUnassigned">0</strong></article>
           <article><span>خرج للتوصيل</span><strong id="cashierRidersOnRoad">0</strong></article>
           <article><span>تم التسليم</span><strong id="cashierRidersDelivered">0</strong></article>
-          <article><span>النقدي المتوقع</span><strong id="cashierRidersCash">0 ج.م</strong></article>
+          <article><span>قيمة طلبات الدليفري</span><strong id="cashierRidersValue">0 ج.م</strong></article>
         </div>
 
         <div class="riders_table_wrapper" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden;">
@@ -323,6 +328,7 @@
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">نقدي</th>
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">تحويل</th>
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">رسوم التوصيل</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">قيمة الطلبات</th>
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">الطلبات</th>
               </tr>
             </thead>
@@ -330,6 +336,29 @@
               <!-- سيتم تعبئة البيانات هنا -->
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Shift Expenses Layout ===== -->
+    <div id="expenses_layout" class="expenses_layout" style="display:none">
+      <div class="expenses_workspace">
+        <header class="expenses_header">
+          <div><p>مصروفات التشغيل</p><h1>مصروفات الشيفت</h1><span>سجّل أي مبلغ خرج من الدرج ليظهر فورًا في التسوية والتقارير</span></div>
+          <div class="expenses_total"><span>إجمالي مصروفات الشيفت</span><strong id="expenses_total_value">0 ج.م</strong></div>
+        </header>
+        <div class="expenses_grid">
+          <form id="expense_form" class="expense_form">
+            <div class="expense_form_heading"><strong>إضافة مصروف</strong><span>اكتب سبب الصرف والمبلغ بدقة</span></div>
+            <label>بند المصروف<input name="title" maxlength="120" required placeholder="مثال: شراء أكياس أو مياه"></label>
+            <label>المبلغ<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label>
+            <label>ملاحظة <small>اختياري</small><textarea name="note" rows="3" maxlength="500" placeholder="تفاصيل إضافية"></textarea></label>
+            <button type="submit">حفظ المصروف</button>
+          </form>
+          <section class="expenses_history">
+            <div class="expense_form_heading"><strong>مصروفات الشيفت الحالي</strong><span id="expenses_count">0 عملية</span></div>
+            <div id="expenses_list" class="expenses_list"><div class="expenses_empty">لا توجد مصروفات مسجلة</div></div>
+          </section>
         </div>
       </div>
     </div>
@@ -350,6 +379,6 @@
         })();
       </script>
     <script src="../js/custom-select.js?v=20260820-global-select"></script>
-    <script src="js/cashier.js?v=20260820-popular-products"></script>
+    <script src="js/cashier.js?v=20260821-expenses-stability"></script>
   </body>
 </html>

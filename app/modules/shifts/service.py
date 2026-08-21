@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional
 
-from app.modules.shifts.models import CashierShift
+from app.modules.shifts.models import CashierShift, ShiftExpense
 from app.modules.orders.models import Order
 from app.core.enums import OrderStatus, PaymentMethod
 from app.core.logging import logger
@@ -108,6 +108,11 @@ class ShiftsService:
 
         orders_result = await self.db.execute(orders_query)
         day_orders = orders_result.all()
+        expenses_result = await self.db.execute(select(ShiftExpense).where(
+            ShiftExpense.target_date == target_date,
+            ShiftExpense.is_deleted == False,
+        ))
+        day_expenses = expenses_result.scalars().all()
 
         def shift_time_to_local(dt):
             if not dt:
@@ -150,7 +155,7 @@ class ShiftsService:
                 for method in PaymentMethod
             }
             opening_cash = shift.opening_cash or 0
-            cash_expenses = shift.cash_expenses or 0
+            cash_expenses = sum((expense.amount or 0) for expense in day_expenses if expense.shift_id == shift.id)
             expected_cash = opening_cash + payment_sales[PaymentMethod.CASH.value] - cash_expenses
             cash_difference = (
                 (shift.actual_closing_cash - expected_cash)

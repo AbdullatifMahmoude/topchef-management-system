@@ -55,6 +55,12 @@ async def get_report_summary(db: AsyncSession, start_date: date, end_date: date)
     successful_orders = row.successful_orders or 0
     total_revenue = row.total_revenue or Decimal('0.00')
     average_order_value = (total_revenue / successful_orders) if successful_orders > 0 else Decimal('0.00')
+    from app.modules.shifts.models import ShiftExpense
+    total_expenses = await db.scalar(select(func.sum(ShiftExpense.amount)).where(
+        ShiftExpense.target_date >= start_date,
+        ShiftExpense.target_date <= end_date,
+        ShiftExpense.is_deleted == False,
+    )) or Decimal('0.00')
 
     return schemas.ReportSummary(
         total_orders=row.total_orders or 0,
@@ -65,6 +71,8 @@ async def get_report_summary(db: AsyncSession, start_date: date, end_date: date)
         total_subtotal=row.total_subtotal or Decimal('0.00'),
         total_discount=row.total_discount or Decimal('0.00'),
         total_delivery_fee=row.total_delivery_fee or Decimal('0.00'),
+        total_expenses=total_expenses,
+        net_profit=total_revenue - total_expenses,
     )
 
 
