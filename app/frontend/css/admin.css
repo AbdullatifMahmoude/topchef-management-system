@@ -3646,6 +3646,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* Expenses and operational profit */
 .ops_kpis { grid-template-columns:repeat(6,minmax(0,1fr)); }
 .ops_kpi_profit strong,.report_kpi_profit strong { color:#58cf91 !important; }
+.ops_kpi_profit strong.is_negative,.report_kpi_profit strong.is_negative { color:#ef6f6c !important; text-shadow:0 0 18px rgba(239,111,108,.14); }
 .ops_kpi_expense strong,.report_kpi_expense strong { color:#ef8a75 !important; }
 .reports_kpis { grid-template-columns:repeat(6,minmax(0,1fr)); }
 @media(max-width:1280px){.ops_kpis,.reports_kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}

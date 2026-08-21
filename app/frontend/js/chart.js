@@ -151,7 +151,10 @@ document.addEventListener("DOMContentLoaded", () => {
     title.textContent = reportTitle(type, data);
     document.getElementById("total_revenue_value").textContent = money(summary.total_revenue);
     document.getElementById("total_expenses_value").textContent = money(summary.total_expenses);
-    document.getElementById("net_profit_value").textContent = money(summary.net_profit);
+    const netProfitValue = document.getElementById("net_profit_value");
+    const netProfit = Number(summary.net_profit || 0);
+    netProfitValue.textContent = money(netProfit);
+    netProfitValue.classList.toggle("is_negative", netProfit < 0);
     document.getElementById("chart_revenue_total").textContent = money(summary.total_revenue);
     document.getElementById("total_orders_value").textContent = number(summary.total_orders);
     document.getElementById("average_order_value").textContent = money(summary.average_order_value);
@@ -164,7 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
       { label: "الخصومات", value: Number(summary.total_discount || 0), color: "#eb6a67" },
       { label: "رسوم التوصيل", value: Number(summary.total_delivery_fee || 0), color: "#9b7de3" },
       { label: "المصروفات", value: Number(summary.total_expenses || 0), color: "#ef8a75" },
-      { label: "صافي الربح", value: Number(summary.net_profit || 0), color: "#58cf91" },
+      { label: "صافي الربح", value: netProfit, color: netProfit < 0 ? "#ef6f6c" : "#58cf91" },
     ], money);
     renderTable(orders, summary, Number(data.orders_offset || 0), Number(data.orders_limit || pageSize));
     renderExpenses(data.expenses, summary);

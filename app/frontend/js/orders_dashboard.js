@@ -110,7 +110,11 @@
     const expensesEl = document.getElementById("ops_total_expenses");
     const profitEl = document.getElementById("ops_net_profit");
     if (expensesEl) expensesEl.textContent = Number(stats.total_expenses || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ج.م";
-    if (profitEl) profitEl.textContent = Number(stats.net_profit || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ج.م";
+    if (profitEl) {
+      const netProfit = Number(stats.net_profit || 0);
+      profitEl.textContent = netProfit.toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ج.م";
+      profitEl.classList.toggle("is_negative", netProfit < 0);
+    }
     if (els.completed)    els.completed.textContent = stats.completed_count;
     if (els.cancelled)    els.cancelled.textContent = stats.cancelled_count;
     if (els.active)       els.active.textContent = stats.active_count;
