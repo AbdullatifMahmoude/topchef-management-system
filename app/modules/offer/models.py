@@ -1,8 +1,16 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SA_Enum, Numeric, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SA_Enum, Numeric, ForeignKey, Index, Table, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base, DbEnum
 from app.core.enums import DiscountType
+
+offer_products = Table(
+    "offer_products",
+    Base.metadata,
+    Column("offer_id", Integer, ForeignKey("offers.offer_id", ondelete="CASCADE"), primary_key=True),
+    Column("product_id", Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True),
+    Index("ix_offer_products_product_id", "product_id"),
+)
 
 class Offer(Base):
     __tablename__ = "offers"
@@ -19,6 +27,7 @@ class Offer(Base):
     min_quantity = Column(Integer, nullable=True)
     max_quantity = Column(Integer, nullable=True)
     max_discount_amount = Column(Numeric(10, 2), nullable=True)
+    rules = Column(JSON, nullable=False, default=dict)
     usage_limit = Column(Integer, nullable=True)
     usage_per_user = Column(Integer, nullable=True)
     current_usage = Column(Integer, nullable=False, default=0)
@@ -37,6 +46,11 @@ class Offer(Base):
     }
 
     usages = relationship("OfferUsage", back_populates="offer", cascade="all, delete-orphan")
+    products = relationship("Product", secondary=offer_products, lazy="selectin")
+
+    @property
+    def product_ids(self):
+        return [product.id for product in self.products]
 
     def is_started(self):
         return datetime.utcnow() >= self.valid_from
@@ -45,7 +59,7 @@ class Offer(Base):
         return datetime.utcnow() > self.valid_to
 
     def is_usage_limit_reached(self) -> bool:
-        return self.usage_limit is not None and self.current_usage >= self.usage_limit
+        return self.usage_limit is not None and int(self.current_usage or 0) >= self.usage_limit
 
     def deactivate_if_expired(self):
         if self.is_expired() and self.is_active:
@@ -79,5 +93,4 @@ class OfferUsage(Base):
 
     __table_args__ = (
         Index('idx_offer_customer', 'offer_id', 'customer_phone'),
-        UniqueConstraint('offer_id', 'customer_phone', name='uq_offer_customer_usage'),
     )

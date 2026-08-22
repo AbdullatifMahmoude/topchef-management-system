@@ -78,6 +78,9 @@ async function apiFetch(path, options = {}) {
 let categories = [];
 let products = [];
 let popularProducts = [];
+let activeOffers = [];
+let offersRefreshTimer = null;
+let selectedOfferCode = null;
 let activeCatId = null;
 let cart = [];
 
@@ -172,10 +175,11 @@ async function init() {
   showGlobalLoader(true);
 
   try {
-    const [catsRes, prodsRes, popularRes] = await Promise.all([
+    const [catsRes, prodsRes, popularRes, offersRes] = await Promise.all([
       apiFetch("/menu/categories"),
       apiFetch("/menu/products"),
       apiFetch("/menu/products/popular?limit=8", { hideLoader: true }).catch(() => null),
+      apiFetch("/offers/", { hideLoader: true }).catch(() => null),
     ]);
 
     if (!catsRes.ok || !prodsRes.ok) throw new Error("API error loading menu");
@@ -183,6 +187,7 @@ async function init() {
     categories = await catsRes.json();
     products = await prodsRes.json();
     popularProducts = popularRes && popularRes.ok ? await popularRes.json() : [];
+    activeOffers = offersRes && offersRes.ok ? await offersRes.json() : [];
 
     categories = Array.isArray(categories)
       ? categories.filter((c) => c.is_active)
@@ -195,6 +200,7 @@ async function init() {
     renderTabs();
     renderPopularProducts();
     renderItems();
+    renderCashierOffersBoard();
     initWebOrdersToggle();
 
     // Initial badge refresh
@@ -268,7 +274,15 @@ function renderItems() {
 
     const card = document.createElement("div");
     card.className = "item_card";
+    const productOffers = getActiveOffersForProduct(product.id);
+    const offerBadge = productOffers.length
+      ? `<div class="product_offer_badge" title="${productOffers.map((offer) => offer.display_name || offer.code).join("، ")}">
+          <span>${formatProductOffer(productOffers[0])}</span>
+          ${productOffers.length > 1 ? `<small>+${productOffers.length - 1}</small>` : ""}
+        </div>`
+      : "";
     card.innerHTML = `
+      ${offerBadge}
       <h1>${product.product_name}</h1>
       ${descriptionHtml}
       <h2>${priceLabel}</h2>
@@ -498,6 +512,126 @@ async function openShiftCashModal() {
   });
 }
 
+function getActiveOffersForProduct(productId) {
+  const now = Date.now();
+  const product = products.find((item) => Number(item.id) === Number(productId));
+  return activeOffers.filter((offer) => {
+    if (!offer || !offer.is_active) return false;
+    const starts = offer.valid_from ? new Date(offer.valid_from).getTime() : 0;
+    const ends = offer.valid_to ? new Date(offer.valid_to).getTime() : Infinity;
+    if (now < starts || now > ends) return false;
+    if (offer.usage_limit && Number(offer.current_usage || 0) >= Number(offer.usage_limit)) return false;
+    const rules = offer.rules || {};
+    if (offer.discount_type === "free_delivery") return false;
+    if (offer.discount_type === "category_discount") {
+      return (rules.category_ids || []).map(Number).includes(Number(product?.cat_id));
+    }
+    if (offer.discount_type === "happy_hour" && rules.start_time && rules.end_time) {
+      const current = new Date().toLocaleTimeString("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit" });
+      const start = String(rules.start_time).slice(0, 5), end = String(rules.end_time).slice(0, 5);
+      if (!(start <= end ? current >= start && current <= end : current >= start || current <= end)) return false;
+    }
+    const ids = Array.isArray(offer.product_ids) ? offer.product_ids.map(Number) : [];
+    return ids.length === 0 || ids.includes(Number(productId));
+  });
+}
+
+function formatProductOffer(offer) {
+  if (["percentage", "quantity_discount", "happy_hour"].includes(offer.discount_type)) return `خصم ${Number(offer.discount_value)}%`;
+  if (offer.discount_type === "fixed") return `خصم ${Number(offer.discount_value)} ج.م`;
+  if (offer.discount_type === "buy_one_get_one") return "عرض 1 + 1";
+  if (offer.discount_type === "combo") return `كومبو ${Number(offer.rules?.combo_price || 0)} ج.م`;
+  if (offer.discount_type === "buy_x_get_y") return `عرض ${offer.rules?.buy_quantity || 1} + ${offer.rules?.get_quantity || 1}`;
+  if (offer.discount_type === "category_discount") return offer.rules?.discount_mode === "fixed" ? `خصم ${Number(offer.discount_value)} ج.م` : `خصم ${Number(offer.discount_value)}%`;
+  return "عليه عرض";
+}
+
+function currentlyAvailableOffers() {
+  const now = Date.now();
+  return activeOffers.filter((offer) => {
+    if (!offer?.is_active) return false;
+    if (offer.valid_from && now < new Date(offer.valid_from).getTime()) return false;
+    if (offer.valid_to && now > new Date(offer.valid_to).getTime()) return false;
+    if (offer.usage_limit && Number(offer.current_usage || 0) >= Number(offer.usage_limit)) return false;
+    if (offer.discount_type === "happy_hour") {
+      const rules = offer.rules || {}, start = String(rules.start_time || "").slice(0, 5), end = String(rules.end_time || "").slice(0, 5);
+      if (start && end) {
+        const current = new Date().toLocaleTimeString("en-GB", {timeZone:"Africa/Cairo", hour:"2-digit", minute:"2-digit"});
+        if (!(start <= end ? current >= start && current <= end : current >= start || current <= end)) return false;
+      }
+    }
+    return true;
+  });
+}
+
+function offerDetailsText(offer) {
+  const rules = offer.rules || {}, parts = [];
+  if (offer.discount_type === "combo") parts.push(`الكومبو بسعر ${Number(rules.combo_price || 0)} ج.م`);
+  else if (offer.discount_type === "buy_x_get_y") parts.push(`اشترِ ${rules.buy_quantity || 1} وخذ ${rules.get_quantity || 1} بخصم ${rules.reward_percent || 100}%`);
+  else if (offer.discount_type === "quantity_discount") parts.push(`اشترِ ${rules.quantity_required || 1} وحدات وخذ خصم ${Number(offer.discount_value)}%`);
+  else if (offer.discount_type === "free_delivery") parts.push("رسوم التوصيل مجانًا");
+  else if (offer.discount_type === "category_discount") parts.push(rules.discount_mode === "fixed" ? `خصم ${Number(offer.discount_value)} ج.م على التصنيف` : `خصم ${Number(offer.discount_value)}% على التصنيف`);
+  else parts.push(formatProductOffer(offer));
+  if (offer.min_order_amount) parts.push(`حد أدنى ${Number(offer.min_order_amount)} ج.م`);
+  if (offer.usage_per_user) parts.push(`${offer.usage_per_user} استخدام لكل عميل`);
+  return parts.join(" • ");
+}
+
+function renderCashierOffersBoard() {
+  const board = document.getElementById("cashier_offers_board"), list = document.getElementById("cashier_offers_list"), count = document.getElementById("cashier_offers_count");
+  if (!board || !list || !count) return;
+  const available = currentlyAvailableOffers();
+  if (selectedOfferCode && !available.some((offer) => offer.code === selectedOfferCode)) selectedOfferCode = null;
+  board.hidden = available.length === 0;
+  count.textContent = `${available.length.toLocaleString("ar-EG")} عرض`;
+  list.innerHTML = available.map((offer) => `<article class="cashier_offer_ad ${selectedOfferCode === offer.code ? "selected" : ""}"><div><span>${offer.display_name || offer.code}</span><strong>${offerDetailsText(offer)}</strong><small>الكود: ${offer.code}</small></div><button type="button" data-apply-offer="${offer.code}">${selectedOfferCode === offer.code ? "إلغاء التطبيق" : "تطبيق العرض"}</button></article>`).join("");
+  ["discount_type", "discount_value", "discount_reason"].forEach((id) => { const input=document.getElementById(id); if(input) input.disabled=Boolean(selectedOfferCode); });
+}
+
+async function refreshActiveOffers() {
+  try {
+    const response = await apiFetch("/offers/", { hideLoader: true });
+    if (!response.ok) return;
+    const freshOffers = await response.json();
+    activeOffers = Array.isArray(freshOffers) ? freshOffers : [];
+    renderItems();
+    renderPopularProducts();
+    renderCashierOffersBoard();
+  } catch (error) {
+    console.warn("Could not refresh active offers", error);
+  }
+}
+
+function scheduleOffersRefresh(delay = 120) {
+  clearTimeout(offersRefreshTimer);
+  offersRefreshTimer = setTimeout(refreshActiveOffers, delay);
+}
+
+document.getElementById("cashier_offers_list")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-apply-offer]");
+  if (!button) return;
+  const code = button.dataset.applyOffer, offer = activeOffers.find((item) => item.code === code);
+  if (!offer) return;
+  if (selectedOfferCode === code) selectedOfferCode = null;
+  else {
+    if (offer.usage_per_user && !isValidEgyptianPhone(deliveryCustomerInfo.phone)) {
+      showToast("أدخل بيانات العميل ورقم هاتفه أولًا لتطبيق هذا العرض", "error");
+      return;
+    }
+    selectedOfferCode = code;
+    const typeInput = document.getElementById("discount_type"), valueInput = document.getElementById("discount_value"), reasonInput = document.getElementById("discount_reason");
+    if (typeInput) typeInput.value = "";
+    if (valueInput) valueInput.value = "";
+    if (reasonInput) reasonInput.value = "";
+  }
+  renderCashierOffersBoard();
+  updatePricingPreview();
+});
+document.getElementById("cashier_offers_toggle")?.addEventListener("click", (event) => {
+  const board = document.getElementById("cashier_offers_board"), collapsed = board.classList.toggle("collapsed");
+  event.currentTarget.textContent = collapsed ? "عرض" : "إخفاء";
+});
+
 function getProductStartingPrice(product) {
   const prices = (product?.variants || [])
     .map((variant) => Number.parseFloat(variant.price))
@@ -521,12 +655,17 @@ function renderPopularProducts() {
   list.innerHTML = "";
   ranked.forEach(({ product }, index) => {
     const price = getProductStartingPrice(product);
+    const productOffers = getActiveOffersForProduct(product.id);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "popular_product_btn";
     button.innerHTML = `
       <b>${index + 1}</b>
-      <span><strong>${product.product_name}</strong><small>${(product.variants || []).length > 1 ? "يبدأ من " : ""}${price ? `${price} ج.م` : "اختر السعر"}</small></span>
+      <span class="popular_product_details">
+        <strong>${product.product_name}</strong>
+        <small>${(product.variants || []).length > 1 ? "يبدأ من " : ""}${price ? `${price} ج.م` : "اختر السعر"}</small>
+        ${productOffers.length ? `<em class="popular_offer_badge">${formatProductOffer(productOffers[0])}</em>` : ""}
+      </span>
       <i aria-hidden="true">+</i>
     `;
     button.onclick = () => handleProductClick(product, price);
@@ -748,9 +887,9 @@ function showConfirmModal(orderData) {
           (orderType === "delivery"
             ? selectedDeliveryFee
             : selectedDineInFee) || 0,
-        offer_code: null,
-        manual_discount_type: discountType,
-        manual_discount_value: discountValue,
+        offer_code: selectedOfferCode,
+        manual_discount_type: selectedOfferCode ? null : discountType,
+        manual_discount_value: selectedOfferCode ? null : discountValue,
         discount_reason: discountReason,
       };
 
@@ -833,6 +972,7 @@ function showConfirmModal(orderData) {
 
       // تصفية السلة وعودة الحالة للصفر
       cart = [];
+      selectedOfferCode = null;
       orderType = null;
       selectedDelivery = null;
       selectedDeliveryFee = null;
@@ -853,6 +993,7 @@ function showConfirmModal(orderData) {
       renderCart();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
+      renderCashierOffersBoard();
 
       showToast("تم تأكيد الطلب بنجاح", "success");
 
@@ -949,6 +1090,7 @@ function showCancelModal() {
   document.getElementById("btn_cancel_yes").onclick = () => {
     overlay.remove();
     cart = [];
+    selectedOfferCode = null;
     orderType = null;
     selectedDelivery = null;
     selectedDeliveryFee = null;
@@ -962,6 +1104,7 @@ function showCancelModal() {
     renderCart();
     renderOrderTypeBadge();
     renderOrderTypeButtons();
+    renderCashierOffersBoard();
     showToast("تم إلغاء الطلب", "error");
   };
 
@@ -985,7 +1128,8 @@ function showToast(message, type) {
 
   const toast = document.createElement("div");
   toast.className = "toast_msg toast_" + type;
-  toast.textContent = message;
+  const toastMessage = String(message || "حدث خطأ غير متوقع");
+  toast.textContent = toastMessage;
 
   toast.style.cssText = `
     position: absolute;
@@ -993,16 +1137,25 @@ function showToast(message, type) {
     left: 50%;
     transform: translate(-50%, -50%);
     color: #fff;
-    padding: 12px 30px;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: calc(100% - 24px);
+    padding: 14px 22px;
     border-radius: 16px;
     font-family: Cairo, sans-serif;
     font-size: 16px;
     font-weight: 700;
+    line-height: 1.75;
     text-align: center;
     z-index: 100;
-    white-space: nowrap;
-    animation: fadeInOutToast 2.5s ease-in-out forwards;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    animation: fadeInOutToast var(--toast-duration) ease-in-out forwards;
   `;
+
+  const toastDuration = Math.min(6500, Math.max(2800, toastMessage.length * 55));
+  toast.style.setProperty("--toast-duration", `${toastDuration}ms`);
 
   if (type === "success") {
     toast.style.backgroundColor = "#1d5c2b";
@@ -1029,7 +1182,7 @@ function showToast(message, type) {
 
   setTimeout(() => {
     if (toast.parentElement) toast.remove();
-  }, 2500);
+  }, toastDuration);
 }
 
 // ===================================================
@@ -1177,12 +1330,11 @@ async function updatePricingPreview() {
         order_type: mappedOrderType,
         source: "cashier",
         delivery_fee: currentFee,
-        offer_code: null,
-        customer_phone:
-          orderType === "delivery" ? deliveryCustomerInfo.phone : null,
+        offer_code: selectedOfferCode,
+        customer_phone: deliveryCustomerInfo.phone || null,
         cashier_id: parseInt(localStorage.getItem("user_id"), 10) || null,
-        manual_discount_type: discountType,
-        manual_discount_value: discountValue,
+        manual_discount_type: selectedOfferCode ? null : discountType,
+        manual_discount_value: selectedOfferCode ? null : discountValue,
       };
 
       const res = await apiFetch("/pricing/preview", {
@@ -1199,6 +1351,10 @@ async function updatePricingPreview() {
             parseFloat(data.total_amount).toFixed(2) + " ج.م";
           // يمكننا مستقبلاً عرض الخصم والـ subtotal هنا
         }
+      } else if (selectedOfferCode) {
+        const payload = await res.json().catch(() => ({}));
+        const message = typeof payload.detail === "string" ? payload.detail : "شروط العرض غير مكتملة في الطلب الحالي";
+        showToast(message, "error");
       }
     } catch (err) {
       console.warn("Pricing preview failed:", err);
@@ -2734,7 +2890,10 @@ function setupWebSocket() {
 
 window.addEventListener("online", () => setupWebSocket());
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && (!socket || socket.readyState === WebSocket.CLOSED)) setupWebSocket();
+  if (!document.hidden) {
+    if (!socket || socket.readyState === WebSocket.CLOSED) setupWebSocket();
+    scheduleOffersRefresh(0);
+  }
 });
 
 function handleSocketEvent(payload) {
@@ -2759,6 +2918,16 @@ function handleSocketEvent(payload) {
       );
     }
     return;
+  }
+
+  if (payload.type === "OFFER_UPDATED") {
+    scheduleOffersRefresh(250);
+    return;
+  }
+
+  if (normalizeOrderEventName(payload.type || payload.event) === "NEW_ORDER") {
+    // A newly committed order may consume the final global offer use.
+    scheduleOffersRefresh(450);
   }
 
   if (payload.type === "ORDER_SNAPSHOT") {
@@ -3628,7 +3797,7 @@ function showErrorModal(message) {
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
       <h3 style="color:#e40411; margin-bottom:12px; font-weight:bold; font-family:'Cairo',sans-serif;">تنبيه</h3>
-      <p style="color:var(--color-text, #fff); font-size:14px; margin-bottom:24px; font-family:'Cairo',sans-serif;">${message}</p>
+      <p style="color:var(--color-text, #fff); font-size:14px; line-height:1.8; margin-bottom:24px; font-family:'Cairo',sans-serif; white-space:normal; overflow-wrap:anywhere; word-break:break-word;">${message}</p>
       <button style="background:#e40411; color:#fff; border:none; padding:8px 32px; border-radius:6px; font-weight:bold; font-family:'Cairo',sans-serif; cursor:pointer; font-size:14px;" onclick="this.parentElement.parentElement.remove()">حسناً</button>
     </div>
   `;

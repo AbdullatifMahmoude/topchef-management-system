@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260822-warning-card-fit" />
+  <link rel="stylesheet" href="css/admin.css?v=20260822-advanced-offers" />
 </head>
 
 <body>
@@ -570,6 +570,13 @@
         </div>
         <button class="add_btn_offers">+ إضافه عرض</button>
       </div>
+      <section class="offers_kpis" aria-label="ملخص أداء العروض">
+        <article><span>نشطة الآن</span><strong id="offersKpiActive">0</strong><small>متاحة للعملاء</small></article>
+        <article><span>مجدولة</span><strong id="offersKpiScheduled">0</strong><small>تبدأ لاحقًا</small></article>
+        <article><span>متوقفة أو منتهية</span><strong id="offersKpiStopped">0</strong><small>تحتاج مراجعة</small></article>
+        <article><span>استخدامات اليوم</span><strong id="offersKpiUses">0</strong><small>قسيمة مطبقة</small></article>
+        <article><span>خصومات اليوم</span><strong id="offersKpiDiscount">0 ج.م</strong><small>إجمالي قيمة الخصم</small></article>
+      </section>
       <div class="table_structure_offers">
         <div class="search_offers_wrapper">
           <input class="search-bar-offers" type="text" placeholder="🔍 بحث عن عرض" />
@@ -581,8 +588,8 @@
                 <th>كود العرض</th>
                 <th>النوع</th>
                 <th>قيمة الخصم</th>
+                <th>نطاق العرض</th>
                 <th>أقل طلب</th>
-                <th>أقصى خصم</th>
                 <th>مرات الاستخدام</th>
                 <th>لكل عميل</th>
                 <th>صالح من</th>
@@ -595,6 +602,10 @@
           </table>
         </div>
       </div>
+      <section class="offers_activity_section">
+        <div class="offers_activity_heading"><div><h2>حركة العروض</h2><p>آخر استخدامات القسائم المسجلة</p></div><span>تحديث لحظي</span></div>
+        <div class="offers_activity_scroll"><table><thead><tr><th>العرض</th><th>الطلب</th><th>العميل</th><th>الكاشير</th><th>قيمة الخصم</th><th>الوقت</th></tr></thead><tbody id="offersActivityBody"><tr><td colspan="6">لا توجد حركة مسجلة</td></tr></tbody></table></div>
+      </section>
       <div class="offers_modal">
         <div class="offers_modal_container">
           <div class="offers_exit">
@@ -605,87 +616,53 @@
             <h1>أضف عرض جديد</h1>
           </div>
           <div class="form_modal_offers">
-            <form class="offer-form">
-              <div class="form-grid">
-                <div class="form-group-3inputs">
-                  <!-- كود العرض -->
-                  <div class="form-group">
-                    <label>كود العرض</label>
-                    <input type="text" placeholder="مثال: SAVE20" />
-                  </div>
-
-                  <!-- نوع العرض -->
-                  <div class="form-group">
-                    <label>نوع العرض</label>
-                    <select class="form-group-select">
-                      <option disabled selected>نوع العرض</option>
-                      <option>نسبة مئوية</option>
-                      <option>خصم ثابت</option>
-                      <option>اشترِ واحد وخذ واحد</option>
-                      <option>خصم موسمي</option>
-                      <option>كود ترويجي</option>
-                      <option>خصم كميات</option>
-                    </select>
-                  </div>
-
-                  <!-- قيمة الخصم -->
-                  <div class="form-group-price">
-                    <label>قيمة الخصم</label>
-                    <input type="text" />
-                  </div>
+            <form class="offer-form" autocomplete="off">
+              <section class="offer_form_section">
+                <div class="offer_section_title"><strong>بيانات العرض</strong><span>الاسم والكود ونوع الخصم</span></div>
+                <div class="offer_fields_grid offer_fields_grid_3">
+                  <label>اسم العرض<input name="display_name" type="text" maxlength="255" placeholder="مثال: عرض الوجبات"></label>
+                  <label>كود العرض<input name="code" type="text" maxlength="255" required placeholder="مثال: SAVE20"></label>
+                  <label>نوع العرض<select name="discount_type" required><option value="">اختر النوع</option><option value="percentage">خصم نسبة مئوية</option><option value="fixed">خصم مبلغ ثابت</option><option value="buy_one_get_one">اشترِ واحد وخذ واحد</option><option value="combo">كومبو بسعر ثابت</option><option value="buy_x_get_y">اشترِ X وخذ Y</option><option value="quantity_discount">خصم حسب الكمية</option><option value="free_delivery">توصيل مجاني</option><option value="category_discount">خصم على تصنيف</option><option value="happy_hour">عرض ساعات محددة</option></select></label>
                 </div>
-                <div class="form-group-amount">
-                  <!-- أقل كمية -->
-                  <div class="form-group-amoun">
-                    <label>أقل كمية</label>
-                    <input type="text" />
-                  </div>
-
-                  <!-- أقصى كمية -->
-                  <div class="form-group-amoun">
-                    <label>أقصى كمية</label>
-                    <input type="text" />
-                  </div>
+              </section>
+              <section id="offerDynamicRules" class="offer_form_section" hidden>
+                <div class="offer_section_title"><strong>شروط النوع المختار</strong><span>تظهر الحقول المطلوبة فقط</span></div>
+                <div class="offer_fields_grid offer_fields_grid_3">
+                  <label id="offerDiscountValueField">قيمة الخصم<input name="discount_value" type="number" min="0.01" step="0.01" placeholder="0"></label>
+                  <label id="offerMinOrderField">الحد الأدنى لقيمة الطلب<input name="min_order_amount" type="number" min="0" step="0.01" placeholder="اختياري"></label>
+                  <label data-rule="combo_price">سعر الكومبو<input name="combo_price" type="number" min="0.01" step="0.01"></label>
+                  <label data-rule="quantity_required">الكمية المطلوبة<input name="quantity_required" type="number" min="1" step="1"></label>
+                  <label data-rule="buy_quantity">كمية الشراء X<input name="buy_quantity" type="number" min="1" step="1"></label>
+                  <label data-rule="get_quantity">كمية الهدية Y<input name="get_quantity" type="number" min="1" step="1"></label>
+                  <label data-rule="reward_percent">نسبة خصم الهدية<input name="reward_percent" type="number" min="1" max="100" step="1" value="100"></label>
+                  <label data-rule="discount_mode">طريقة خصم التصنيف<select name="discount_mode"><option value="percentage">نسبة مئوية</option><option value="fixed">مبلغ ثابت</option></select></label>
+                  <label data-rule="start_time">من الساعة<input name="start_time" type="time"></label>
+                  <label data-rule="end_time">إلى الساعة<input name="end_time" type="time"></label>
                 </div>
-                <div class="form-group-number">
-                  <!-- عدد مرات استخدام العرض -->
-                  <div class="form-group-num">
-                    <label>عدد مرات استخدام العرض</label>
-                    <input type="text" />
-                  </div>
-
-                  <!-- عدد مرات استخدام العميل -->
-                  <div class="form-group-num">
-                    <label>عدد مرات استخدام العميل</label>
-                    <input type="text" />
-                  </div>
+                <div data-rule="category_ids" class="offer_rule_picker"><strong>التصنيفات المشمولة</strong><div id="offerCategoriesList" class="offer_products_list"></div></div>
+                <div data-rule="buy_product_ids" class="offer_rule_picker"><strong>أصناف الشراء X</strong><div id="offerBuyProductsList" class="offer_products_list"></div></div>
+                <div data-rule="get_product_ids" class="offer_rule_picker"><strong>أصناف الهدية Y</strong><div id="offerGetProductsList" class="offer_products_list"></div></div>
+              </section>
+              <section class="offer_form_section offer_scope_section">
+                <div class="offer_section_title"><strong>الأصناف المشمولة</strong><span id="offerScopeSummary">العرض مطبق على كل الأصناف</span></div>
+                <div class="offer_scope_switch"><button type="button" data-scope="all" class="active">كل الأصناف</button><button type="button" data-scope="selected">أصناف محددة</button></div>
+                <div class="offer_product_picker" hidden>
+                  <input id="offerProductSearch" type="search" placeholder="ابحث عن صنف...">
+                  <div class="offer_product_picker_actions"><button type="button" id="offerSelectAllProducts">تحديد الظاهر</button><button type="button" id="offerClearProducts">إلغاء التحديد</button></div>
+                  <div id="offerProductsList" class="offer_products_list"></div>
                 </div>
-
-                <div class="status_offers">
-                  <p>الحالة</p>
-                  <div class="switch">
-                    <div class="circle"></div>
-                  </div>
+              </section>
+              <section class="offer_form_section">
+                <div class="offer_section_title"><strong>المدة وحدود الاستخدام</strong><span>اترك الحدود فارغة لو العرض غير محدود</span></div>
+                <div class="offer_fields_grid offer_limits_grid">
+                  <label>متاح من<input name="valid_from" type="date" required></label>
+                  <label>متاح إلى<input name="valid_to" type="date" required></label>
+                  <label>إجمالي مرات الاستخدام<input name="usage_limit" type="number" min="1" step="1" placeholder="غير محدود"></label>
+                  <label>مرات الاستخدام لكل عميل<input name="usage_per_user" type="number" min="1" step="1" placeholder="غير محدود"></label>
                 </div>
-
-                <div class="form-group-date">
-                  <!-- من -->
-                  <div class="form-group-from">
-                    <label>متاح من</label>
-                    <input type="date" />
-                  </div>
-
-                  <!-- إلى -->
-                  <div class="form-group-from">
-                    <label>إلى</label>
-                    <input type="date" />
-                  </div>
-                </div>
-              </div>
-
-              <button class="form-group-submit-btn" type="submit">
-                حفظ العرض
-              </button>
+                <label class="offer_active_control"><input name="is_active" type="checkbox" checked><span>العرض نشط ومتاح للاستخدام</span></label>
+              </section>
+              <div class="offer_form_actions"><button class="form-group-submit-btn" type="submit">حفظ العرض</button><button class="offer_cancel_btn" type="button">إلغاء</button></div>
             </form>
           </div>
         </div>
@@ -809,7 +786,7 @@
     <script src="js/category.js?v=20260820-categories-operations"></script>
     <script src="js/delivery.js?v=20260820-users-operations"></script>
     <script src="js/delivery-operations.js?v=20260820-delivery-desk"></script>
-    <script src="js/offer.js"></script>
+    <script src="js/offer.js?v=20260822-silent-live-refresh"></script>
     <script src="js/shifts.js?v=20260820-payment-reconciliation"></script>
 
     <script src="js/chart.js?v=20260822-negative-profit"></script>

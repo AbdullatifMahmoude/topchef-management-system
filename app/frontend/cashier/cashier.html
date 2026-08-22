@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/cashier.css?v=20260822-expense-delete-center-v2" />
+    <link rel="stylesheet" href="css/cashier.css?v=20260822-popular-offer-layout" />
   </head>
   <body>
     <!-- ===== Navbar ===== -->
@@ -71,6 +71,10 @@
             <input id="localProductSearch" type="search" placeholder="ابحث عن صنف..." oninput="filterLocalProducts(this.value)" />
           </label>
         </header>
+        <section id="cashier_offers_board" class="cashier_offers_board" hidden>
+          <div class="cashier_offers_heading"><div><span>عروض متاحة الآن</span><small id="cashier_offers_count">0 عرض</small></div><button id="cashier_offers_toggle" type="button">إخفاء</button></div>
+          <div id="cashier_offers_list" class="cashier_offers_list"></div>
+        </section>
         <!-- تابز الكاتيجوري -->
         <div class="category_tabs" id="category_tabs"></div>
 
@@ -379,6 +383,6 @@
         })();
       </script>
     <script src="../js/custom-select.js?v=20260820-global-select"></script>
-    <script src="js/cashier.js?v=20260822-expenses-form-reset"></script>
+    <script src="js/cashier.js?v=20260822-popular-offer-layout"></script>
   </body>
 </html>

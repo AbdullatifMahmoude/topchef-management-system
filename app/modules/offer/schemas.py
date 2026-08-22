@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from decimal import Decimal
 from app.core.enums import DiscountType
 
@@ -9,15 +9,17 @@ class OfferBase(BaseModel):
     display_name: Optional[str] = Field(None, max_length=255)
     discount_type: DiscountType
     discount_value: Decimal = Field(..., gt=0)
-    min_order_amount: Optional[Decimal] = None
-    min_quantity: Optional[int] = None
-    max_quantity: Optional[int] = None
-    max_discount_amount: Optional[Decimal] = None
-    usage_limit: Optional[int] = None
-    usage_per_user: Optional[int] = None
+    min_order_amount: Optional[Decimal] = Field(None, ge=0)
+    min_quantity: Optional[int] = Field(None, gt=0)
+    max_quantity: Optional[int] = Field(None, gt=0)
+    max_discount_amount: Optional[Decimal] = Field(None, gt=0)
+    usage_limit: Optional[int] = Field(None, gt=0)
+    usage_per_user: Optional[int] = Field(None, gt=0)
     is_active: bool = True
     valid_from: datetime = Field(default_factory=datetime.utcnow)
     valid_to: datetime
+    product_ids: List[int] = Field(default_factory=list)
+    rules: Dict[str, Any] = Field(default_factory=dict)
 
 class OfferCreate(OfferBase):
     pass
@@ -27,15 +29,17 @@ class OfferUpdate(BaseModel):
     display_name: Optional[str] = Field(None, max_length=255)
     discount_type: Optional[DiscountType] = None
     discount_value: Optional[Decimal] = Field(None, gt=0)
-    min_order_amount: Optional[Decimal] = None
-    min_quantity: Optional[int] = None
-    max_quantity: Optional[int] = None
-    max_discount_amount: Optional[Decimal] = None
-    usage_limit: Optional[int] = None
-    usage_per_user: Optional[int] = None
+    min_order_amount: Optional[Decimal] = Field(None, ge=0)
+    min_quantity: Optional[int] = Field(None, gt=0)
+    max_quantity: Optional[int] = Field(None, gt=0)
+    max_discount_amount: Optional[Decimal] = Field(None, gt=0)
+    usage_limit: Optional[int] = Field(None, gt=0)
+    usage_per_user: Optional[int] = Field(None, gt=0)
     is_active: Optional[bool] = None
     valid_from: Optional[datetime] = None
     valid_to: Optional[datetime] = None
+    product_ids: Optional[List[int]] = None
+    rules: Optional[Dict[str, Any]] = None
 
 class OfferResponse(OfferBase):
     offer_id: int
@@ -51,3 +55,21 @@ class ApplyOfferResponse(BaseModel):
     offer_metadata: Optional[OfferResponse] = None
     applied_successfully: bool = False
     message: Optional[str] = None
+    waive_delivery_fee: bool = False
+
+class OfferUsageActivity(BaseModel):
+    offer_name: str
+    offer_code: str
+    customer_phone: Optional[str] = None
+    cashier_name: Optional[str] = None
+    order_id: Optional[int] = None
+    discount_amount: Decimal
+    applied_at: datetime
+
+class OfferAnalyticsResponse(BaseModel):
+    active_now: int = 0
+    scheduled: int = 0
+    stopped_or_ended: int = 0
+    redemptions_today: int = 0
+    discounts_today: Decimal = Decimal("0.00")
+    recent_activity: List[OfferUsageActivity] = Field(default_factory=list)

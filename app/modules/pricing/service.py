@@ -21,6 +21,7 @@ class PricingService:
         subtotal = Decimal(str(subtotal))
 
         discount_amount = Decimal("0.00")
+        waive_delivery_fee = False
         
         # 2. Apply Offer if present
         if request.offer_code:
@@ -33,6 +34,7 @@ class PricingService:
                 commit_usage=False # This is a price calculation preview
             )
             discount_amount = offer_response.discount_amount
+            waive_delivery_fee = offer_response.waive_delivery_fee
 
         # 2b. Apply manual discount if present (cashier-entered)
         if request.manual_discount_type and request.manual_discount_value and request.manual_discount_value > 0:
@@ -48,6 +50,8 @@ class PricingService:
             delivery_fee = request.delivery_fee
             if delivery_fee < 0:
                 raise ValueError("Delivery fee cannot be negative")
+        if waive_delivery_fee and request.order_type == OrderType.DELIVERY:
+            delivery_fee = Decimal("0.00")
         
         # 4. Consolidate using FinancialSnapshot (Pure Logic)
         snapshot = FinancialSnapshot.calculate(

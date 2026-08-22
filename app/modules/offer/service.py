@@ -1,14 +1,17 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import contextlib
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError, ValidationError
 from app.modules.offer.repository import OfferRepository
-from app.modules.offer.schemas import OfferCreate, OfferUpdate, OfferResponse, ApplyOfferResponse
+from app.modules.offer.schemas import OfferCreate, OfferUpdate, OfferResponse, ApplyOfferResponse, OfferAnalyticsResponse, OfferUsageActivity
 from typing import List, Optional
 from decimal import Decimal
 from app.core.enums import DiscountType
 from app.core.logging import logger
+from sqlalchemy import select
+from app.modules.customer.phone import normalize_egyptian_phone
+
 
 class OfferService:
     def __init__(self, db: AsyncSession, redis=None):
@@ -35,6 +38,18 @@ class OfferService:
                     await self.redis.delete(f"offer:id:{offer.offer_id}")
             except Exception as e:
                 logger.warning(f"Redis error invalidating offers cache: {e}")
+
+    async def _emit_offer_change(self, action: str, offer_id: int) -> None:
+        try:
+            from app.core.events import order_events_manager
+            await order_events_manager.emit({
+                "type": "OFFER_UPDATED",
+                "data": {"id": offer_id, "action": action},
+            })
+        except Exception as exc:
+            # The database change remains valid if a client is temporarily
+            # offline; clients also refresh on reconnect/visibility change.
+            logger.warning(f"Could not broadcast offer update {offer_id}: {exc}")
 
     async def _get_cached_offer(self, key_prefix: str, identifier: str) -> Optional[OfferResponse]:
         if not self.redis:
@@ -63,18 +78,74 @@ class OfferService:
         except Exception as e:
             logger.warning(f"Redis error caching offer {offer_res.code}: {e}")
 
+    async def _resolve_products(self, product_ids: List[int]):
+        if not product_ids:
+            return []
+        from app.modules.menu.models import Product
+        unique_ids = list(dict.fromkeys(product_ids))
+        products = list((await self.db.execute(select(Product).where(
+            Product.id.in_(unique_ids),
+            Product.is_deleted == False,
+            Product.is_available == True,
+        ))).scalars().all())
+        if len(products) != len(unique_ids):
+            raise ValidationError("بعض الأصناف المختارة غير موجودة أو موقوفة")
+        return products
+
+    @staticmethod
+    def _validate_configuration(offer) -> None:
+        if offer.valid_to <= offer.valid_from:
+            raise ValidationError("تاريخ نهاية العرض يجب أن يكون بعد تاريخ البداية")
+        if offer.min_quantity and offer.max_quantity and offer.min_quantity > offer.max_quantity:
+            raise ValidationError("الحد الأدنى للكمية لا يمكن أن يتجاوز الحد الأقصى")
+        if offer.discount_type in (DiscountType.PERCENTAGE, DiscountType.QUANTITY_DISCOUNT, DiscountType.HAPPY_HOUR) and Decimal(str(offer.discount_value)) > 100:
+            raise ValidationError("نسبة الخصم لا يمكن أن تتجاوز 100%")
+        if offer.usage_limit and int(offer.current_usage or 0) > offer.usage_limit:
+            raise ValidationError("حد الاستخدام الجديد أقل من عدد مرات الاستخدام الحالية")
+        rules = offer.rules or {}
+        dtype = offer.discount_type
+        if dtype == DiscountType.COMBO:
+            if not rules.get("requirements") or Decimal(str(rules.get("combo_price", 0))) <= 0:
+                raise ValidationError("عرض الكومبو يحتاج أصنافًا وسعر كومبو صحيحًا")
+        elif dtype == DiscountType.BUY_X_GET_Y:
+            if not rules.get("buy_product_ids") or not rules.get("get_product_ids"):
+                raise ValidationError("حدد أصناف الشراء وأصناف الهدية")
+            if int(rules.get("buy_quantity", 0)) <= 0 or int(rules.get("get_quantity", 0)) <= 0:
+                raise ValidationError("كميات اشترِ X وخذ Y يجب أن تكون أكبر من صفر")
+        elif dtype == DiscountType.QUANTITY_DISCOUNT:
+            if int(rules.get("quantity_required", 0)) <= 0:
+                raise ValidationError("حدد الكمية المطلوبة لتفعيل الخصم")
+        elif dtype == DiscountType.CATEGORY_DISCOUNT:
+            if not rules.get("category_ids"):
+                raise ValidationError("اختر تصنيفًا واحدًا على الأقل")
+            if rules.get("discount_mode", "percentage") == "percentage" and Decimal(str(offer.discount_value)) > 100:
+                raise ValidationError("نسبة الخصم لا يمكن أن تتجاوز 100%")
+        elif dtype == DiscountType.HAPPY_HOUR:
+            if not rules.get("start_time") or not rules.get("end_time"):
+                raise ValidationError("حدد وقت بداية ونهاية العرض")
+
     async def create_offer(self, offer_data: OfferCreate) -> OfferResponse:
         async with self._transaction_scope():
+            offer_data.code = offer_data.code.strip().upper()
             existing_offer = await self.repository.get_by_code(offer_data.code)
             if existing_offer:
                 raise ValidationError(f"Offer with code '{offer_data.code}' already exists")
             
             offer = await self.repository.create(offer_data)
+            offer.products = await self._resolve_products(offer_data.product_ids)
+            self._validate_configuration(offer)
             await self.db.flush()
             logger.info(f"Offer created: code='{offer.code}', type='{offer.discount_type}'")
             await self._invalidate_cache(offer)
         
-        return OfferResponse.model_validate(offer)
+        # Persist before notifying live clients so their immediate refresh can
+        # never read the previous version of the offer.
+        if self.db.in_transaction():
+            await self.db.commit()
+        await self._invalidate_cache(offer)
+        response = OfferResponse.model_validate(offer)
+        await self._emit_offer_change("created", offer.offer_id)
+        return response
 
     async def list_all_offers(self, only_active: bool = False) -> List[OfferResponse]:
         # 1. Get current cache version
@@ -120,6 +191,33 @@ class OfferService:
                     logger.warning(f"Redis error writing offers cache: {e}")
         
         return response
+
+    async def get_analytics(self) -> OfferAnalyticsResponse:
+        egypt_tz = timezone(timedelta(hours=3))
+        local_now = datetime.now(egypt_tz)
+        start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_utc = start_local.astimezone(timezone.utc).replace(tzinfo=None)
+        end_utc = (start_local + timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
+        offers = await self.repository.list_offers(only_active=False)
+        now = datetime.utcnow()
+        active_now = sum(1 for offer in offers if offer.is_active and offer.valid_from <= now <= offer.valid_to and not offer.is_usage_limit_reached())
+        scheduled = sum(1 for offer in offers if offer.is_active and offer.valid_from > now)
+        stopped_or_ended = len(offers) - active_now - scheduled
+        redemptions, total_discount, rows = await self.repository.usage_analytics(start_utc, end_utc)
+        activity = [OfferUsageActivity(
+            offer_name=display_name or code,
+            offer_code=code,
+            customer_phone=usage.customer_phone,
+            cashier_name=full_name,
+            order_id=usage.order_id,
+            discount_amount=usage.discount_amount,
+            applied_at=usage.applied_at,
+        ) for usage, display_name, code, full_name in rows]
+        return OfferAnalyticsResponse(
+            active_now=active_now, scheduled=scheduled, stopped_or_ended=stopped_or_ended,
+            redemptions_today=redemptions, discounts_today=total_discount,
+            recent_activity=activity,
+        )
 
     async def get_offer_by_id(self, offer_id: int, check_cache: bool = True) -> OfferResponse:
         # 1. Granular Cache Path
@@ -181,17 +279,31 @@ class OfferService:
             
             # Map update data via model's rich method
             update_dict = offer_data.model_dump(exclude_unset=True)
+            product_ids = update_dict.pop("product_ids", None)
+            if update_dict.get("code"):
+                update_dict["code"] = update_dict["code"].strip().upper()
+                duplicate = await self.repository.get_by_code(update_dict["code"])
+                if duplicate and duplicate.offer_id != offer_id:
+                    raise ValidationError(f"Offer with code '{update_dict['code']}' already exists")
             for key in ["valid_from", "valid_to"]:
                 if isinstance(update_dict.get(key), datetime):
                     update_dict[key] = update_dict[key].replace(tzinfo=None)
             
             offer.update_info(update_dict)
+            if product_ids is not None:
+                offer.products = await self._resolve_products(product_ids)
+            self._validate_configuration(offer)
             
             await self.db.flush()
             logger.info(f"Offer updated: id={offer_id}, code='{offer.code}'")
             await self._invalidate_cache(offer)
         
-        return OfferResponse.model_validate(offer)
+        if self.db.in_transaction():
+            await self.db.commit()
+        await self._invalidate_cache(offer)
+        response = OfferResponse.model_validate(offer)
+        await self._emit_offer_change("updated", offer.offer_id)
+        return response
 
     async def delete_offer(self, offer_id: int) -> bool:
         async with self._transaction_scope():
@@ -202,6 +314,11 @@ class OfferService:
             await self.repository.delete(offer)
             logger.info(f"Offer deleted: id={offer_id}")
             await self._invalidate_cache(offer)
+            deleted_id = offer.offer_id
+        if self.db.in_transaction():
+            await self.db.commit()
+        await self._invalidate_cache(offer)
+        await self._emit_offer_change("deleted", deleted_id)
         return True
 
     async def apply_offer(self, code: str, subtotal: Decimal, items: List = None, 
@@ -216,6 +333,8 @@ class OfferService:
         """
         async with self._transaction_scope():
             # 1. Fetch the offer with row-level locking to prevent race conditions
+            code = code.strip().upper()
+            customer_phone = normalize_egyptian_phone(customer_phone)
             offer = await self.repository.get_by_code(code, lock=True)
             if not offer:
                 logger.warning(f"ApplyOffer failure: Invalid code '{code}'")
@@ -242,35 +361,47 @@ class OfferService:
                     offer.is_active = False # Safe-guard deactivation
                 raise ValidationError("Offer global usage limit reached")
             
-            # --- 3. Per-Customer Usage Check (Redis-Optimized) ---
-            if offer.usage_per_user:
-                if self.redis and customer_phone:
-                    user_usage_key = f"offer:usage:user:{offer.code}:{customer_phone}"
-                    try:
-                        current_u = await self.redis.get(user_usage_key)
-                        if current_u and int(current_u) >= offer.usage_per_user:
-                            raise ValidationError(f"Limit reached. You have already used this offer {current_u} times.")
-                    except (ValueError, TypeError):
-                        pass
-
+            # --- 3. Per-Customer Usage Check ---
+            # A personal limit is meaningful only with a stable customer
+            # identity, regardless of whether the order is online or cashier.
+            has_customer_identity = bool(customer_phone and len(customer_phone) == 11)
+            if offer.usage_per_user and not has_customer_identity:
+                raise ValidationError("يجب إدخال رقم هاتف العميل الصحيح لاستخدام هذا العرض")
+            enforce_customer_limit = bool(offer.usage_per_user and has_customer_identity)
+            if enforce_customer_limit:
                 identity_count = await self.repository.get_customer_usage_count(
-                    offer.offer_id, customer_phone=customer_phone, cashier_id=cashier_id
+                    offer.offer_id, customer_phone=customer_phone
                 )
                 if identity_count >= offer.usage_per_user:
-                    # Sync Redis if it was missing
-                    if self.redis and customer_phone:
-                        await self.redis.setex(f"offer:usage:user:{offer.code}:{customer_phone}", 86400, identity_count)
-                    raise ValidationError(f"You have already used this offer {identity_count} times.")
+                    raise ValidationError("هذا العميل استنفد عدد مرات استخدام العرض")
 
-            # --- 4. Content Thresholds ---
+            # --- 4. Eligible products and thresholds ---
+            rules = offer.rules or {}
+            selected_product_ids = {product.id for product in offer.products}
+            category_ids = {int(value) for value in rules.get("category_ids", [])}
+            has_product_scope = bool(selected_product_ids or category_ids)
+            if category_ids:
+                from app.modules.menu.models import Product
+                category_product_ids = set((await self.db.execute(
+                    select(Product.id).where(Product.cat_id.in_(category_ids), Product.is_available == True)
+                )).scalars().all())
+                selected_product_ids.update(category_product_ids)
+            eligible_items = [item for item in (items or []) if not has_product_scope or item.product_id in selected_product_ids]
+            eligible_subtotal = sum(
+                (Decimal(str(item.unit_price)) * item.quantity for item in eligible_items),
+                Decimal("0.00"),
+            )
+            if has_product_scope and not eligible_items:
+                raise ValidationError("العرض لا ينطبق على أي صنف موجود في الطلب")
+
             # A) Basket Value
-            if offer.min_order_amount and subtotal < Decimal(str(offer.min_order_amount)):
+            if offer.min_order_amount and eligible_subtotal < Decimal(str(offer.min_order_amount)):
                 raise ValidationError(
                     f"Order must be at least {offer.min_order_amount} to use this offer."
                 )
             
             # B) Basket Quantity
-            total_qty = sum(item.quantity for item in items) if items else 0
+            total_qty = sum(item.quantity for item in eligible_items)
             if offer.min_quantity and total_qty < offer.min_quantity:
                 raise ValidationError(f"Requires at least {offer.min_quantity} items.")
             if offer.max_quantity and total_qty > offer.max_quantity:
@@ -281,16 +412,17 @@ class OfferService:
             calculated_discount = Decimal("0.00")
             dtype = offer.discount_type
             dval = Decimal(str(offer.discount_value))
+            waive_delivery_fee = False
 
             if dtype == DiscountType.PERCENTAGE:
-                calculated_discount = subtotal * (dval / Decimal("100.0"))
+                calculated_discount = eligible_subtotal * (dval / Decimal("100.0"))
             
             elif dtype == DiscountType.FIXED:
-                calculated_discount = dval
+                calculated_discount = min(dval, eligible_subtotal)
             
             elif dtype == DiscountType.BUY_ONE_GET_ONE:
-                if items:
-                    sorted_items = sorted(items, key=lambda x: x.unit_price)
+                if eligible_items:
+                    sorted_items = sorted(eligible_items, key=lambda x: x.unit_price)
                     total_quantity = sum(item.quantity for item in sorted_items)
                     free_units = total_quantity // 2
                     for item in sorted_items:
@@ -301,6 +433,80 @@ class OfferService:
                         free_units -= units_to_discount
                 else:
                     logger.warning(f"BOGO offer '{code}' applied to empty basket context.")
+
+            elif dtype == DiscountType.COMBO:
+                requirements = rules.get("requirements", [])
+                item_quantities = {}
+                item_prices = {}
+                for item in items or []:
+                    pid = int(item.product_id)
+                    item_quantities[pid] = item_quantities.get(pid, 0) + int(item.quantity)
+                    price = Decimal(str(item.unit_price))
+                    item_prices[pid] = min(item_prices.get(pid, price), price)
+                bundle_counts = []
+                regular_bundle_price = Decimal("0.00")
+                for requirement in requirements:
+                    pid = int(requirement["product_id"])
+                    qty = max(1, int(requirement.get("quantity", 1)))
+                    bundle_counts.append(item_quantities.get(pid, 0) // qty)
+                    regular_bundle_price += item_prices.get(pid, Decimal("0.00")) * qty
+                bundles = min(bundle_counts) if bundle_counts else 0
+                if bundles < 1:
+                    raise ValidationError("أضف كل أصناف الكومبو بالكميات المطلوبة")
+                combo_price = Decimal(str(rules.get("combo_price")))
+                calculated_discount = max(Decimal("0.00"), regular_bundle_price - combo_price) * bundles
+
+            elif dtype == DiscountType.BUY_X_GET_Y:
+                buy_ids = {int(value) for value in rules.get("buy_product_ids", [])}
+                get_ids = {int(value) for value in rules.get("get_product_ids", [])}
+                buy_qty = max(1, int(rules.get("buy_quantity", 1)))
+                get_qty = max(1, int(rules.get("get_quantity", 1)))
+                bought = sum(int(item.quantity) for item in (items or []) if int(item.product_id) in buy_ids)
+                reward_units = (bought // buy_qty) * get_qty
+                reward_items = sorted(
+                    (item for item in (items or []) if int(item.product_id) in get_ids),
+                    key=lambda item: Decimal(str(item.unit_price)),
+                )
+                available_rewards = sum(int(item.quantity) for item in reward_items)
+                if reward_units < 1 or available_rewards < 1:
+                    raise ValidationError("شروط اشترِ X وخذ Y غير مكتملة في الطلب")
+                reward_units = min(reward_units, available_rewards)
+                reward_percent = Decimal(str(rules.get("reward_percent", 100))) / Decimal("100")
+                for item in reward_items:
+                    units = min(int(item.quantity), reward_units)
+                    calculated_discount += Decimal(str(item.unit_price)) * units * reward_percent
+                    reward_units -= units
+                    if reward_units <= 0:
+                        break
+
+            elif dtype == DiscountType.QUANTITY_DISCOUNT:
+                required = max(1, int(rules.get("quantity_required", 1)))
+                if total_qty < required:
+                    raise ValidationError(f"العرض يحتاج شراء {required} وحدات على الأقل")
+                calculated_discount = eligible_subtotal * (dval / Decimal("100"))
+
+            elif dtype == DiscountType.FREE_DELIVERY:
+                waive_delivery_fee = True
+
+            elif dtype == DiscountType.CATEGORY_DISCOUNT:
+                mode = rules.get("discount_mode", "percentage")
+                calculated_discount = (
+                    eligible_subtotal * (dval / Decimal("100"))
+                    if mode == "percentage" else min(dval, eligible_subtotal)
+                )
+
+            elif dtype == DiscountType.HAPPY_HOUR:
+                from datetime import time
+                def parse_offer_time(value):
+                    hours, minutes = str(value).split(":")[:2]
+                    return time(int(hours), int(minutes))
+                now_time = datetime.now(timezone(timedelta(hours=3))).time().replace(second=0, microsecond=0, tzinfo=None)
+                start_time = parse_offer_time(rules["start_time"])
+                end_time = parse_offer_time(rules["end_time"])
+                in_window = start_time <= now_time <= end_time if start_time <= end_time else (now_time >= start_time or now_time <= end_time)
+                if not in_window:
+                    raise ValidationError("العرض غير متاح في الساعة الحالية")
+                calculated_discount = eligible_subtotal * (dval / Decimal("100"))
             
             # --- 6. Caps and Safeties ---
             if offer.max_discount_amount:
@@ -308,31 +514,17 @@ class OfferService:
                 calculated_discount = min(calculated_discount, max_bound)
             
             # Absolute Floor: Can't discount more than the subtotal
-            discount_amount = min(calculated_discount, subtotal).quantize(Decimal("0.00"))
+            discount_amount = min(calculated_discount, eligible_subtotal, subtotal).quantize(Decimal("0.00"))
             
-            # --- 7. Usage Tracking (Atomic Redis + DB) ---
+            # --- 7. Atomic usage tracking ---
             if commit_usage:
-                # A) Redis Global Check/Update
-                if self.redis and offer.usage_limit:
-                    global_key = f"offer:usage:global:{offer.code}"
-                    new_val = await self.redis.incr(global_key)
-                    if new_val > offer.usage_limit:
-                        await self.redis.decr(global_key)
-                        raise ValidationError("Offer global usage limit reached (Redis Guard)")
-                
-                # B) Redis User Check/Update
-                if self.redis and offer.usage_per_user and customer_phone:
-                    user_key = f"offer:usage:user:{offer.code}:{customer_phone}"
-                    new_u_val = await self.redis.incr(user_key)
-                    if new_u_val > offer.usage_per_user:
-                        await self.redis.decr(user_key)
-                        raise ValidationError("Your personal limit for this offer has been reached.")
-
-                # C) DB Update
-                offer.current_usage += 1
+                # The locked database row is the single source of truth. Redis
+                # is deliberately not used as a counter here: incrementing it
+                # before a later DB rollback can reject valid customers.
+                offer.current_usage = int(offer.current_usage or 0) + 1
                 await self.repository.record_usage({
                     "offer_id": offer.offer_id,
-                    "customer_phone": customer_phone,
+                    "customer_phone": customer_phone if has_customer_identity else None,
                     "cashier_id": cashier_id,
                     "discount_amount": discount_amount,
                     "order_id": order_id
@@ -352,4 +544,5 @@ class OfferService:
                 offer_metadata=OfferResponse.model_validate(offer),
                 applied_successfully=True,
                 message="Offer applied successfully"
+                ,waive_delivery_fee=waive_delivery_fee
             )

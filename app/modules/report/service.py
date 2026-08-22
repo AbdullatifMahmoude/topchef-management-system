@@ -137,11 +137,23 @@ async def get_report_orders(
 
 
 async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: date) -> List[schemas.TopSellingItem]:
+    # Allocate the order-level discount proportionally across its items. This
+    # keeps item revenue consistent with net sales for offers and manual
+    # discounts instead of reporting the undiscounted line total.
+    net_item_revenue = case(
+        (
+            Order.subtotal > 0,
+            OrderItem.total_price
+            * (Order.subtotal - Order.discount_amount)
+            / Order.subtotal,
+        ),
+        else_=0,
+    )
     stmt = (
         select(
             Product.product_name.label("name"),
             func.sum(OrderItem.quantity).label("quantity"),
-            func.sum(OrderItem.total_price).label("revenue"),
+            func.sum(net_item_revenue).label("revenue"),
         )
         .select_from(Order)
         .join(OrderItem, OrderItem.order_id == Order.id)
@@ -157,7 +169,14 @@ async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: da
         .limit(5)
     )
     rows = (await db.execute(stmt)).all()
-    return [schemas.TopSellingItem(name=row.name, quantity=row.quantity or 0, revenue=row.revenue or Decimal("0.00")) for row in rows]
+    return [
+        schemas.TopSellingItem(
+            name=row.name,
+            quantity=row.quantity or 0,
+            revenue=(row.revenue or Decimal("0.00")).quantize(Decimal("0.01")),
+        )
+        for row in rows
+    ]
 
 
 async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date) -> List[schemas.RevenueTrendPoint]:

@@ -36,6 +36,14 @@ async def create_offer(
     offer_service = service.OfferService(db, redis)
     return await offer_service.create_offer(offer_data)
 
+@router.get("/analytics/summary", response_model=schemas.OfferAnalyticsResponse)
+async def offer_analytics(
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
+    _current_user=Depends(require_capability(Capability.VIEW_OFFERS)),
+):
+    return await service.OfferService(db, redis).get_analytics()
+
 @router.get("/{offer_id}", response_model=schemas.OfferResponse)
 async def get_offer(
     offer_id: int,
