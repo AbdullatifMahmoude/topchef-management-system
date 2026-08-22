@@ -512,6 +512,23 @@ async function openShiftCashModal() {
   });
 }
 
+function escapeOrderText(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]);
+}
+
+function appliedOfferCardHtml(order) {
+  const offer = order.applied_offer;
+  if (!offer) return "";
+  const name = escapeOrderText(offer.display_name || offer.code);
+  const code = escapeOrderText(offer.code);
+  const discount = Number(offer.discount_amount || order.discount_amount || 0).toFixed(2);
+  return `<div class="detail_row" style="color:#f1c75b;font-weight:800;border:1px solid rgba(241,199,91,.25);border-radius:7px;padding:7px 9px;">
+    <span>عرض: ${name} (${code}) • خصم ${discount} ج.م</span>
+  </div>`;
+}
+
 function getActiveOffersForProduct(productId) {
   const now = Date.now();
   const product = products.find((item) => Number(item.id) === Number(productId));
@@ -2514,6 +2531,7 @@ function renderOnlineOrders() {
         </div>`
             : ""
         }
+        ${appliedOfferCardHtml(order)}
         </div>
       </div>
       
@@ -3561,6 +3579,7 @@ function renderAllOrders() {
           </div>
         </div>
         ${itemsHtml}
+        ${appliedOfferCardHtml(order)}
         ${
           actionsHtml
             ? `
@@ -4069,6 +4088,11 @@ function openOrderDetails(orderId, source) {
             <span>خدمة التوصيل:</span>
             <span id="od_delivery_fee">${deliveryFee.toFixed(2)} ج.م</span>
           </div>
+          ${order.applied_offer ? `
+          <div class="summary_row" style="color:#f1c75b;">
+            <span>العرض: ${escapeOrderText(order.applied_offer.display_name || order.applied_offer.code)} (${escapeOrderText(order.applied_offer.code)})</span>
+            <span>قيمة الخصم: ${Number(order.applied_offer.discount_amount || order.discount_amount || 0).toFixed(2)} ج.م</span>
+          </div>` : ""}
           ${
             order.discount_amount && parseFloat(order.discount_amount) > 0
               ? `

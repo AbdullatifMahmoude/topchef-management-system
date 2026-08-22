@@ -6,6 +6,10 @@ from typing import Optional, List, Tuple
 from app.modules.orders import models, schemas
 from app.core.enums import OrderSource, OrderStatus, OrderType
 from app.core.business_calendar import holiday_name, is_weekly_holiday, previous_business_date
+from app.modules.offer.models import OfferUsage
+
+def _offer_load_option():
+    return selectinload(models.Order.offer_usage).selectinload(OfferUsage.offer)
 
 class OrderRepository:
     def __init__(self, db: AsyncSession):
@@ -26,7 +30,8 @@ class OrderRepository:
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address),
-            selectinload(models.Order.modifications)
+            selectinload(models.Order.modifications),
+            _offer_load_option()
         ).where(
             models.Order.id == order_id,
             models.Order.is_deleted == False
@@ -39,7 +44,8 @@ class OrderRepository:
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            _offer_load_option()
         ).where(
             models.Order.idempotency_key == key,
             models.Order.is_deleted == False
@@ -54,7 +60,8 @@ class OrderRepository:
             selectinload(models.Order.items),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            _offer_load_option()
         ).where(
             models.Order.order_number == order_number,
             models.Order.order_date == order_date,
@@ -79,7 +86,8 @@ class OrderRepository:
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address),
-            selectinload(models.Order.modifications)
+            selectinload(models.Order.modifications),
+            _offer_load_option()
         ).where(models.Order.is_deleted == False)
         
         if source:
@@ -142,7 +150,8 @@ class OrderRepository:
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address),
-            selectinload(models.Order.modifications)
+            selectinload(models.Order.modifications),
+            _offer_load_option()
         ).where(models.Order.is_deleted == False)
         if source:
             query = query.where(models.Order.order_source == source)

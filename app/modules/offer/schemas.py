@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, ConfigDict
-from datetime import datetime
+from pydantic import BaseModel, Field, ConfigDict, field_validator
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Any, Dict
 from decimal import Decimal
 from app.core.enums import DiscountType
@@ -21,6 +21,15 @@ class OfferBase(BaseModel):
     product_ids: List[int] = Field(default_factory=list)
     rules: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("valid_from", "valid_to", mode="after")
+    @classmethod
+    def use_normal_calendar_time(cls, value: datetime) -> datetime:
+        # Offers use normal midnight-to-midnight calendar time, not the 5am
+        # restaurant business-day cutoff. Store the Cairo wall clock as naive.
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone(timedelta(hours=3)))
+        return value.replace(tzinfo=None)
+
 class OfferCreate(OfferBase):
     pass
 
@@ -40,6 +49,13 @@ class OfferUpdate(BaseModel):
     valid_to: Optional[datetime] = None
     product_ids: Optional[List[int]] = None
     rules: Optional[Dict[str, Any]] = None
+
+    @field_validator("valid_from", "valid_to", mode="after")
+    @classmethod
+    def use_normal_calendar_time(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and value.tzinfo is not None:
+            value = value.astimezone(timezone(timedelta(hours=3)))
+        return value.replace(tzinfo=None) if value is not None else None
 
 class OfferResponse(OfferBase):
     offer_id: int

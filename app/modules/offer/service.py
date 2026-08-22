@@ -500,7 +500,9 @@ class OfferService:
                 def parse_offer_time(value):
                     hours, minutes = str(value).split(":")[:2]
                     return time(int(hours), int(minutes))
-                now_time = datetime.now(timezone(timedelta(hours=3))).time().replace(second=0, microsecond=0, tzinfo=None)
+                # Happy-hour windows follow the normal wall clock; they are not
+                # shifted by the restaurant's business-day/shift cutoff.
+                now_time = datetime.now().time().replace(second=0, microsecond=0)
                 start_time = parse_offer_time(rules["start_time"])
                 end_time = parse_offer_time(rules["end_time"])
                 in_window = start_time <= now_time <= end_time if start_time <= end_time else (now_time >= start_time or now_time <= end_time)

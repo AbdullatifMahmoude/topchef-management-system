@@ -85,6 +85,12 @@ class Order(Base):
     creator = relationship("User", foreign_keys=[created_by_user_id])
     delivery_person = relationship("User", foreign_keys=[delivery_person_id])
     address = relationship("CustomerAddress", foreign_keys=[address_id])
+    offer_usage = relationship(
+        "OfferUsage",
+        primaryjoin="Order.id == foreign(OfferUsage.order_id)",
+        uselist=False,
+        viewonly=True,
+    )
 
     @property
     def creator_name(self) -> Optional[str]:
@@ -103,6 +109,20 @@ class Order(Base):
         if self.address:
             return self.address.address
         return None
+
+    @property
+    def applied_offer(self):
+        usage = self.offer_usage
+        if not usage or not usage.offer:
+            return None
+        offer = usage.offer
+        return {
+            "code": offer.code,
+            "display_name": offer.display_name,
+            "discount_type": offer.discount_type,
+            "discount_value": offer.discount_value,
+            "discount_amount": usage.discount_amount,
+        }
 
     __table_args__ = (
         UniqueConstraint('idempotency_key', 'order_date', name='uq_idempotency_per_day'),

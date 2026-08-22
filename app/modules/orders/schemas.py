@@ -18,6 +18,13 @@ class OrderItemResponse(OrderItemBase):
     id: int
     total_price: Decimal
 
+class AppliedOfferResponse(BaseModel):
+    code: str
+    display_name: Optional[str] = None
+    discount_type: DiscountType
+    discount_value: Decimal
+    discount_amount: Decimal
+
 class OrderBase(BaseModel):
     customer_id: Optional[int] = None
     customer_phone: Optional[str] = None
@@ -99,6 +106,7 @@ class OrderResponse(OrderBase):
     discount_type: Optional[DiscountType] = None
     discount_value: Optional[Decimal] = None
     discount_reason: Optional[str] = None
+    applied_offer: Optional[AppliedOfferResponse] = None
     delivery_fee: Decimal
     total_amount: Decimal
     items: List[OrderItemResponse]
