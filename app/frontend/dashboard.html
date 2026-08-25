@@ -34,6 +34,7 @@
         <button class="side_btn" data-page="shifts"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>الشيفتات</span></button>
         <button class="side_btn" data-page="offers"><svg viewBox="0 0 24 24"><path d="M20 13 13 20 4 11V4h7z"/><circle cx="8" cy="8" r="1"/></svg><span>العروض</span></button>
         <button class="side_btn" data-page="reports"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>التقارير</span></button>
+        <button class="side_btn" data-page="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/></svg><span>الإعدادات</span></button>
       </div>
       <div class="logo_bottom sidebar_account">
         <div class="sidebar_user_avatar" aria-hidden="true">م</div>
@@ -561,6 +562,51 @@
       </section>
     </div>
 
+    <!-- ===== صفحة الإعدادات ===== -->
+    <div class="page-content" id="page-settings" style="display: none">
+      <section class="settings_workspace" aria-labelledby="settings_page_title">
+        <header class="settings_header">
+          <div><p>إعدادات النظام</p><h1 id="settings_page_title">تكامل واتساب</h1><span>احفظ بيانات الربط والرسالة الافتراضية للحملات الجماعية</span></div>
+        </header>
+        <form id="whatsappSettingsForm" class="settings_card">
+          <div class="settings_card_title">
+            <span class="whatsapp_mark">W</span>
+            <div><h2>إعدادات WhatsApp API</h2><p>المفتاح لا يظهر مرة أخرى بعد حفظه حفاظًا على سريته.</p></div>
+          </div>
+          <label class="settings_field">
+            <span>API Key</span>
+            <div class="settings_secret_row">
+              <input id="whatsappApiKey" type="password" autocomplete="new-password" placeholder="أدخل مفتاح الربط" maxlength="2000">
+              <button id="toggleWhatsAppApiKey" type="button">إظهار</button>
+            </div>
+            <small id="whatsappApiKeyStatus">لم يتم تحميل حالة المفتاح بعد</small>
+          </label>
+          <div class="settings_grid">
+            <label class="settings_field"><span>Phone Number ID</span><input id="whatsappPhoneNumberId" type="text" inputmode="numeric" placeholder="مثال: 123456789012345"></label>
+            <label class="settings_field"><span>Graph API Version</span><input id="whatsappGraphVersion" type="text" dir="ltr" placeholder="v23.0"></label>
+            <label class="settings_field"><span>اسم قالب Utility المعتمد</span><input id="whatsappTemplateName" type="text" dir="ltr" placeholder="topchef_order_update"></label>
+            <label class="settings_field"><span>كود لغة القالب</span><input id="whatsappLanguageCode" type="text" dir="ltr" placeholder="ar"></label>
+            <label class="settings_field"><span>قالب الرسالة الجماعية</span><input id="whatsappBulkTemplateName" type="text" dir="ltr" placeholder="topchef_bulk_message"></label>
+            <label class="settings_field"><span>قالب استعادة كلمة المرور</span><input id="whatsappResetTemplateName" type="text" dir="ltr" placeholder="topchef_password_reset"></label>
+            <label class="settings_field"><span>صلاحية كود الاستعادة (دقائق)</span><input id="whatsappResetExpiry" type="number" min="5" max="60" value="10"></label>
+            <label class="settings_field"><span>الحد الأقصى للإرسال الجماعي</span><input id="whatsappBulkLimit" type="number" min="1" max="5000" value="500"></label>
+          </div>
+          <label class="settings_toggle"><input id="whatsappEnabled" type="checkbox"><span>تفعيل الإشعارات التلقائية للطلبات</span></label>
+          <div class="settings_template_help">أنشئ في Meta ثلاثة قوالب Utility: قالب تحديث الطلب، وقالب الرسالة الجماعية، وقالب استعادة كلمة المرور. كل قالب يحتوي في الـBody على متغير نصي واحد <code>{{1}}</code>.</div>
+          <label class="settings_field">
+            <span>نص الرسالة الجماعية</span>
+            <textarea id="whatsappBulkMessage" rows="7" maxlength="5000" placeholder="اكتب الرسالة الافتراضية هنا..."></textarea>
+            <small><b id="whatsappMessageCount">0</b> / 5000 حرف</small>
+          </label>
+          <div id="whatsappSettingsNotice" class="settings_notice" role="status" hidden></div>
+          <div class="settings_actions">
+            <button id="saveWhatsAppSettings" type="submit">حفظ الإعدادات</button>
+            <button id="sendWhatsAppBulk" class="settings_secondary_btn" type="button">إرسال الرسالة الجماعية</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
     <!-- ===== صفحة العروض ===== -->
     <div class="page-content" id="page-offers" style="display: none">
       <div class="title_btn_offers">
@@ -788,6 +834,7 @@
     <script src="js/delivery-operations.js?v=20260820-delivery-desk"></script>
     <script src="js/offer.js?v=20260822-silent-live-refresh"></script>
     <script src="js/shifts.js?v=20260820-payment-reconciliation"></script>
+    <script src="js/settings.js?v=20260825-whatsapp-settings"></script>
 
     <script src="js/chart.js?v=20260822-negative-profit"></script>
     <script src="js/orders_dashboard.js?v=20260822-negative-profit"></script>

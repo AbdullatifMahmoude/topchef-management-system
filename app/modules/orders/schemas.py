@@ -17,6 +17,7 @@ class OrderItemResponse(OrderItemBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     total_price: Decimal
+    product_name: Optional[str] = None
 
 class AppliedOfferResponse(BaseModel):
     code: str

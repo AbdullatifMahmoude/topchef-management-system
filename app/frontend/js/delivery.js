@@ -18,6 +18,30 @@
   const currentUserId = Number(localStorage.getItem("user_id"));
   const escapeUserText = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[char]);
 
+  function getApiErrorMessage(error, fallback) {
+    const detail = error?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      const fieldNames = { password: "كلمة المرور", phone: "رقم التليفون", username: "اسم المستخدم", full_name: "الاسم بالكامل", role: "الصلاحية" };
+      const messages = detail.map((item) => {
+        const field = item?.loc?.at?.(-1);
+        const label = fieldNames[field] || "البيانات";
+        if (field === "password" && (item?.type === "string_too_short" || item?.type === "string_pattern_mismatch")) {
+          return "كلمة المرور يجب أن تكون 6 خانات على الأقل، حروف إنجليزية أو أرقام فقط";
+        }
+        if (field === "phone" && item?.type === "string_pattern_mismatch") {
+          return "رقم التليفون يجب أن يكون 11 رقم ويبدأ بـ 010 أو 011 أو 012 أو 015";
+        }
+        return `${label}: ${item?.msg || item?.message || "قيمة غير صحيحة"}`;
+      }).filter(Boolean);
+      if (messages.length) return messages.join("\n");
+    }
+    if (detail && typeof detail === "object") {
+      return detail.message || detail.msg || fallback;
+    }
+    return error?.message || fallback;
+  }
+
   // ===== REAL-TIME VALIDATION =====
   fullNameInput.addEventListener("input", () => validateField(fullNameInput, "username"));
   nameInput.addEventListener("input",     () => validateField(nameInput, "username"));
@@ -57,10 +81,13 @@
       });
       if (res.ok) { closeModal(); loadUsers(); }
       else {
-        const err = await res.json();
-        alert("فشل إضافة المستخدم: " + JSON.stringify(err));
+        const err = await res.json().catch(() => ({}));
+        alert(getApiErrorMessage(err, "فشل إضافة المستخدم"));
       }
-    } catch (err) { console.error("خطأ في الإضافة:", err); }
+    } catch (err) {
+      console.error("خطأ في الإضافة:", err);
+      alert("تعذر الاتصال بالخادم أثناء إضافة المستخدم");
+    }
   }
 
   async function updateUser(id, body) {
@@ -72,10 +99,13 @@
       });
       if (res.ok) { closeModal(); loadUsers(); }
       else {
-        const err = await res.json();
-        alert("فشل تعديل المستخدم: " + JSON.stringify(err));
+        const err = await res.json().catch(() => ({}));
+        alert(getApiErrorMessage(err, "فشل تعديل المستخدم"));
       }
-    } catch (err) { console.error("خطأ في التعديل:", err); }
+    } catch (err) {
+      console.error("خطأ في التعديل:", err);
+      alert("تعذر الاتصال بالخادم أثناء تعديل المستخدم");
+    }
   }
 
   async function deleteUser(id) {
@@ -215,12 +245,6 @@
     const passwordValid = currentEditId
       ? validateOptionalField(passwordInput, "password")
       : validateField(passwordInput, "password");
-
-    // الـ API بيطلب 8 حروف على الأقل
-    if (passwordInput.value.trim() && passwordInput.value.trim().length < 8) {
-      setFieldState(passwordInput, "error", "كلمة المرور: 8 أحرف على الأقل");
-      return;
-    }
 
     if (!fullNameValid || !nameValid || !phoneValid || !passwordValid) return;
 

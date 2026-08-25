@@ -76,7 +76,7 @@ const VALIDATION_RULES = {
   },
   password: {
     regex: /^[a-zA-Z0-9]{6,}$/,
-    message: "6 أحرف على الأقل، أرقام أو أرقام وحروف",
+    message: "كلمة المرور يجب أن تكون 6 خانات على الأقل، حروف إنجليزية أو أرقام فقط",
   },
   offerCode: {
     regex: /^[a-zA-Z0-9]{3,20}$/,

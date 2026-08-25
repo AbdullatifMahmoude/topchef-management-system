@@ -25,3 +25,19 @@ class SettingsRepository:
             setting = models.AppSetting(key=key, value_bool=value_bool, description=description)
             self.db.add(setting)
         return setting
+
+    async def create_or_update_text_setting(self, key: str, value_text: str, description: str = None) -> models.AppSetting:
+        setting = await self.get_setting(key)
+        if setting:
+            setting.value_text = value_text
+            if description:
+                setting.description = description
+        else:
+            setting = models.AppSetting(
+                key=key,
+                value_bool=True,
+                value_text=value_text,
+                description=description,
+            )
+            self.db.add(setting)
+        return setting

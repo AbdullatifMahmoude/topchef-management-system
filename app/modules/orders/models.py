@@ -164,6 +164,11 @@ class OrderItem(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None))
 
     order = relationship("Order", back_populates="items")
+    product = relationship("Product", foreign_keys=[product_id])
+
+    @property
+    def product_name(self) -> Optional[str]:
+        return self.product.product_name if self.product else None
 
 
 class OrderStatusHistory(Base):

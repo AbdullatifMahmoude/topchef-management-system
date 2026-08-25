@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, Text
 from app.core.database import Base
 from datetime import datetime
 
@@ -7,6 +7,7 @@ class AppSetting(Base):
     
     key = Column(String(100), primary_key=True)
     value_bool = Column(Boolean, default=True)
+    value_text = Column(Text, nullable=True)
     description = Column(String(255), nullable=True)
     is_deleted = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

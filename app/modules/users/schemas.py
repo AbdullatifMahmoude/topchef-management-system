@@ -7,14 +7,14 @@ class CreateUser(BaseModel):
     username: Annotated[str, Field(min_length=3, max_length=200)]
     role: UserRole
     phone:Annotated[str, Field(pattern=r"^01[0125][0-9]{8}$")]
-    password: Annotated[str, Field(min_length=8)]
+    password: Annotated[str, Field(min_length=6, pattern=r"^[A-Za-z0-9]+$")]
 
 class UpdateUser(BaseModel):
     full_name: Optional[str] = None
     username: Optional[Annotated[str, Field(min_length=3, max_length=200)]]= None
     role: Optional[UserRole] = None
     phone: Optional[Annotated[str, Field(pattern= r"^01[0125][0-9]{8}$")]] = None
-    password: Optional[Annotated[str, Field(min_length=8)]] = None
+    password: Optional[Annotated[str, Field(min_length=6, pattern=r"^[A-Za-z0-9]+$")]] = None
 
 class UserResponse(BaseModel):
     id: int

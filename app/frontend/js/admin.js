@@ -158,7 +158,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // --- تحديد الصفحة الأولى ---
   const hash = window.location.hash.replace("#", "");
-  const validPages = ["home", "items", "categories", "delivery", "delivery-ops", "shifts", "reports", "offers", "events"];
+  const validPages = ["home", "items", "categories", "delivery", "delivery-ops", "shifts", "reports", "offers", "settings", "events"];
   showPage(validPages.includes(hash) ? hash : "home");
 
   // --- Back/Forward ---

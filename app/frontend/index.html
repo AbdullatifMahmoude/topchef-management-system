@@ -36,9 +36,22 @@
               </svg>
             </button>
           </div>
-          <a href=""><span class="forget_password">هل نسيت كلمة السر؟</span></a>
+          <button type="button" id="forgotPasswordButton" class="forgot_password_button">هل نسيت كلمة السر؟</button>
         </div>
         <button type="submit" class="login_btn">دخول</button>
+      </form>
+      <form id="passwordResetForm" class="password_reset_form" hidden>
+        <h2>استعادة كلمة المرور</h2>
+        <p>أدخل اسم المستخدم وسنرسل كود تحقق إلى رقم واتساب المسجل.</p>
+        <input id="resetUsername" type="text" placeholder="اسم المستخدم">
+        <button id="sendResetCode" type="button">إرسال كود التحقق</button>
+        <div id="resetCodeFields" hidden>
+          <input id="resetCode" type="text" inputmode="numeric" maxlength="6" placeholder="كود التحقق المكون من 6 أرقام">
+          <input id="resetNewPassword" type="password" placeholder="كلمة المرور الجديدة">
+          <button type="submit">تغيير كلمة المرور</button>
+        </div>
+        <p id="passwordResetNotice" class="reset_notice" hidden></p>
+        <button id="backToLogin" type="button" class="reset_back">العودة لتسجيل الدخول</button>
       </form>
     </div>
 

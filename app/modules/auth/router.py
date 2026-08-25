@@ -1,10 +1,20 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.modules.auth.schemas import LoginRequest, TokenResponse
+from app.modules.auth.schemas import LoginRequest, TokenResponse, ForgotPasswordRequest, ResetPasswordRequest, PasswordResetResponse
 from app.modules.auth.service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+@router.post("/forgot-password", response_model=PasswordResetResponse)
+async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    await AuthService(db).request_password_reset(data.username)
+    return PasswordResetResponse(message="إذا كان الحساب موجودًا فسيصل كود التحقق إلى رقم واتساب المسجل")
+
+@router.post("/reset-password", response_model=PasswordResetResponse)
+async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    await AuthService(db).reset_password(data.username, data.code, data.new_password)
+    return PasswordResetResponse(message="تم تغيير كلمة المرور بنجاح")
 
 
 @router.post("/login", response_model=TokenResponse)

@@ -26,7 +26,7 @@ class OrderRepository:
 
     async def get_by_id(self, order_id: int) -> Optional[models.Order]:
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address),
@@ -41,7 +41,7 @@ class OrderRepository:
 
     async def get_by_idempotency_key(self, key: str) -> Optional[models.Order]:
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address),
@@ -57,7 +57,7 @@ class OrderRepository:
         if order_date is None:
             order_date = self.get_business_date()
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address),
@@ -82,7 +82,7 @@ class OrderRepository:
 
         """Get paginated orders."""
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address),
@@ -146,7 +146,7 @@ class OrderRepository:
         cashier_id: Optional[int] = None
     ) -> List[models.Order]:
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
             selectinload(models.Order.address),

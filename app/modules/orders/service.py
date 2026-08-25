@@ -14,6 +14,7 @@ from app.core.protocols import PricingServiceInterface, OfferServiceInterface, C
 from app.core.events import order_events_manager
 from app.core.enums import OrderStatus, OrderSource, OrderType, UserRole
 from app.core.business_calendar import get_current_business_date, is_weekly_holiday
+from app.modules.settings.whatsapp import queue_order_notification
 
 
 class OrderService:
@@ -233,6 +234,7 @@ class OrderService:
                 "event": "order.created",
                 "data": payload_data
             })
+            queue_order_notification(payload_data, "created")
             
             return order
 
@@ -274,6 +276,7 @@ class OrderService:
     async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: Optional[int] = None) -> models.Order:
         async with self._transaction_scope():
             order = await self.get_order(order_id)
+            status_changed = bool(update_data.order_status and order.order_status != update_data.order_status)
             if update_data.order_status and order.order_status != update_data.order_status:
                 target_rider_id = update_data.delivery_person_id or order.delivery_person_id
                 if (
@@ -308,6 +311,7 @@ class OrderService:
             "event": "order.updated",
             "data": payload_data
         })
+        queue_order_notification(payload_data, "status_changed" if status_changed else "updated")
         return completed_order
 
     async def update_order(self, order_id: int, update_data: schemas.OrderUpdateFull, current_user_id: Optional[int] = None) -> models.Order:
@@ -468,6 +472,7 @@ class OrderService:
             "event": "order.updated",
             "data": payload_data
         })
+        queue_order_notification(payload_data, "updated")
         return completed_order
 
     async def get_today_stats(self) -> dict:

@@ -417,3 +417,6 @@ button:disabled {
     font-size: 17px;
   }
 }
+
+.forgot_password_button{padding:0;border:0;background:transparent;color:inherit;font-family:inherit;cursor:pointer}.password_reset_form{display:flex;width:100%;flex-direction:column;gap:12px;direction:rtl}.password_reset_form[hidden],#resetCodeFields[hidden]{display:none}.password_reset_form h2{margin:0;color:#fff}.password_reset_form p{margin:0;color:rgba(255,255,255,.62);font-size:13px;line-height:1.7}.password_reset_form input{width:100%;box-sizing:border-box}.password_reset_form button{min-height:42px;border:0;border-radius:8px;background:#c9a243;color:#171208;font-family:inherit;font-weight:800;cursor:pointer}#resetCodeFields{display:flex;flex-direction:column;gap:10px}.password_reset_form .reset_back{background:transparent;color:#d7b75c}.reset_notice{padding:9px;border-radius:7px}.reset_notice.success{background:rgba(46,204,113,.12);color:#70dda3}.reset_notice.error{background:rgba(231,76,60,.12);color:#ef928d}
+.signup_form[hidden]{display:none!important}

@@ -33,19 +33,9 @@ class UserService:
     
     @staticmethod
     def validate_password(password: str) -> None:
-        if not re.search(r"[A-Z]", password):
+        if len(password) < 6 or not re.fullmatch(r"[A-Za-z0-9]+", password):
             raise ValidationError(
-                "Password must contain at least one uppercase letter"
-            )
-
-        if not re.search(r"[a-z]", password):
-            raise ValidationError(
-                "Password must contain at least one lowercase letter"
-            )
-
-        if not re.search(r"[0-9]", password):
-            raise ValidationError(
-                "Password must contain at least one digit"
+                "كلمة المرور يجب أن تكون 6 خانات على الأقل وتحتوي على حروف إنجليزية أو أرقام فقط"
             )
         
     async def get_by_id(self, userid: int, check_cache: bool = True):

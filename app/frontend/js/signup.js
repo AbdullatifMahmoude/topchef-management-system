@@ -7,6 +7,8 @@
   const usernameInput = form.querySelector('input[type="text"]');
   const passwordInput = document.getElementById('password_input') || form.querySelector('input[type="password"]');
   const submitBtn     = form.querySelector("button[type='submit']");
+  const resetForm = document.getElementById("passwordResetForm");
+  const forgotButton = document.getElementById("forgotPasswordButton");
 
   // ===== Regex Rules =====
   const RULES = {
@@ -143,6 +145,71 @@
   function setLoading(isLoading) {
     submitBtn.disabled    = isLoading;
     submitBtn.textContent = isLoading ? "جاري الدخول..." : "دخول";
+  }
+
+  if (resetForm && forgotButton) {
+    const resetUsername = document.getElementById("resetUsername");
+    const resetCode = document.getElementById("resetCode");
+    const resetPassword = document.getElementById("resetNewPassword");
+    const resetFields = document.getElementById("resetCodeFields");
+    const resetNotice = document.getElementById("passwordResetNotice");
+    const sendCodeButton = document.getElementById("sendResetCode");
+
+    const showResetNotice = (message, type) => {
+      resetNotice.hidden = false;
+      resetNotice.className = `reset_notice ${type}`;
+      resetNotice.textContent = message;
+    };
+    forgotButton.addEventListener("click", () => {
+      resetUsername.value = usernameInput.value.trim();
+      form.hidden = true;
+      resetForm.hidden = false;
+    });
+    document.getElementById("backToLogin").addEventListener("click", () => {
+      resetForm.hidden = true;
+      form.hidden = false;
+      resetNotice.hidden = true;
+    });
+    sendCodeButton.addEventListener("click", async () => {
+      const username = resetUsername.value.trim();
+      if (!RULES.username.regex.test(username)) return showResetNotice(RULES.username.message, "error");
+      sendCodeButton.disabled = true;
+      try {
+        const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "تعذر إرسال الكود");
+        resetFields.hidden = false;
+        showResetNotice(data.message, "success");
+      } catch (error) {
+        showResetNotice(error.message || "تعذر الاتصال بالخادم", "error");
+      } finally {
+        sendCodeButton.disabled = false;
+      }
+    });
+    resetForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const newPassword = resetPassword.value.trim();
+      if (!/^\d{6}$/.test(resetCode.value.trim())) return showResetNotice("أدخل كود التحقق المكون من 6 أرقام", "error");
+      if (!/^[A-Za-z0-9]{6,}$/.test(newPassword)) return showResetNotice("كلمة المرور 6 خانات على الأقل، حروف إنجليزية أو أرقام فقط", "error");
+      const button = resetForm.querySelector("button[type='submit']");
+      button.disabled = true;
+      try {
+        const response = await fetch(`${API_BASE}/auth/reset-password`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: resetUsername.value.trim(), code: resetCode.value.trim(), new_password: newPassword }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "تعذر تغيير كلمة المرور");
+        showResetNotice(data.message, "success");
+        setTimeout(() => document.getElementById("backToLogin").click(), 1200);
+      } catch (error) {
+        showResetNotice(error.message || "تعذر الاتصال بالخادم", "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
   }
 
 })();
