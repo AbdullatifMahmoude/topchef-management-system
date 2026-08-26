@@ -1,7 +1,11 @@
 import hashlib
-from app.core.redis import redis_client
-from app.core.logging import logger
 import time
+
+from redis.exceptions import RedisError
+
+from app.core.logging import logger
+from app.core.redis import redis_client
+
 
 class TokenBlacklist:
     """Manage revoked JWT tokens in the active cache backend."""
@@ -19,18 +23,20 @@ class TokenBlacklist:
                 key = self._token_key(token)
                 await redis_client.connect()
                 await redis_client.setex(key, ttl, "1")
-                logger.info(f"Token revoked: {key}")
+                logger.info("Authentication token revoked")
                 return True
-        except Exception as e:
-            logger.warning(f"Error revoking token: {e}")
+        except (RedisError, OSError) as exc:
+            logger.warning("Error revoking token: %s", type(exc).__name__)
         return False
 
-    async def is_revoked(self, token: str) -> bool:
+    async def is_revoked(self, token: str) -> bool | None:
         """Check if token is revoked."""
         try:
             key = self._token_key(token)
-            await redis_client.connect()
-            return await redis_client.exists(key)
-        except Exception:
-            # If the cache backend is unavailable, treat token as valid (fail open)
-            return False
+            backend = await redis_client.connect()
+            if backend is None:
+                return None
+            return bool(await backend.exists(key))
+        except (RedisError, OSError) as exc:
+            logger.warning("Token revocation check unavailable: %s", type(exc).__name__)
+            return None

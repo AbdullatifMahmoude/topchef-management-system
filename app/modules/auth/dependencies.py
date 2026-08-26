@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthenticationError, AuthenticationServiceUnavailable
 from app.core.redis import get_redis
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.schemas import TokenPayload
@@ -28,7 +28,10 @@ async def get_current_user(
     
     # ✅ FIX: Check if token is revokedf
     from app.core.token_blacklist import TokenBlacklist
-    if await TokenBlacklist().is_revoked(token):
+    revocation_status = await TokenBlacklist().is_revoked(token)
+    if revocation_status is None:
+        raise AuthenticationServiceUnavailable()
+    if revocation_status:
         raise AuthenticationError("Token has been revoked. Please log in again.")
         
     payload = decode_token(token)

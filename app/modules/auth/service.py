@@ -1,24 +1,22 @@
-import time
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+import time
 from collections import defaultdict
+from datetime import datetime, timedelta
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import verify_password, create_access_token
+from app.core.config import settings as app_settings
 from app.core.exceptions import AuthenticationError
 from app.core.logging import logger
+from app.core.security import create_access_token, get_password_hash, verify_password
+from app.modules.auth.models import PasswordResetCode
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.schemas import LoginRequest, TokenResponse
-from app.modules.auth.models import PasswordResetCode
-from app.modules.users.repository import UserRepository
 from app.modules.settings.service import SettingsService
 from app.modules.settings.whatsapp import send_template_text, whatsapp_config_ready
-from app.core.config import settings as app_settings
-from app.core.security import get_password_hash
-
+from app.modules.users.repository import UserRepository
 
 # In-memory failed login tracker: { username: { "count": int, "locked_until": float } }
 _login_attempts: dict[str, dict] = defaultdict(lambda: {"count": 0, "locked_until": 0.0})
@@ -29,8 +27,9 @@ _PASSWORD_RESET_COOLDOWN_SECONDS = 60
 
 
 class AuthService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, redis=None):
         self.db = db
+        self.redis = redis
         self.repo = AuthRepository(db)
 
     async def login(self, credentials: LoginRequest) -> TokenResponse:
@@ -71,7 +70,7 @@ class AuthService:
         }
         access_token = create_access_token(data=token_data)
 
-        logger.info(f"User '{user.username}' (role={user.role.value}) logged in successfully")
+        logger.info("User login succeeded user_id=%s role=%s", user.id, user.role.value)
 
         return TokenResponse(
             access_token=access_token,
@@ -98,12 +97,8 @@ class AuthService:
         return hashlib.sha256(value.encode()).hexdigest()
 
     async def request_password_reset(self, username: str) -> None:
-        username_key = username.lower().strip()
-        now_monotonic = time.monotonic()
-        last_request = _password_reset_requests.get(username_key, 0)
-        if now_monotonic - last_request < _PASSWORD_RESET_COOLDOWN_SECONDS:
+        if not await self._allow_password_reset_request(username):
             return
-        _password_reset_requests[username_key] = now_monotonic
         user = await UserRepository(self.db).get_by_name(username)
         # Always return the same public response to prevent account discovery.
         if not user or not user.is_active:
@@ -131,6 +126,32 @@ class AuthService:
         sent = await send_template_text(user.phone, code, config.password_reset_template_name)
         if not sent:
             logger.warning("Password reset WhatsApp was not accepted for user id=%s", user.id)
+
+    async def _allow_password_reset_request(self, username: str) -> bool:
+        username_key = username.lower().strip()
+        key_hash = hashlib.sha256(username_key.encode()).hexdigest()
+        redis_key = f"auth:password-reset:{key_hash}"
+        if self.redis is not None:
+            try:
+                count = await self.redis.incr(redis_key)
+                if count == 1:
+                    await self.redis.expire(redis_key, _PASSWORD_RESET_COOLDOWN_SECONDS)
+                return count == 1
+            except Exception as exc:
+                logger.warning("Password reset Redis rate limit unavailable: %s", exc)
+
+        now = time.monotonic()
+        expired = [
+            key for key, requested_at in _password_reset_requests.items()
+            if now - requested_at >= _PASSWORD_RESET_COOLDOWN_SECONDS
+        ]
+        for key in expired:
+            _password_reset_requests.pop(key, None)
+        last_request = _password_reset_requests.get(key_hash, 0)
+        if now - last_request < _PASSWORD_RESET_COOLDOWN_SECONDS:
+            return False
+        _password_reset_requests[key_hash] = now
+        return True
 
     async def reset_password(self, username: str, code: str, new_password: str) -> None:
         user = await UserRepository(self.db).get_by_name(username)

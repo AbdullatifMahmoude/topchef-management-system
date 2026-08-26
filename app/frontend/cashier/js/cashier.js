@@ -19,7 +19,7 @@ function printReceipt(orderData) {
         const error = await response.json().catch(() => ({}));
         throw new Error(error.detail || `Print Agent returned ${response.status}`);
       }
-      console.log("Invoice queued in Top Chef Print Agent.");
+      console.debug("Invoice queued in Top Chef Print Agent.");
     })
     .catch((error) => {
       clearTimeout(timeout);
@@ -94,12 +94,7 @@ let totalNewOrdersGlobalCount = 0; // New orders only
 const ordersPageSize = 30;
 let lastNewOrdersCount = 0;
 let isNotificationSoundEnabled = true;
-let socket = null;
-let reconnectTimerId = null;
-let socketHeartbeatTimerId = null;
-let socketWatchdogTimerId = null;
-let socketReconnectAttempts = 0;
-let lastSocketActivityAt = 0;
+let cashierLiveSocket = null;
 let ordersSnapshotLoaded = false;
 let lastSocketOrderUpdate = Date.now();
 
@@ -2382,7 +2377,7 @@ async function refreshNewOrdersBadge() {
 setInterval(
   () => {
     if (totalNewOrdersGlobalCount > 0 && isNotificationSoundEnabled) {
-      console.log(
+      console.debug(
         "Sound reminder: Still have",
         totalNewOrdersGlobalCount,
         "new orders.",
@@ -2759,160 +2754,41 @@ function updateWebOrdersToggleUI() {
 //  WebSocket - Real-time updates
 // ===================================================
 
-function updateConnectionStatus(status) {
-  console.log("🔄 UI Connection Status Change:", status);
-  const dot = document.getElementById("ws_status_dot");
-  const text = document.getElementById("ws_status_text");
-  if (!dot || !text) {
-    console.warn("⚠️ Connection status elements not found in DOM");
-    return;
+function getCashierLiveSocket() {
+  if (!cashierLiveSocket) {
+    cashierLiveSocket = window.createCashierLiveSocket({
+      path: "/orders/ws/cashier",
+      onMessage: (payload) => handleSocketEvent(payload),
+      onOpen: (ws) => {
+        setTimeout(() => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          Promise.all([
+            fetchOnlineOrdersServer(1, true),
+            fetchAllOrdersServer(1, true),
+            refreshNewOrdersBadge(),
+          ]).then(() => {
+            ordersSnapshotLoaded = true;
+            updateOnlineStats();
+            const onlineLayout = document.getElementById("online_orders_layout");
+            const allLayout = document.getElementById("all_orders_layout");
+            if (onlineLayout && onlineLayout.style.display !== "none") renderOnlineOrders();
+            if (allLayout && allLayout.style.display !== "none") renderAllOrders();
+          }).catch((error) => console.warn("Post-reconnect order sync failed:", error));
+        }, 700);
+      },
+      onVisible: () => scheduleOffersRefresh(0),
+    });
   }
-
-  if (status === "connected") {
-    dot.style.background = "#2ecc71"; // Green
-    text.textContent = "متصل مباشر";
-  } else if (status === "disconnected") {
-    dot.style.background = "#e74c3c"; // Red
-    text.textContent = "غير متصل (إعادة محاولة)";
-  } else {
-    dot.style.background = "#f1c40f"; // Yellow
-    text.textContent = "جاري الاتصال...";
-  }
+  return cashierLiveSocket;
 }
+
 function setupWebSocket() {
-  if (reconnectTimerId) {
-    clearTimeout(reconnectTimerId);
-    reconnectTimerId = null;
-  }
-
-  updateConnectionStatus("connecting");
-
-  if (
-    socket &&
-    [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)
-  ) {
-    return;
-  }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/orders/ws/cashier`;
-
-  console.log("📡 Attempting WebSocket connection:", wsUrl);
-  const ws = new WebSocket(wsUrl);
-  socket = ws;
-
-  // Hosted services may need a few seconds to wake up from idle.
-  const connectTimeoutId = setTimeout(() => {
-    if (ws.readyState === WebSocket.CONNECTING) {
-      console.warn("⚠️ WebSocket connection timed out. Retrying...");
-      ws.close();
-    }
-  }, 12000);
-
-  const stopSocketHealthChecks = () => {
-    if (socketHeartbeatTimerId) clearInterval(socketHeartbeatTimerId);
-    if (socketWatchdogTimerId) clearInterval(socketWatchdogTimerId);
-    socketHeartbeatTimerId = null;
-    socketWatchdogTimerId = null;
-  };
-
-  const startSocketHealthChecks = () => {
-    stopSocketHealthChecks();
-    lastSocketActivityAt = Date.now();
-    socketHeartbeatTimerId = setInterval(() => {
-      if (socket === ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "HEARTBEAT", sent_at: Date.now() }));
-      }
-    }, 15000);
-    socketWatchdogTimerId = setInterval(() => {
-      if (socket === ws && ws.readyState === WebSocket.OPEN && Date.now() - lastSocketActivityAt > 55000) {
-        console.warn("⚠️ WebSocket heartbeat timeout. Reconnecting...");
-        ws.close(4000, "heartbeat timeout");
-      }
-    }, 10000);
-  };
-
-  ws.onopen = () => {
-    clearTimeout(connectTimeoutId);
-    startSocketHealthChecks();
-    console.log("✅ WebSocket connected successfully (Cashier)");
-    updateConnectionStatus("connected");
-    setTimeout(() => {
-      if (socket === ws && ws.readyState === WebSocket.OPEN) socketReconnectAttempts = 0;
-    }, 30000);
-    // Fill any gap that may have happened during a restart/disconnection.
-    setTimeout(() => {
-      if (socket === ws && ws.readyState === WebSocket.OPEN) {
-        Promise.all([
-          fetchOnlineOrdersServer(1, true),
-          fetchAllOrdersServer(1, true),
-          refreshNewOrdersBadge(),
-        ]).then(() => {
-          ordersSnapshotLoaded = true;
-          updateOnlineStats();
-          const onlineLayout = document.getElementById("online_orders_layout");
-          const allLayout = document.getElementById("all_orders_layout");
-          if (onlineLayout && onlineLayout.style.display !== "none") renderOnlineOrders();
-          if (allLayout && allLayout.style.display !== "none") renderAllOrders();
-        }).catch((error) => console.warn("Post-reconnect order sync failed:", error));
-      }
-    }, 700);
-  };
-
-  ws.onmessage = (event) => {
-    try {
-      const payload = JSON.parse(event.data);
-      lastSocketActivityAt = Date.now();
-      if (payload.type === "HEARTBEAT") {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "HEARTBEAT_ACK", received_at: Date.now() }));
-        }
-        return;
-      }
-      if (payload.type !== "HEARTBEAT" && payload.type !== "HEARTBEAT_ACK") {
-        console.debug("📥 Received WS message:", payload.type);
-      }
-      handleSocketEvent(payload);
-    } catch (err) {
-      console.error("❌ Error parsing WebSocket message:", err);
-    }
-  };
-
-  ws.onclose = (e) => {
-    clearTimeout(connectTimeoutId);
-    stopSocketHealthChecks();
-    if (socket !== ws) return;
-    console.warn(
-      `🔴 WebSocket disconnected. Code: ${e.code}, Reason: ${e.reason || "None"}`,
-    );
-    socket = null;
-    updateConnectionStatus("disconnected");
-
-    socketReconnectAttempts += 1;
-    const baseDelay = e.code === 1012 ? 1000 : Math.min(15000, 1000 * (2 ** Math.min(socketReconnectAttempts - 1, 4)));
-    const reconnectDelay = baseDelay + Math.floor(Math.random() * 750);
-    if (!reconnectTimerId) {
-      reconnectTimerId = setTimeout(() => {
-        reconnectTimerId = null;
-        if (navigator.onLine !== false) setupWebSocket();
-      }, reconnectDelay);
-    }
-  };
-
-  ws.onerror = (err) => {
-    clearTimeout(connectTimeoutId);
-    console.error("❌ WebSocket error details:", err);
-    updateConnectionStatus("disconnected");
-  };
+  getCashierLiveSocket().connect();
 }
 
-window.addEventListener("online", () => setupWebSocket());
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) {
-    if (!socket || socket.readyState === WebSocket.CLOSED) setupWebSocket();
-    scheduleOffersRefresh(0);
-  }
-});
+function updateConnectionStatus(status) {
+  getCashierLiveSocket().updateStatus(status);
+}
 
 function handleSocketEvent(payload) {
   if (
@@ -2979,7 +2855,7 @@ function handleSocketEvent(payload) {
   }
 
   if (payload.type === "SYNC_COMPLETE") {
-    console.log("Desktop master data sync complete, refreshing data safely...");
+    console.debug("Desktop master data sync complete, refreshing data safely...");
     // Safe targeted refresh: reload menu and orders without resetting UI state (cart, modals, etc.)
     _safeSyncRefresh();
     return;
@@ -2990,7 +2866,7 @@ function handleSocketEvent(payload) {
     payload.type === "CUSTOMER_CREATED" ||
     payload.type === "ADDRESS_CREATED"
   ) {
-    console.log("Customer data synced:", payload.type, payload.data);
+    console.debug("Customer data synced:", payload.type);
     // No UI action needed - customer data will be fetched fresh when next order is placed
     // But if delivery customer form is open with same phone, we could refresh it
     if (
@@ -3012,7 +2888,7 @@ function handleSocketEvent(payload) {
 
   ordersSnapshotLoaded = true;
   const eventName = normalizeOrderEventName(payload.type || event);
-  console.log("Real-time event:", eventName, data.id);
+  console.debug("Real-time event:", eventName, data.id);
 
   // 1. Update internal state
   let hasChanged = false;
@@ -3062,7 +2938,7 @@ function handleSocketEvent(payload) {
   }
   // Handle Order Updated / Status Changed
   else if (eventName === "ORDER_UPDATED") {
-    console.log(
+    console.debug(
       "Processing update for order:",
       data.order_number,
       "Status:",
@@ -3087,7 +2963,7 @@ function handleSocketEvent(payload) {
         id: localId,
       };
       hasChanged = true;
-      console.log("Updated onlineOrdersList at index", oIdx);
+      console.debug("Updated online orders state");
     }
 
     if (typeof allOrdersList !== "undefined") {
@@ -3096,7 +2972,7 @@ function handleSocketEvent(payload) {
         const localId = allOrdersList[aIdx].id;
         allOrdersList[aIdx] = { ...allOrdersList[aIdx], ...data, id: localId };
         hasChanged = true;
-        console.log("Updated allOrdersList at index", aIdx);
+        console.debug("Updated all orders state");
       }
     }
 
@@ -3229,7 +3105,7 @@ async function _safeSyncRefresh() {
       if (ridersLayout && ridersLayout.style.display !== "none")
         renderRidersTab();
 
-      console.log("✅ Safe sync refresh completed");
+      console.debug("Safe sync refresh completed");
     } catch (err) {
       console.warn("Safe sync refresh failed (non-critical):", err);
     }
@@ -3259,7 +3135,7 @@ async function _refreshCustomerAddresses(phone) {
         if (addrField && typeof renderAddressFieldHTML === "function") {
           addrField.innerHTML = renderAddressFieldHTML();
         }
-        console.log(
+        console.debug(
           "✅ Customer addresses refreshed from sync:",
           data.addresses.length,
           "addresses",

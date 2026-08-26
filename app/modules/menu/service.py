@@ -29,7 +29,7 @@ class CategoryService:
             try:
                 cached = await self.redis.get("menu:categories")
                 if cached:
-                    logger.info("⚡ Redis Cache Hit: Categories")
+                    logger.debug("Redis cache hit: category")
                     data = json.loads(cached)
                     for cat_data in data:
                         if cat_data["id"] == category_id:
@@ -60,7 +60,7 @@ class CategoryService:
             try:
                 cached = await self.redis.get(cache_key)
                 if cached:
-                    logger.info("⚡ Redis Cache Hit: Category List")
+                    logger.debug("Redis cache hit: category list")
                     data = json.loads(cached)
                     return [schemas.CategoryResponse.model_validate(item) for item in data]
             except Exception as e:
@@ -99,7 +99,7 @@ class CategoryService:
 
             createcat = await self.repo.create_category(category_data)
             await self.db.flush()
-            logger.info(f"Menu Category created: '{category_data.cat_name}'")
+            logger.info("Menu category created id=%s", createcat.id)
             await self._invalidate_cache()
 
         from app.core.events import order_events_manager
@@ -182,7 +182,7 @@ class ProductService:
             try:
                 cached = await self.redis.get("menu:products")
                 if cached:
-                    logger.info(f"⚡ Redis Cache Hit: Product {product_id}")
+                    logger.debug("Redis cache hit: product id=%s", product_id)
                     products = json.loads(cached)
                     for prod_data in products:
                         if prod_data["id"] == product_id:
@@ -213,7 +213,7 @@ class ProductService:
             try:
                 cached = await self.redis.get(cache_key)
                 if cached:
-                    logger.info("⚡ Redis Cache Hit: Product List")
+                    logger.debug("Redis cache hit: product list")
                     data = json.loads(cached)
                     return [schemas.ProductResponse.model_validate(item) for item in data]
             except Exception as e:
@@ -262,7 +262,7 @@ class ProductService:
             )
             await self.repo.create_product(product_model)
             await self.db.flush()
-            logger.info(f"Menu Product created: '{product_data.product_name}'")
+            logger.info("Menu product created id=%s", product_model.id)
             await self._invalidate_cache()
 
         from app.core.events import order_events_manager

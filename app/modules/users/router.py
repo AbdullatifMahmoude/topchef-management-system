@@ -82,7 +82,7 @@ async def delete_user(
     if id == _current_user.id:
         raise ValidationError("You cannot delete your current account")
     user_service = service.UserService(db, redis)
-    deleteuser = await user_service.delete_user(id)
+    await user_service.delete_user(id)
     return None
 
 

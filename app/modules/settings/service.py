@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.settings.repository import SettingsRepository
 from app.modules.settings import schemas
 from app.core.logging import logger
+from app.core.secrets import decrypt_secret, encrypt_secret
 
 class SettingsService:
     WHATSAPP_API_KEY = "whatsapp_api_key"
@@ -93,12 +94,12 @@ class SettingsService:
             self.WHATSAPP_RESET_EXPIRY_MINUTES, self.WHATSAPP_BULK_SEND_LIMIT,
             self.WHATSAPP_BULK_MESSAGE,
         )
-        values = {key: await self.repo.get_setting(key) for key in keys}
+        values = await self.repo.get_settings(keys)
         text = lambda key, default="": (
-            values[key].value_text if values[key] and values[key].value_text is not None else default
+            values[key].value_text if values.get(key) and values[key].value_text is not None else default
         )
         return schemas.WhatsAppSettingsResponse(
-            api_key_configured=bool(text(self.WHATSAPP_API_KEY)),
+            api_key_configured=bool(decrypt_secret(text(self.WHATSAPP_API_KEY))),
             phone_number_id=text(self.WHATSAPP_PHONE_NUMBER_ID),
             template_name=text(self.WHATSAPP_TEMPLATE_NAME, "topchef_order_update"),
             language_code=text(self.WHATSAPP_LANGUAGE_CODE, "ar"),
@@ -120,7 +121,7 @@ class SettingsService:
             if data.api_key is not None and data.api_key.strip():
                 await self.repo.create_or_update_text_setting(
                     self.WHATSAPP_API_KEY,
-                    data.api_key.strip(),
+                    encrypt_secret(data.api_key.strip()),
                     "WhatsApp provider API key",
                 )
             text_settings = {
@@ -145,3 +146,7 @@ class SettingsService:
 
         logger.info("WhatsApp settings updated")
         return await self.get_whatsapp_settings()
+
+    async def get_whatsapp_access_token(self) -> str:
+        row = await self.repo.get_setting(self.WHATSAPP_API_KEY)
+        return decrypt_secret(row.value_text if row and row.value_text else "")

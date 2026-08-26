@@ -65,7 +65,7 @@ async def get_price_preview(
             user_phone = getattr(current_user, 'phone', None)
             if user_phone and request.customer_phone != user_phone:
                 from app.core.logging import logger
-                logger.warning(f"IDOR attempt: User {current_user.id} tried to probe phone {request.customer_phone}")
+                logger.warning("Pricing identity mismatch user_id=%s", current_user.id)
                 # We return a generic error or just override the phone to theirs
                 # For security, raising ValidationError is better to signal it's blocked
                 raise ValidationError("You can only preview pricing for your own phone number.")

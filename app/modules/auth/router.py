@@ -1,14 +1,26 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
-from app.modules.auth.schemas import LoginRequest, TokenResponse, ForgotPasswordRequest, ResetPasswordRequest, PasswordResetResponse
+from app.core.redis import get_redis
+from app.modules.auth.schemas import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    PasswordResetResponse,
+    ResetPasswordRequest,
+    TokenResponse,
+)
 from app.modules.auth.service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/forgot-password", response_model=PasswordResetResponse)
-async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
-    await AuthService(db).request_password_reset(data.username)
+async def forgot_password(
+    data: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis),
+):
+    await AuthService(db, redis=redis).request_password_reset(data.username)
     return PasswordResetResponse(message="إذا كان الحساب موجودًا فسيصل كود التحقق إلى رقم واتساب المسجل")
 
 @router.post("/reset-password", response_model=PasswordResetResponse)
@@ -35,10 +47,13 @@ async def login(
     
     return response
 
-from app.modules.auth.dependencies import get_current_user, security_scheme
 from fastapi.security import HTTPAuthorizationCredentials
-from app.core.token_blacklist import TokenBlacklist
+
 from app.core.security import decode_token
+from app.core.token_blacklist import TokenBlacklist
+from app.core.exceptions import AuthenticationError, AuthenticationServiceUnavailable
+from app.modules.auth.dependencies import get_current_user, security_scheme
+
 
 @router.post("/logout")
 async def logout(
@@ -51,13 +66,16 @@ async def logout(
     if payload:
         exp = payload.get("exp")
         user_id = payload.get("user_id")
-        await TokenBlacklist().revoke_token(token, exp)
+        if not isinstance(exp, int):
+            raise AuthenticationError("Token payload is malformed")
+        if not await TokenBlacklist().revoke_token(token, exp):
+            raise AuthenticationServiceUnavailable()
         
         if user_id:
             from app.core.enums import UserRole
             if payload.get("role") == UserRole.CASHIER.value:
-                from app.modules.shifts.service import ShiftsService
                 from app.core.database import AsyncSessionLocal
+                from app.modules.shifts.service import ShiftsService
                 async with AsyncSessionLocal() as db:
                     shifts_service = ShiftsService(db)
                     await shifts_service.end_shift(user_id)

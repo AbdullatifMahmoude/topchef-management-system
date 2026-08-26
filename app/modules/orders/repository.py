@@ -1,12 +1,18 @@
+from datetime import date, datetime, timedelta, timezone
+
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
 from sqlalchemy.orm import selectinload
-from datetime import date, timedelta, datetime, timezone
-from typing import Optional, List, Tuple
-from app.modules.orders import models, schemas
+
+from app.core.business_calendar import (
+    holiday_name,
+    is_weekly_holiday,
+    previous_business_date,
+)
 from app.core.enums import OrderSource, OrderStatus, OrderType
-from app.core.business_calendar import holiday_name, is_weekly_holiday, previous_business_date
 from app.modules.offer.models import OfferUsage
+from app.modules.orders import models, schemas
+
 
 def _offer_load_option():
     return selectinload(models.Order.offer_usage).selectinload(OfferUsage.offer)
@@ -24,7 +30,7 @@ class OrderRepository:
         return now.date()
 
 
-    async def get_by_id(self, order_id: int) -> Optional[models.Order]:
+    async def get_by_id(self, order_id: int) -> models.Order | None:
         query = select(models.Order).options(
             selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
@@ -39,7 +45,7 @@ class OrderRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_by_idempotency_key(self, key: str) -> Optional[models.Order]:
+    async def get_by_idempotency_key(self, key: str) -> models.Order | None:
         query = select(models.Order).options(
             selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
@@ -53,7 +59,7 @@ class OrderRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_by_number(self, order_number: str, order_date: Optional[date] = None) -> Optional[models.Order]:
+    async def get_by_number(self, order_number: str, order_date: date | None = None) -> models.Order | None:
         if order_date is None:
             order_date = self.get_business_date()
         query = select(models.Order).options(
@@ -72,13 +78,13 @@ class OrderRepository:
 
     async def list_orders_paginated(
         self,
-        source: Optional[OrderSource] = None,
-        status: Optional[OrderStatus] = None,
-        order_type: Optional[OrderType] = None,
+        source: OrderSource | None = None,
+        status: OrderStatus | None = None,
+        order_type: OrderType | None = None,
         page: int = 1,
         page_size: int = 50,
-        cashier_id: Optional[int] = None
-    ) -> Tuple[int, List[models.Order]]:
+        cashier_id: int | None = None
+    ) -> tuple[int, list[models.Order]]:
 
         """Get paginated orders."""
         query = select(models.Order).options(
@@ -98,7 +104,7 @@ class OrderRepository:
             query = query.where(models.Order.order_type == order_type)
             
         if cashier_id:
-            from sqlalchemy import or_, and_
+            from sqlalchemy import and_, or_
             query = query.where(
                 or_(
                     and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
@@ -140,11 +146,11 @@ class OrderRepository:
 
     async def list_orders(
         self,
-        source: Optional[OrderSource] = None,
-        status: Optional[OrderStatus] = None,
-        order_type: Optional[OrderType] = None,
-        cashier_id: Optional[int] = None
-    ) -> List[models.Order]:
+        source: OrderSource | None = None,
+        status: OrderStatus | None = None,
+        order_type: OrderType | None = None,
+        cashier_id: int | None = None
+    ) -> list[models.Order]:
         query = select(models.Order).options(
             selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
@@ -161,7 +167,7 @@ class OrderRepository:
             query = query.where(models.Order.order_type == order_type)
 
         if cashier_id:
-            from sqlalchemy import or_, and_
+            from sqlalchemy import and_, or_
             query = query.where(
                 or_(
                     and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
@@ -178,12 +184,11 @@ class OrderRepository:
         return result.scalars().all()
 
     async def get_next_order_number(self) -> str:
-        """Get next order number using a daily PostgreSQL sequence (atomic)."""
-        from sqlalchemy import text
-        from app.core.database import engine
-        from app.core.logging import logger
-        from app.core.exceptions import ValidationError
+        """Atomically increment the per-terminal, per-business-day counter."""
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
         from app.core.config import settings
+        from app.core.exceptions import ValidationError
         
         business_date = self.get_business_date()
         prefix = settings.TERMINAL_ID
@@ -197,31 +202,20 @@ class OrderRepository:
             current_count = await self.db.scalar(count_query) or 0
             return f"{prefix}-{current_count + 1:04d}"
 
-        seq_name = f"order_seq_{business_date.strftime('%Y_%m_%d')}"
-        
         try:
-            # Use a savepoint so if the sequence doesn't exist, it doesn't abort the outer transaction
-            async with self.db.begin_nested():
-                result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
-                seq_value = result.scalar()
-                return f"{prefix}-{seq_value:04d}"
-        except Exception as e:
-            # If sequence doesn't exist for the day, try to create it
-            if seq_name in str(e).lower() or "does not exist" in str(e).lower() or "relation" in str(e).lower():
-                try:
-                    logger.info(f"Sequence '{seq_name}' missing. Creating via main connection...")
-                    async with self.db.begin_nested():
-                        await self.db.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {seq_name} START WITH 1"))
-                    
-                    # Retry after creation on the main transaction
-                    result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
-                    seq_value = result.scalar()
-                    return f"{prefix}-{seq_value:04d}"
-                except Exception as create_err:
-                    logger.error(f"Critical: Failed to self-heal sequence: {create_err}")
-            
-            logger.error(f"Error generating order number: {e}")
-            raise ValidationError("Failed to generate order number")
+            statement = pg_insert(models.DailyOrderCounter).values(
+                business_date=business_date,
+                terminal_id=prefix,
+                last_value=1,
+            )
+            statement = statement.on_conflict_do_update(
+                index_elements=["business_date", "terminal_id"],
+                set_={"last_value": models.DailyOrderCounter.last_value + 1},
+            ).returning(models.DailyOrderCounter.last_value)
+            counter = (await self.db.execute(statement)).scalar_one()
+            return f"{prefix}-{counter:04d}"
+        except Exception as exc:
+            raise ValidationError("Failed to generate order number") from exc
 
     async def save_in_transaction(self, order: models.Order) -> models.Order:
         """Adds to session without explicit commit (delegates to context manager)."""
@@ -230,16 +224,12 @@ class OrderRepository:
         return order
 
     async def save(self, order: models.Order) -> models.Order:
+        """Persist without committing; the request unit of work owns commit."""
         self.db.add(order)
-        try:
-            await self.db.commit()
-            await self.db.refresh(order)
-            return order
-        except Exception:
-            await self.db.rollback()
-            raise
+        await self.db.flush()
+        return order
 
-    async def update(self, order: models.Order, update_data: schemas.OrderUpdate, changed_by_user_id: Optional[int] = None) -> models.Order:
+    async def update(self, order: models.Order, update_data: schemas.OrderUpdate, changed_by_user_id: int | None = None) -> models.Order:
         """
         Update order status and related fields - database operations only.
         Assumes all validation has been done in the service layer.
@@ -256,7 +246,7 @@ class OrderRepository:
         order.updated_at = datetime.now(tz).replace(tzinfo=None)
         
         # Record history if status changed
-        if old_status != new_status:
+        if new_status is not None and old_status != new_status:
             history = models.OrderStatusHistory(
                 order_id=order.id,
                 status=new_status,
@@ -267,7 +257,7 @@ class OrderRepository:
         self.db.add(order)
         return order
 
-    async def update_order_full(self, order: models.Order, update_data: schemas.OrderUpdateFull, changed_by_user_id: Optional[int] = None) -> models.Order:
+    async def update_order_full(self, order: models.Order, update_data: schemas.OrderUpdateFull, changed_by_user_id: int | None = None) -> models.Order:
         """
         Comprehensive order update - database operations only.
         Assumes all validation has been done in the service layer.

@@ -531,7 +531,7 @@ class OfferService:
                     "discount_amount": discount_amount,
                     "order_id": order_id
                 })
-                logger.info(f"Offer '{code}' REDEEMED (id:{offer.offer_id}) for phone:{customer_phone}")
+                logger.info("Offer redeemed code=%s id=%s", code, offer.offer_id)
                 
                 # Invalidating to sync current_usage in cache
                 await self._invalidate_cache(offer)

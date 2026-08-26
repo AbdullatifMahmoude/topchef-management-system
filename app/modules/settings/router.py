@@ -7,7 +7,8 @@ from app.modules.infrastructure.dependencies import require_role
 from app.core.enums import UserRole
 from app.core.business_calendar import is_weekly_holiday
 from app.modules.customer.repository import CustomerRepository
-from app.modules.settings.whatsapp import queue_bulk_message, whatsapp_config_ready
+from app.modules.settings.whatsapp import whatsapp_config_ready
+from app.modules.settings.whatsapp_outbox import enqueue_bulk_notifications
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
@@ -68,5 +69,5 @@ async def send_whatsapp_bulk_message(
         raise ValidationError("اكتب نص الرسالة الجماعية واحفظ الإعدادات أولًا")
     customers = await CustomerRepository(db).list_customers()
     phones = [customer.phone_number for customer in customers[:config.bulk_send_limit]]
-    queue_bulk_message(phones, config.bulk_message, config.bulk_template_name)
-    return schemas.BulkSendResponse(queued_count=len(phones), message="تمت إضافة الرسائل إلى قائمة الإرسال")
+    queued = await enqueue_bulk_notifications(db, phones, config.bulk_message, config.bulk_template_name)
+    return schemas.BulkSendResponse(queued_count=queued, message="تمت إضافة الرسائل إلى قائمة الإرسال")

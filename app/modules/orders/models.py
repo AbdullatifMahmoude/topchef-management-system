@@ -1,29 +1,37 @@
-from datetime import date, datetime, timezone, timedelta
+from datetime import date, datetime, timedelta, timezone
 
-from typing import Optional
 from sqlalchemy import (
+    Boolean,
     Column,
-    Integer,
-    String,
-    Numeric,
+    Date,
     DateTime,
     ForeignKey,
-    Enum as SQLEnum,
-    Text,
     Index,
-    Date,
+    Integer,
+    Numeric,
+    String,
+    Text,
     UniqueConstraint,
-    Sequence,
-    Boolean,
 )
-from app.core.enums import OrderStatus, OrderType, OrderSource, DiscountType, PaymentMethod
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base, DbEnum
-from app.modules.users.models import User
+from app.core.enums import (
+    DiscountType,
+    OrderSource,
+    OrderStatus,
+    OrderType,
+    PaymentMethod,
+)
 
-# Atomic sequence for order numbering (PostgreSQL)
-order_number_seq = Sequence('order_number_seq', start=1)
+
+class DailyOrderCounter(Base):
+    __tablename__ = "daily_order_counters"
+
+    business_date = Column(Date, primary_key=True)
+    terminal_id = Column(String(32), primary_key=True)
+    last_value = Column(Integer, nullable=False, default=0)
+
 
 class Order(Base):
     __tablename__ = "orders"
@@ -93,19 +101,19 @@ class Order(Base):
     )
 
     @property
-    def creator_name(self) -> Optional[str]:
+    def creator_name(self) -> str | None:
         if self.creator:
             return self.creator.full_name or self.creator.username
         return None
 
     @property
-    def delivery_person_name(self) -> Optional[str]:
+    def delivery_person_name(self) -> str | None:
         if self.delivery_person:
             return self.delivery_person.full_name or self.delivery_person.username
         return None
 
     @property
-    def customer_address(self) -> Optional[str]:
+    def customer_address(self) -> str | None:
         if self.address:
             return self.address.address
         return None
@@ -167,7 +175,7 @@ class OrderItem(Base):
     product = relationship("Product", foreign_keys=[product_id])
 
     @property
-    def product_name(self) -> Optional[str]:
+    def product_name(self) -> str | None:
         return self.product.product_name if self.product else None
 
 
@@ -191,8 +199,8 @@ class OrderModificationHistory(Base):
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     changed_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
     
-    from sqlalchemy.dialects.postgresql import JSONB
     from sqlalchemy import JSON
+    from sqlalchemy.dialects.postgresql import JSONB
     # We will use JSON to store the modifications array
     changes = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=False)
 

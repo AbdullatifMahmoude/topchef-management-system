@@ -1,4 +1,3 @@
-import asyncio
 import re
 from decimal import Decimal
 from typing import Any
@@ -18,7 +17,24 @@ STATUS_NAMES = {
     "completed": "تم اكتمال الطلب",
     "cancelled": "تم إلغاء الطلب",
 }
-_notification_tasks: set[asyncio.Task] = set()
+_http_client: httpx.AsyncClient | None = None
+
+
+def get_whatsapp_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0, connect=5.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _http_client
+
+
+async def close_whatsapp_http_client() -> None:
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
 
 
 def whatsapp_config_ready(settings, *, template_name: str = "") -> bool:
@@ -82,16 +98,16 @@ def build_order_message(order: dict[str, Any], event_type: str) -> str:
 async def send_order_notification(order: dict[str, Any], event_type: str) -> bool:
     phone = normalize_whatsapp_phone(order.get("customer_phone"))
     if not phone:
-        logger.info("WhatsApp skipped for order %s: no valid Egyptian mobile", order.get("order_number"))
+        logger.debug("WhatsApp skipped for order %s: no valid Egyptian mobile", order.get("order_number"))
         return False
 
     async with AsyncSessionLocal() as db:
-        settings = await SettingsService(db).get_whatsapp_settings()
-        key_row = await SettingsService(db).repo.get_setting(SettingsService.WHATSAPP_API_KEY)
-        token = key_row.value_text if key_row and key_row.value_text else ""
+        service = SettingsService(db)
+        settings = await service.get_whatsapp_settings()
+        token = await service.get_whatsapp_access_token()
 
     if not token or not whatsapp_config_ready(settings, template_name=settings.template_name):
-        logger.info("WhatsApp skipped for order %s: integration is incomplete or disabled", order.get("order_number"))
+        logger.debug("WhatsApp skipped for order %s: integration is incomplete or disabled", order.get("order_number"))
         return False
 
     url = f"https://graph.facebook.com/{settings.graph_api_version}/{settings.phone_number_id}/messages"
@@ -110,33 +126,36 @@ async def send_order_notification(order: dict[str, Any], event_type: str) -> boo
         },
     }
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                url,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json=payload,
-            )
+        response = await get_whatsapp_http_client().post(
+            url,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=payload,
+        )
         if response.is_success:
             logger.info("WhatsApp %s sent for order %s", event_type, order.get("order_number"))
             return True
         logger.warning(
-            "WhatsApp delivery rejected for order %s (status=%s): %s",
-            order.get("order_number"), response.status_code, response.text[:1000],
+            "WhatsApp delivery rejected for order %s status=%s",
+            order.get("order_number"), response.status_code,
         )
     except Exception as exc:
         logger.warning("WhatsApp request failed for order %s: %s", order.get("order_number"), exc)
     return False
 
 
-async def send_template_text(phone: str, text: str, template_name: str) -> bool:
+async def send_template_text(
+    phone: str, text: str, template_name: str, *, config=None,
+    token: str | None = None, client: httpx.AsyncClient | None = None,
+) -> bool:
     normalized = normalize_whatsapp_phone(phone)
     if not normalized:
         return False
-    async with AsyncSessionLocal() as db:
-        service = SettingsService(db)
-        settings = await service.get_whatsapp_settings()
-        key_row = await service.repo.get_setting(SettingsService.WHATSAPP_API_KEY)
-        token = key_row.value_text if key_row and key_row.value_text else ""
+    settings = config
+    if settings is None or token is None:
+        async with AsyncSessionLocal() as db:
+            service = SettingsService(db)
+            settings = await service.get_whatsapp_settings()
+            token = await service.get_whatsapp_access_token()
     if not token or not whatsapp_config_ready(settings, template_name=template_name):
         return False
     payload = {
@@ -148,39 +167,13 @@ async def send_template_text(phone: str, text: str, template_name: str) -> bool:
         },
     }
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"https://graph.facebook.com/{settings.graph_api_version}/{settings.phone_number_id}/messages",
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, json=payload,
-            )
+        response = await (client or get_whatsapp_http_client()).post(
+            f"https://graph.facebook.com/{settings.graph_api_version}/{settings.phone_number_id}/messages",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, json=payload,
+        )
         if response.is_success:
             return True
-        logger.warning("WhatsApp template '%s' rejected for %s: %s", template_name, normalized, response.text[:1000])
+        logger.warning("WhatsApp template '%s' rejected status=%s", template_name, response.status_code)
     except Exception as exc:
-        logger.warning("WhatsApp template '%s' failed for %s: %s", template_name, normalized, exc)
+        logger.warning("WhatsApp template '%s' request failed: %s", template_name, type(exc).__name__)
     return False
-
-
-def queue_bulk_message(phones: list[str], text: str, template_name: str) -> None:
-    async def runner():
-        semaphore = asyncio.Semaphore(5)
-        async def send(phone: str):
-            async with semaphore:
-                return await send_template_text(phone, text, template_name)
-        results = await asyncio.gather(*(send(phone) for phone in phones), return_exceptions=True)
-        sent = sum(result is True for result in results)
-        logger.info("WhatsApp bulk send finished: %s/%s accepted by Meta", sent, len(phones))
-    task = asyncio.create_task(runner(), name="whatsapp-bulk-send")
-    _notification_tasks.add(task)
-    task.add_done_callback(_notification_tasks.discard)
-
-
-def queue_order_notification(order: dict[str, Any], event_type: str) -> None:
-    async def runner():
-        # Let the request transaction commit before reading integration settings.
-        await asyncio.sleep(0.25)
-        await send_order_notification(order, event_type)
-
-    task = asyncio.create_task(runner(), name=f"whatsapp-order-{order.get('id', 'unknown')}")
-    _notification_tasks.add(task)
-    task.add_done_callback(_notification_tasks.discard)

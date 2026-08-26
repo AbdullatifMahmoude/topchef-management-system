@@ -62,7 +62,7 @@ def DbEnum(enum_cls, **kwargs):
             # Fallback to direct lowercase lookup if needed
             try:
                 return self.enum_cls(value.lower())
-            except:
+            except (ValueError, AttributeError):
                 return value
 
 

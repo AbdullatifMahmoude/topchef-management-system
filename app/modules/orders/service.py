@@ -14,7 +14,7 @@ from app.core.protocols import PricingServiceInterface, OfferServiceInterface, C
 from app.core.events import order_events_manager
 from app.core.enums import OrderStatus, OrderSource, OrderType, UserRole
 from app.core.business_calendar import get_current_business_date, is_weekly_holiday
-from app.modules.settings.whatsapp import queue_order_notification
+from app.modules.orders.notifications import OrderNotificationPort, OutboxOrderNotifications
 
 
 class OrderService:
@@ -23,7 +23,8 @@ class OrderService:
         db: AsyncSession, 
         redis: Optional[CacheStore] = None,
         pricing_service: Optional[PricingServiceInterface] = None,
-        offer_service: Optional[OfferServiceInterface] = None
+        offer_service: Optional[OfferServiceInterface] = None,
+        notification_service: Optional[OrderNotificationPort] = None,
     ):
         self.db = db
         self.repository = OrderRepository(db)
@@ -31,6 +32,7 @@ class OrderService:
         self.pricing_service = pricing_service or PricingService(db)
         self.offer_service = offer_service or OfferService(db, redis=redis)
         self.settings_service = SettingsService(db, redis=redis)
+        self.notifications = notification_service or OutboxOrderNotifications(db)
 
     @contextlib.asynccontextmanager
     async def _transaction_scope(self):
@@ -234,7 +236,7 @@ class OrderService:
                 "event": "order.created",
                 "data": payload_data
             })
-            queue_order_notification(payload_data, "created")
+            await self.notifications.enqueue(payload_data, "created")
             
             return order
 
@@ -311,7 +313,7 @@ class OrderService:
             "event": "order.updated",
             "data": payload_data
         })
-        queue_order_notification(payload_data, "status_changed" if status_changed else "updated")
+        await self.notifications.enqueue(payload_data, "status_changed" if status_changed else "updated")
         return completed_order
 
     async def update_order(self, order_id: int, update_data: schemas.OrderUpdateFull, current_user_id: Optional[int] = None) -> models.Order:
@@ -472,7 +474,7 @@ class OrderService:
             "event": "order.updated",
             "data": payload_data
         })
-        queue_order_notification(payload_data, "updated")
+        await self.notifications.enqueue(payload_data, "updated")
         return completed_order
 
     async def get_today_stats(self) -> dict:

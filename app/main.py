@@ -1,7 +1,7 @@
 import os
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from contextlib import asynccontextmanager
@@ -11,13 +11,14 @@ from sqlalchemy import text
 from app.core.events import order_events_manager
 from app.core.redis import redis_client
 from app.core.logging import logger
+from app.core.observability import ObservabilityMiddleware, metrics
 from app.cors import add_cors_middleware
 
 from app.modules.auth import register_auth
 from app.modules.comments import register_comments
 from app.modules.customer import register_customer
 from app.modules.infrastructure.middlewares.auth import AuthMiddleware
-from app.modules.infrastructure.middlewares.error_handler import ErrorHandlerMiddleware
+from app.modules.infrastructure.middlewares.error_handler import ErrorHandlerMiddleware, register_error_handlers
 from app.modules.menu import register_menu
 from app.modules.offer import register_offer
 from app.modules.orders import register_orders
@@ -43,67 +44,9 @@ async def lifespan(app: FastAPI):
         return
 
     logger.info(f"[STARTUP] Initializing application [PID: {pid}]")
-    try:
-        async with engine.begin() as conn:
-                # Keep deployments compatible when application code reaches a
-                # replica before the release migration command is executed.
-                # The transaction-scoped advisory lock serializes concurrent
-                # replicas, while IF NOT EXISTS keeps this safe on every boot.
-                await conn.execute(text("SELECT pg_advisory_xact_lock(8202601)"))
-                await conn.execute(text("""
-                    DO $$ BEGIN
-                        CREATE TYPE paymentmethod AS ENUM ('CASH', 'INSTAPAY', 'WALLET');
-                    EXCEPTION WHEN duplicate_object THEN NULL;
-                    END $$
-                """))
-                await conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method paymentmethod NOT NULL DEFAULT 'CASH'"))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_order_payment_method ON orders (payment_method)"))
-                await conn.execute(text("ALTER TABLE cashier_shifts ADD COLUMN IF NOT EXISTS opening_cash NUMERIC(12, 2) NOT NULL DEFAULT 0"))
-                await conn.execute(text("ALTER TABLE cashier_shifts ADD COLUMN IF NOT EXISTS cash_expenses NUMERIC(12, 2) NOT NULL DEFAULT 0"))
-                await conn.execute(text("ALTER TABLE cashier_shifts ADD COLUMN IF NOT EXISTS actual_closing_cash NUMERIC(12, 2)"))
-                await conn.execute(text("ALTER TABLE cashier_shifts ADD COLUMN IF NOT EXISTS closing_note TEXT"))
-                await conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS product_change_logs (
-                        id SERIAL PRIMARY KEY,
-                        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-                        changed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-                        change_type VARCHAR(30) NOT NULL,
-                        old_value TEXT,
-                        new_value TEXT,
-                        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
-                    )
-                """))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_product_change_logs_product_id ON product_change_logs (product_id)"))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_product_change_logs_created_at ON product_change_logs (created_at)"))
-                logger.info("[DATABASE] Payment and shift reconciliation schema verified.")
-
-                # Discovery: List all existing constraints
-                try:
-                    res = await conn.execute(text("""
-                        SELECT conname FROM pg_constraint 
-                        WHERE conrelid = 'products'::regclass
-                    """))
-                    constraints = [r[0] for r in res.all()]
-                    logger.info(f"[INFO] Current constraints on 'products': {constraints}")
-                except Exception as e_disc:
-                    logger.warning(f"Could not list constraints: {e_disc}")
-
-                # Update product constraints.
-                try:
-                    # 1. Drop the name-only unique constraint
-                    await conn.execute(text("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_product_name_key CASCADE"))
-                    await conn.execute(text("DROP INDEX IF EXISTS products_product_name_key CASCADE"))
-                    
-                    # 2. Reset the composite one
-                    await conn.execute(text("ALTER TABLE products DROP CONSTRAINT IF EXISTS uq_product_name_cat_id CASCADE"))
-                    await conn.execute(text("ALTER TABLE products ADD CONSTRAINT uq_product_name_cat_id UNIQUE (product_name, cat_id)"))
-                    
-                    logger.info("[SECURITY] Cloud DB hardening successful: Product constraints updated.")
-                except Exception as inner_e:
-                    logger.error(f"[ERROR] Failed to apply product constraint fix: {inner_e}")
-                    
-    except Exception as e:
-        logger.warning(f"Self-healing database update skipped or failed: {e}")
+    # Database schema changes are applied exclusively through Alembic before
+    # the application starts. Runtime DDL makes startup destructive and masks
+    # missing deployment migrations.
 
     # 2. Infrastructure & Cache (Cloud Only)
     logger.info("[NETWORK] Connecting to Redis/Infrastructure...")
@@ -123,6 +66,8 @@ async def lifespan(app: FastAPI):
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()
         await global_leader_manager.start()
+        from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
+        await whatsapp_outbox_worker.start()
         logger.info(f"[WORKER] Global Worker active [PID: {pid}]")
     
     logger.info(f"[SUCCESS] Application startup complete [PID: {pid}] [Role: {APP_ROLE}]")
@@ -133,10 +78,14 @@ async def lifespan(app: FastAPI):
     # --- SHUTDOWN ---
     logger.info(f"[SHUTDOWN] Shutting down application [PID: {pid}]")
     if APP_ROLE in ("worker", "all"):
+        from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
+        await whatsapp_outbox_worker.stop()
         await global_leader_manager.stop()
     if APP_ROLE in ("api", "all"):
         await order_events_manager.stop()
     await redis_client.disconnect()
+    from app.modules.settings.whatsapp import close_whatsapp_http_client
+    await close_whatsapp_http_client()
 
 
 
@@ -145,6 +94,26 @@ app = FastAPI(
     version=settings.VERSION,
     lifespan=lifespan,
 )
+register_error_handlers(app)
+
+async def collect_health(db_engine=engine, cache=redis_client) -> tuple[int, dict]:
+    try:
+        async with db_engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.error("Database health check failed: %s", exc)
+        return 503, {"status": "unhealthy", "database": "disconnected", "redis": cache.status_label}
+
+    redis_status = cache.status_label
+    if cache.redis is not None:
+        try:
+            await cache.redis.ping()
+        except Exception as exc:
+            logger.warning("Redis health check failed: %s", exc)
+            redis_status = "disconnected"
+    status = "healthy" if redis_status == "connected" else "degraded"
+    return 200, {"status": status, "database": "connected", "redis": redis_status}
+
 
 @app.get("/health")
 async def health_check():
@@ -152,25 +121,17 @@ async def health_check():
     Health check endpoint for the application.
     Used by the hosting platform to verify server readiness.
     """
-    try:
-        redis_stats = redis_client.get_stats()
-        return {
-            "status": "healthy",
-            "redis": {
-                "status": redis_client.status_label,
-                "stats": redis_stats,
-            },
-            "database": "connected",
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unhealthy", "detail": str(e)}
-        )
+    status_code, payload = await collect_health()
+    return JSONResponse(status_code=status_code, content=payload)
 
-app.add_middleware(ErrorHandlerMiddleware)
+
+@app.get("/metrics", include_in_schema=False)
+async def application_metrics():
+    return PlainTextResponse(metrics.render(), media_type="text/plain; version=0.0.4")
+
 app.add_middleware(AuthMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(ObservabilityMiddleware)
 add_cors_middleware(app)
 
 register_auth(app)

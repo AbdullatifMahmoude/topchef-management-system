@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
 class SettingBase(BaseModel):
@@ -10,8 +10,7 @@ class SettingUpdate(BaseModel):
     value_bool: bool
 
 class SettingResponse(SettingBase):
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class WhatsAppSettingsUpdate(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=2000)

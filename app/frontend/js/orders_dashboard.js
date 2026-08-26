@@ -229,12 +229,13 @@
     updateConnectionStatus("connecting");
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsToken = localStorage.getItem("token") || "";
     const wsUrl = `${protocol}//${window.location.host}/orders/ws/admin`;
     
-    socket = new WebSocket(wsUrl);
+    socket = new WebSocket(wsUrl, ["access_token", wsToken]);
 
     socket.onopen = () => {
-      console.log("WebSocket connected successfully (Admin Dashboard)");
+      console.debug("WebSocket connected successfully (Admin Dashboard)");
       updateConnectionStatus("connected");
       if (reconnectTimer) {
         clearInterval(reconnectTimer);
@@ -255,17 +256,23 @@
           return;
         }
         if (payload.type === "HEARTBEAT_ACK") return;
+        window.dispatchEvent(new CustomEvent("topchef:admin-live", { detail: payload }));
         handleSocketEvent(payload);
       } catch (err) {
         console.error("WS Message Error:", err);
       }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       updateConnectionStatus("disconnected");
       clearInterval(heartbeatTimer);
       heartbeatTimer = null;
       socket = null;
+      if (event.code === 4401 || event.code === 4403) {
+        localStorage.removeItem("token");
+        window.location.replace("index.html");
+        return;
+      }
       if (!reconnectTimer) {
         reconnectTimer = setInterval(setupWebSocket, 5000);
       }
@@ -350,7 +357,7 @@
     
     // Global order refresh completed.
     if (type === "SYNC_COMPLETE") {
-       console.log("Master sync complete, refreshing all...");
+       console.debug("Master sync complete, refreshing all...");
        loadDashboardData();
        if (typeof window.refreshProducts === "function") window.refreshProducts();
        if (typeof window.refreshCategoriesPage === "function") window.refreshCategoriesPage();

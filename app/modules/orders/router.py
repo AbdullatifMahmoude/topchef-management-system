@@ -14,9 +14,36 @@ from app.core.enums import OrderSource, OrderStatus, OrderType, UserRole
 from app.core.redis import get_redis
 from app.modules.orders.dependencies import get_order_service
 from app.core.events import order_events_manager
+from app.core.security import decode_token
+from app.core.logging import logger
+from app.modules.auth.repository import AuthRepository
 
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+
+WS_CHANNEL_ROLES = {
+    "admin": {UserRole.ADMIN.value},
+    "cashier": {UserRole.ADMIN.value, UserRole.CASHIER.value},
+    "default": {UserRole.ADMIN.value, UserRole.CASHIER.value},
+}
+
+
+def authorize_websocket_token(token: str | None, channel: str) -> dict | None:
+    if not token or channel not in WS_CHANNEL_ROLES:
+        return None
+    payload = decode_token(token)
+    if not payload or payload.get("role") not in WS_CHANNEL_ROLES[channel]:
+        return None
+    if not payload.get("user_id"):
+        return None
+    return payload
+
+
+def websocket_protocol_token(header: str | None) -> str | None:
+    protocols = [item.strip() for item in (header or "").split(",")]
+    if len(protocols) == 2 and protocols[0] == "access_token":
+        return protocols[1]
+    return None
 
 @router.post("/", response_model=schemas.OrderResponse)
 async def create_order(
@@ -257,6 +284,26 @@ async def update_order_status(
     user_id = current_user.id if current_user else None
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)
 
+@router.websocket("/ws/online")
+async def websocket_online(websocket: WebSocket):
+    """Anonymous, payload-free invalidation stream for the customer website."""
+    await websocket.accept()
+    await order_events_manager.connect(websocket, "online", already_accepted=True)
+    try:
+        while True:
+            message = await websocket.receive_text()
+            try:
+                public_payload = json.loads(message)
+            except json.JSONDecodeError:
+                continue
+            if public_payload.get("type") in {"heartbeat", "HEARTBEAT", "HEARTBEAT_ACK"}:
+                await websocket.send_json({"type": "HEARTBEAT_ACK"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await order_events_manager.disconnect(websocket, "online")
+
+
 @router.websocket("/ws")
 @router.websocket("/ws/{channel}")
 async def websocket_orders(
@@ -264,7 +311,22 @@ async def websocket_orders(
     channel: str = "default",
     service: OrderService = Depends(get_order_service),
 ):
-    await order_events_manager.connect(websocket, channel)
+
+    token = websocket_protocol_token(websocket.headers.get("sec-websocket-protocol"))
+    # Negotiate first so browsers receive the private close code instead of
+    # an opaque HTTP 403 that triggers an endless reconnect loop.
+    await websocket.accept(subprotocol="access_token")
+    payload = authorize_websocket_token(token, channel)
+    if not payload:
+        logger.warning("WebSocket authentication rejected channel=%s", channel)
+        await websocket.close(code=4401, reason="Authentication required")
+        return
+    user = await AuthRepository(service.db).get_user_by_id(payload["user_id"])
+    if not user or not user.is_active or user.role.value not in WS_CHANNEL_ROLES[channel]:
+        logger.warning("WebSocket authorization rejected channel=%s user_id=%s", channel, payload["user_id"])
+        await websocket.close(code=4403, reason="Not authorized for this channel")
+        return
+    await order_events_manager.connect(websocket, channel, already_accepted=True)
     try:
         if channel in {"cashier", "admin", "default"}:
             total, orders = await service.list_orders_paginated(page=1, page_size=500)

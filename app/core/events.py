@@ -53,6 +53,7 @@ event_bus = EventBus()
 class OrderEventsManager:
     CHANNEL_PREFIX = "topchef:orders:events"
     CLIENT_HEARTBEAT_INTERVAL_SECONDS = 25.0
+    PUBLIC_EVENT_TYPES = {"PRODUCT_UPDATED", "CATEGORY_UPDATED", "OFFER_UPDATED"}
 
     def __init__(self) -> None:
         self.active_connections: dict[str, list[WebSocket]] = {}
@@ -80,8 +81,9 @@ class OrderEventsManager:
             self._listener_task = None
         logger.info("Order events manager stopped")
 
-    async def connect(self, websocket: WebSocket, channel: str = "default"):
-        await websocket.accept()
+    async def connect(self, websocket: WebSocket, channel: str = "default", *, already_accepted: bool = False):
+        if not already_accepted:
+            await websocket.accept()
         async with self._lock:
             self.active_connections.setdefault(channel, []).append(websocket)
             self._connection_channels[websocket] = channel
@@ -117,6 +119,13 @@ class OrderEventsManager:
                 break
 
     async def broadcast(self, message: dict[str, Any], channel: str = "default"):
+        if channel == "online":
+            event_type = message.get("type")
+            if event_type not in self.PUBLIC_EVENT_TYPES:
+                return
+            # The public website only needs an invalidation signal; never send
+            # internal entity or order/customer data to anonymous clients.
+            message = {"type": event_type}
         async with self._lock:
             connections = list(self.active_connections.get(channel, []))
         payload = json.dumps(message)

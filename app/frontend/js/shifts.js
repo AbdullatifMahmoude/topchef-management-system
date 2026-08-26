@@ -29,7 +29,12 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("afterprint", () => document.body.classList.remove("printing_shift"), { once: true });
     window.print();
   });
-  startShiftsWebSocket();
+  window.addEventListener("topchef:admin-live", (event) => {
+    const payload = event.detail || {};
+    if (["SHIFT_CREATED", "SHIFT_UPDATED"].includes(payload.type) && document.getElementById("page-shifts")?.style.display !== "none") {
+      fetchShiftsReport();
+    }
+  });
 });
 
 function startShiftsAutoRefresh() {
@@ -38,25 +43,6 @@ function startShiftsAutoRefresh() {
     const page = document.getElementById("page-shifts");
     if (page && page.style.display !== "none") fetchShiftsReport();
   }, 60000);
-}
-
-function startShiftsWebSocket() {
-  if (!window.WebSocket) return;
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  let socket = null, reconnectTimer = null;
-  const connect = () => {
-    if (socket) return;
-    socket = new WebSocket(`${protocol}//${window.location.host}/orders/ws/admin`);
-    socket.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (["SHIFT_CREATED", "SHIFT_UPDATED"].includes(payload.type) && document.getElementById("page-shifts")?.style.display !== "none") fetchShiftsReport();
-      } catch (error) { console.error("Shifts WS message error:", error); }
-    };
-    socket.onclose = () => { socket = null; if (!reconnectTimer) reconnectTimer = setInterval(connect, 10000); };
-    socket.onopen = () => { if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; } };
-  };
-  connect();
 }
 
 async function fetchShiftsReport() {

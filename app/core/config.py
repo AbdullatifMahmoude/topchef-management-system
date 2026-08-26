@@ -16,6 +16,26 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
     REMOTE_API: str = "https://topchef-system.fastapicloud.dev"
     TERMINAL_ID: str = Field(default=os.getenv("TERMINAL_ID", "T1"))
+    CORS_ORIGINS: str = "http://127.0.0.1:5500,http://localhost:5500,https://topchef-dashboard.vercel.app,https://topchefeg.com,https://www.topchefeg.com"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        # Production may override CORS_ORIGINS completely. Keep the official
+        # customer-facing origins trusted even when an older environment value
+        # is still configured on the hosting provider.
+        required_origins = (
+            "https://topchefeg.com",
+            "https://www.topchefeg.com",
+        )
+        configured = (
+            origin.strip().rstrip("/")
+            for origin in self.CORS_ORIGINS.split(",")
+        )
+        return list(dict.fromkeys(
+            origin
+            for origin in (*configured, *required_origins)
+            if origin and origin != "*"
+        ))
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

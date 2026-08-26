@@ -1,6 +1,6 @@
 import unittest
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -47,8 +47,8 @@ def item(product_id, quantity, price):
 def offer(dtype, value=1, product_ids=(1,), rules=None):
     model = Offer(
         offer_id=1, code="TEST", display_name="Test", discount_type=dtype,
-        discount_value=Decimal(str(value)), valid_from=datetime.utcnow() - timedelta(days=1),
-        valid_to=datetime.utcnow() + timedelta(days=1), current_usage=0,
+            discount_value=Decimal(str(value)), valid_from=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+            valid_to=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=1), current_usage=0,
         is_active=True, is_deleted=False, rules=rules or {}, version=1,
     )
     model.products = [product(pid) for pid in product_ids]
