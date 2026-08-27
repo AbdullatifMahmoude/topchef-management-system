@@ -17,7 +17,7 @@ from app.modules.orders.dependencies import get_pricing_service
 
 # In-memory rate limiter for pricing preview (per-IP sliding window)
 _pricing_rate_limit: dict[str, list[float]] = defaultdict(list)
-_PRICING_RATE_LIMIT_MAX = 5       # max requests
+_PRICING_RATE_LIMIT_MAX = 60      # public requests per IP
 _PRICING_RATE_LIMIT_WINDOW = 60   # per window (seconds)
 
 
@@ -44,11 +44,16 @@ async def get_price_preview(
     Public endpoint to preview pricing and offers.
     Security: Includes IDOR protection to prevent phone-probing and rate limiting.
     """
-    # Rate limiting
+    user_role = getattr(current_user, "role", None) if current_user else None
+    is_staff = user_role in (UserRole.ADMIN, UserRole.CASHIER)
+
+    # The cashier UI previews automatically while an order is edited, so staff
+    # must not share the small public-IP quota. Keep a more generous limiter for
+    # anonymous and non-staff traffic to protect the public endpoint.
     client_ip = "unknown"
     if http_request:
         client_ip = http_request.client.host if http_request.client else "unknown"
-    if not _check_rate_limit(client_ip):
+    if not is_staff and not _check_rate_limit(client_ip):
         from app.core.logging import logger
         logger.warning("Rate limit exceeded for pricing preview from IP: %s", client_ip)
         return JSONResponse(
@@ -62,9 +67,6 @@ async def get_price_preview(
         # Checking the non-existent collection classified cashiers as customers,
         # so delivery previews were rejected when they contained the customer's
         # phone number.
-        user_role = getattr(current_user, "role", None)
-        is_staff = user_role in (UserRole.ADMIN, UserRole.CASHIER)
-        
         # If not staff, enforce that the requested phone matches the user's own phone
         if not is_staff and request.customer_phone:
             user_phone = getattr(current_user, 'phone', None)

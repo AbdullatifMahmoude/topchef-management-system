@@ -6,6 +6,7 @@ import pytest
 from app.core.enums import OrderSource, OrderType, UserRole
 from app.core.exceptions import ValidationError
 from app.modules.pricing.router import get_price_preview
+from app.modules.pricing import router as pricing_router
 from app.modules.pricing.schemas import PricingItem, PricingRequest, PricingResult
 from app.modules.users.schemas import UserResponse
 
@@ -45,6 +46,35 @@ async def test_cashier_can_preview_delivery_for_customer_phone():
 
     assert result.total_amount == Decimal("60")
     pricing_service.calculate_price.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cashier_preview_bypasses_public_rate_limit(monkeypatch):
+    pricing_service = AsyncMock()
+    pricing_service.calculate_price.return_value = PricingResult(
+        subtotal=Decimal("50"),
+        discount_amount=Decimal("0"),
+        delivery_fee=Decimal("10"),
+        total_amount=Decimal("60"),
+    )
+    cashier = UserResponse(
+        id=7,
+        username="cashier",
+        role=UserRole.CASHIER,
+        phone="01000000000",
+        is_active=True,
+    )
+    rate_limit_check = AsyncMock()
+    monkeypatch.setattr(pricing_router, "_check_rate_limit", rate_limit_check)
+
+    result = await get_price_preview(
+        _request("01111111111"),
+        pricing_service=pricing_service,
+        current_user=cashier,
+    )
+
+    assert result.total_amount == Decimal("60")
+    rate_limit_check.assert_not_called()
 
 
 @pytest.mark.asyncio

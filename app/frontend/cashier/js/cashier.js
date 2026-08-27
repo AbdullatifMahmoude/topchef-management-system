@@ -514,7 +514,9 @@ function pressOrderKeypad(key) {
   else if (key === ".") {
     if (!value.includes(".")) value = value ? `${value}.` : "0.";
   } else if (/^\d+$/.test(key)) {
-    value = value === "0" ? key : value + key;
+    // Preserve explicitly entered leading zeroes. This is essential when the
+    // shared keypad targets a phone number (for example, 01xxxxxxxxx).
+    value += key;
   }
   if (input.maxLength > 0) value = value.slice(0, input.maxLength);
   input.value = value;
