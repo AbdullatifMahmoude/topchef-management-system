@@ -167,7 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
       { label: "الخصومات", value: Number(summary.total_discount || 0), color: "#eb6a67" },
       { label: "رسوم التوصيل", value: Number(summary.total_delivery_fee || 0), color: "#9b7de3" },
       { label: "المصروفات", value: Number(summary.total_expenses || 0), color: "#ef8a75" },
-      { label: "صافي الربح", value: netProfit, color: netProfit < 0 ? "#ef6f6c" : "#58cf91" },
+      { label: "الصافي بعد المصروفات", value: netProfit, color: netProfit < 0 ? "#ef6f6c" : "#58cf91" },
     ], money);
     renderTable(orders, summary, Number(data.orders_offset || 0), Number(data.orders_limit || pageSize));
     renderExpenses(data.expenses, summary);

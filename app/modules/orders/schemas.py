@@ -8,7 +8,7 @@ from app.modules.customer.schemas import CustomerAddressResponse
 class OrderItemBase(BaseModel):
     product_id: int
     quantity: int = Field(default=1, ge=1)
-    unit_price: Decimal
+    unit_price: Decimal = Field(ge=0, max_digits=10, decimal_places=2)
 
 class OrderItemCreate(OrderItemBase):
     pass
@@ -45,7 +45,7 @@ class OrderCreate(OrderBase):
     delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
     offer_code: Optional[str] = None
     manual_discount_type: Optional[DiscountType] = None
-    manual_discount_value: Optional[Decimal] = None
+    manual_discount_value: Optional[Decimal] = Field(default=None, gt=0)
     discount_reason: Optional[str] = None
     order_number: Optional[str] = None
     order_date: Optional[date] = None
@@ -56,6 +56,16 @@ class OrderCreate(OrderBase):
         if v == 0:
             return None
         return v
+
+    @model_validator(mode='after')
+    def validate_discount_rules(self):
+        if (self.manual_discount_type is None) != (self.manual_discount_value is None):
+            raise ValueError("Manual discount type and value must be provided together")
+        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value > Decimal("100"):
+            raise ValueError("Manual percentage discount cannot exceed 100%")
+        if self.offer_code and self.manual_discount_type:
+            raise ValueError("An offer and a manual discount cannot be combined")
+        return self
 
 class OrderUpdate(BaseModel):
     order_status: Optional[OrderStatus] = None
@@ -83,7 +93,7 @@ class OrderUpdateFull(BaseModel):
     delivery_fee: Optional[Decimal] = None
     items: Optional[List[OrderItemCreate]] = None
     manual_discount_type: Optional[DiscountType] = None
-    manual_discount_value: Optional[Decimal] = None
+    manual_discount_value: Optional[Decimal] = Field(default=None, gt=0)
     discount_reason: Optional[str] = None
     payment_method: Optional[PaymentMethod] = None
 
@@ -93,6 +103,12 @@ class OrderUpdateFull(BaseModel):
         if v == 0:
             return None
         return v
+
+    @model_validator(mode='after')
+    def validate_percentage_discount(self):
+        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value is not None and self.manual_discount_value > Decimal("100"):
+            raise ValueError("Manual percentage discount cannot exceed 100%")
+        return self
 
 class OrderResponse(OrderBase):
     model_config = ConfigDict(from_attributes=True)

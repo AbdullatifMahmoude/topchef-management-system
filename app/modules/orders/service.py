@@ -61,6 +61,17 @@ class OrderService:
             product = products_by_id[item.product_id]
             if not product.is_available:
                 raise ValidationError(f"'{product.product_name}' is currently unavailable")
+            if not product.category or not product.category.is_active or product.category.is_deleted:
+                raise ValidationError(f"Category for '{product.product_name}' is currently unavailable")
+
+            requested_price = Decimal(str(item.unit_price)).quantize(Decimal("0.01"))
+            allowed_prices = {
+                Decimal(str(variant.price)).quantize(Decimal("0.01"))
+                for variant in product.variants
+                if not variant.is_deleted
+            }
+            if requested_price not in allowed_prices:
+                raise ValidationError(f"Invalid price for '{product.product_name}'")
 
     async def create_order(self, order_data: schemas.OrderCreate, current_user_id: Optional[int] = None) -> models.Order:
         import asyncio as _asyncio
@@ -400,6 +411,8 @@ class OrderService:
                 needs_reprice = True
             
             if needs_reprice:
+                applied_offer = order.applied_offer
+                existing_offer_code = applied_offer["code"] if applied_offer else None
                 if update_data.items is not None:
                     await self._validate_order_items(update_data.items)
                     pricing_items = [PricingItem(product_id=it.product_id, quantity=it.quantity, unit_price=it.unit_price) for it in update_data.items]
@@ -412,7 +425,8 @@ class OrderService:
 
                 pricing_req = PricingRequest(
                     items=pricing_items, order_type=order.order_type, delivery_fee=order.delivery_fee, 
-                    offer_code=None, customer_phone=order.customer_phone, cashier_id=current_user_id,
+                    offer_code=existing_offer_code, customer_phone=order.customer_phone, cashier_id=current_user_id,
+                    redeemed_order_id=order.id if existing_offer_code else None,
                     manual_discount_type=disc_type,
                     manual_discount_value=disc_value
                 )

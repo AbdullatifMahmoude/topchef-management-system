@@ -6,7 +6,7 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.modules.offer.repository import OfferRepository
 from app.modules.offer.schemas import OfferCreate, OfferUpdate, OfferResponse, ApplyOfferResponse, OfferAnalyticsResponse, OfferUsageActivity
 from typing import List, Optional
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from app.core.enums import DiscountType
 from app.core.logging import logger
 from sqlalchemy import select
@@ -61,7 +61,8 @@ class OfferService:
                 data = json.loads(cached)
                 offer = OfferResponse(**data)
                 # TTL check against logical expiration
-                if offer.is_active and offer.valid_to < datetime.utcnow():
+                cairo_now = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+                if offer.is_active and offer.valid_to < cairo_now:
                     return None
                 return offer
         except Exception as e:
@@ -112,6 +113,9 @@ class OfferService:
                 raise ValidationError("حدد أصناف الشراء وأصناف الهدية")
             if int(rules.get("buy_quantity", 0)) <= 0 or int(rules.get("get_quantity", 0)) <= 0:
                 raise ValidationError("كميات اشترِ X وخذ Y يجب أن تكون أكبر من صفر")
+            reward_percent = Decimal(str(rules.get("reward_percent", 100)))
+            if reward_percent <= 0 or reward_percent > 100:
+                raise ValidationError("نسبة خصم الهدية يجب أن تكون بين 1% و100%")
         elif dtype == DiscountType.QUANTITY_DISCOUNT:
             if int(rules.get("quantity_required", 0)) <= 0:
                 raise ValidationError("حدد الكمية المطلوبة لتفعيل الخصم")
@@ -199,7 +203,7 @@ class OfferService:
         start_utc = start_local.astimezone(timezone.utc).replace(tzinfo=None)
         end_utc = (start_local + timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
         offers = await self.repository.list_offers(only_active=False)
-        now = datetime.utcnow()
+        now = datetime.now(egypt_tz).replace(tzinfo=None)
         active_now = sum(1 for offer in offers if offer.is_active and offer.valid_from <= now <= offer.valid_to and not offer.is_usage_limit_reached())
         scheduled = sum(1 for offer in offers if offer.is_active and offer.valid_from > now)
         stopped_or_ended = len(offers) - active_now - scheduled
@@ -323,7 +327,8 @@ class OfferService:
 
     async def apply_offer(self, code: str, subtotal: Decimal, items: List = None, 
                           customer_phone: str = None, cashier_id: int = None,
-                          commit_usage: bool = False, order_id: int = None) -> ApplyOfferResponse:
+                          commit_usage: bool = False, order_id: int = None,
+                          existing_order_id: int = None) -> ApplyOfferResponse:
         """
         Production-ready offer application logic:
         - Validates timing (start/end) and status.
@@ -339,24 +344,34 @@ class OfferService:
             if not offer:
                 logger.warning(f"ApplyOffer failure: Invalid code '{code}'")
                 raise ValidationError(f"Invalid offer code: {code}")
+
+            existing_redemption = False
+            if existing_order_id:
+                from app.modules.offer.models import OfferUsage
+                existing_redemption = bool(await self.db.scalar(select(OfferUsage.usage_id).where(
+                    OfferUsage.offer_id == offer.offer_id,
+                    OfferUsage.order_id == existing_order_id,
+                )))
             
             # --- 1. Timing & Status ---
-            if commit_usage:
+            if existing_redemption:
+                pass
+            elif commit_usage:
                 offer.deactivate_if_expired()
                 offer.deactivate_if_usage_full()
             else:
                 if offer.is_expired() or offer.is_usage_limit_reached():
                     raise ValidationError("Offer is no longer active or has expired")
             
-            if not offer.is_active:
+            if not existing_redemption and not offer.is_active:
                 raise ValidationError("Offer is no longer active or has expired")
             
-            if not offer.is_started():
+            if not existing_redemption and not offer.is_started():
                 startTime = offer.valid_from.strftime('%Y-%m-%d %H:%M')
                 raise ValidationError(f"Offer is not yet valid. Starts at {startTime}")
 
             # --- 2. Global Usage Check ---
-            if offer.is_usage_limit_reached():
+            if not existing_redemption and offer.is_usage_limit_reached():
                 if commit_usage:
                     offer.is_active = False # Safe-guard deactivation
                 raise ValidationError("Offer global usage limit reached")
@@ -365,9 +380,9 @@ class OfferService:
             # A personal limit is meaningful only with a stable customer
             # identity, regardless of whether the order is online or cashier.
             has_customer_identity = bool(customer_phone and len(customer_phone) == 11)
-            if offer.usage_per_user and not has_customer_identity:
+            if not existing_redemption and offer.usage_per_user and not has_customer_identity:
                 raise ValidationError("يجب إدخال رقم هاتف العميل الصحيح لاستخدام هذا العرض")
-            enforce_customer_limit = bool(offer.usage_per_user and has_customer_identity)
+            enforce_customer_limit = bool(not existing_redemption and offer.usage_per_user and has_customer_identity)
             if enforce_customer_limit:
                 identity_count = await self.repository.get_customer_usage_count(
                     offer.offer_id, customer_phone=customer_phone
@@ -502,7 +517,8 @@ class OfferService:
                     return time(int(hours), int(minutes))
                 # Happy-hour windows follow the normal wall clock; they are not
                 # shifted by the restaurant's business-day/shift cutoff.
-                now_time = datetime.now().time().replace(second=0, microsecond=0)
+                cairo_tz = timezone(timedelta(hours=3))
+                now_time = datetime.now(cairo_tz).time().replace(second=0, microsecond=0, tzinfo=None)
                 start_time = parse_offer_time(rules["start_time"])
                 end_time = parse_offer_time(rules["end_time"])
                 in_window = start_time <= now_time <= end_time if start_time <= end_time else (now_time >= start_time or now_time <= end_time)
@@ -516,7 +532,7 @@ class OfferService:
                 calculated_discount = min(calculated_discount, max_bound)
             
             # Absolute Floor: Can't discount more than the subtotal
-            discount_amount = min(calculated_discount, eligible_subtotal, subtotal).quantize(Decimal("0.00"))
+            discount_amount = min(calculated_discount, eligible_subtotal, subtotal).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             
             # --- 7. Atomic usage tracking ---
             if commit_usage:

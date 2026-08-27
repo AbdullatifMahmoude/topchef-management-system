@@ -6,8 +6,16 @@ from typing import List, Dict, Any, Optional
 
 from app.modules.shifts.models import CashierShift, ShiftExpense
 from app.modules.orders.models import Order
-from app.core.enums import OrderStatus, PaymentMethod
+from app.core.enums import OrderStatus, PaymentMethod, OrderType
 from app.core.logging import logger
+
+
+def restaurant_sales_amount(order):
+    """Restaurant revenue keeps hall service, but excludes rider-owned delivery fees."""
+    total = order.total_amount or 0
+    if order.order_type == OrderType.DELIVERY:
+        return total - (order.delivery_fee or 0)
+    return total
 
 def get_business_date() -> date:
     # Business shift starts at 5am (UTC+3)
@@ -143,12 +151,15 @@ class ShiftsService:
             ]
             successful = [order for order in shift_orders if order.order_status != OrderStatus.CANCELLED]
             cancelled_count = len(shift_orders) - len(successful)
-            total_sales = sum((order.total_amount or 0) - (order.delivery_fee or 0) for order in successful)
+            total_sales = sum(restaurant_sales_amount(order) for order in successful)
             total_discount = sum((order.discount_amount or 0) for order in successful)
-            total_delivery_fee = sum((order.delivery_fee or 0) for order in successful)
+            total_delivery_fee = sum(
+                (order.delivery_fee or 0) for order in successful
+                if order.order_type == OrderType.DELIVERY
+            )
             payment_sales = {
                 method.value: sum(
-                    (order.total_amount or 0)
+                    restaurant_sales_amount(order)
                     for order in successful
                     if order.payment_method == method
                 )

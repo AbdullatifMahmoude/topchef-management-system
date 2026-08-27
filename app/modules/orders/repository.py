@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -286,7 +286,10 @@ class OrderRepository:
             func.count(models.Order.id).label("total_count"),
             # Dashboard sales use the same net-sales definition as reports and
             # cashier shifts: delivery fees are excluded.
-            func.sum(models.Order.total_amount - models.Order.delivery_fee).filter(
+            func.sum(
+                models.Order.total_amount
+                - case((models.Order.order_type == OrderType.DELIVERY, models.Order.delivery_fee), else_=0)
+            ).filter(
                 models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.NEW, OrderStatus.CONFIRMED, OrderStatus.OUT_FOR_DELIVERY])
             ).label("total_sales"),
             func.count(models.Order.id).filter(models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED])).label("completed_count"),
@@ -316,7 +319,10 @@ class OrderRepository:
         comparison_start = datetime.combine(comparison_date, datetime.min.time()).replace(hour=5)
         comparison_cutoff = comparison_start + min(elapsed, timedelta(days=1))
         yesterday_sales_query = select(
-            func.sum(models.Order.total_amount - models.Order.delivery_fee)
+            func.sum(
+                models.Order.total_amount
+                - case((models.Order.order_type == OrderType.DELIVERY, models.Order.delivery_fee), else_=0)
+            )
         ).where(
             models.Order.order_date == comparison_date,
             models.Order.created_at >= comparison_start,

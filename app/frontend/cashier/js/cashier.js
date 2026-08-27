@@ -754,7 +754,7 @@ function filterLocalProducts(term) {
   renderItems();
 }
 
-function confirmOrder() {
+async function confirmOrder() {
   if (cart.length === 0) return;
 
   if (!orderType) {
@@ -783,14 +783,51 @@ function confirmOrder() {
   else if (orderType === "dine_in" && hasFeeValue(selectedDineInFee))
     fee = selectedDineInFee;
 
-  const grandTotal = itemsTotal + fee;
+  const pricingItems = cart.map((entry) => {
+    const rawId = String(entry.item.id);
+    return {
+      product_id: parseInt(rawId.includes("_") ? rawId.split("_")[0] : rawId, 10),
+      quantity: entry.qty,
+      unit_price: entry.item.price,
+    };
+  });
+  const mappedOrderType = orderType === "delivery" ? "delivery" : orderType === "takeaway" ? "takeaway" : "hall";
+  const discountType = document.getElementById("discount_type")?.value || null;
+  const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
+  let pricing;
+  try {
+    const pricingResponse = await apiFetch("/pricing/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        items: pricingItems,
+        order_type: mappedOrderType,
+        source: "cashier",
+        delivery_fee: fee,
+        offer_code: selectedOfferCode,
+        customer_phone: deliveryCustomerInfo.phone || null,
+        cashier_id: parseInt(localStorage.getItem("user_id"), 10) || null,
+        manual_discount_type: selectedOfferCode ? null : discountType,
+        manual_discount_value: selectedOfferCode ? null : discountValue,
+      }),
+    });
+    if (!pricingResponse.ok) {
+      const detail = await pricingResponse.json().catch(() => ({}));
+      throw new Error(typeof detail.detail === "string" ? detail.detail : "تعذر حساب إجمالي الطلب");
+    }
+    pricing = await pricingResponse.json();
+  } catch (error) {
+    showToast(error.message || "تعذر حساب إجمالي الطلب", "error");
+    return;
+  }
+
+  const grandTotal = Number(pricing.total_amount || 0);
 
   const orderData = {
     cart,
     orderType,
     selectedDelivery,
     selectedDeliveryFee,
-    itemsTotal,
+    itemsTotal: Number(pricing.subtotal || itemsTotal),
     grandTotal,
     customerPhone: deliveryCustomerInfo.phone || null,
     customerName: deliveryCustomerInfo.name || null,
@@ -1425,7 +1462,7 @@ async function updatePricingPreview() {
       if (res.ok) {
         const data = await res.json();
         const totalEl = document.getElementById("total_price");
-        if (totalEl && data.total_amount) {
+        if (totalEl && data.total_amount != null) {
           totalEl.textContent =
             parseFloat(data.total_amount).toFixed(2) + " ج.م";
           // يمكننا مستقبلاً عرض الخصم والـ subtotal هنا
@@ -3812,28 +3849,28 @@ async function logout() {
   const headers = token ? { Authorization: "Bearer " + token } : {};
 
   try {
-    // محاوله إبلاغ السيرفر بتسجيل الخروج لإبطال التوكن
-    await fetch(`${API_BASE}/auth/logout`, {
+    // تسجيل الخروج هو الذي يقفل الشيفت على السيرفر؛ لا نمسح الجلسة محليًا إذا فشل.
+    const response = await fetch(`${API_BASE}/auth/logout`, {
       method: "POST",
       headers: {
         ...headers,
         "Content-Type": "application/json",
       },
     });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (err) {
     console.warn("Logout API error:", err);
-  } finally {
-    // في كل الأحوال، مسح البيانات المحلية والتحويل لصفحة الدخول
-    localStorage.removeItem("token");
-    localStorage.removeItem("token_type");
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("username");
-    localStorage.removeItem("role");
-    localStorage.removeItem("user");
-
-    // التحويل لصفحة الدخول الرئيسية
-    window.location.replace("../index.html");
+    showToast("تعذر إغلاق الشيفت. تأكد من الاتصال وحاول تسجيل الخروج مرة أخرى", "error");
+    return;
   }
+
+  localStorage.removeItem("token");
+  localStorage.removeItem("token_type");
+  localStorage.removeItem("user_id");
+  localStorage.removeItem("username");
+  localStorage.removeItem("role");
+  localStorage.removeItem("user");
+  window.location.replace("../index.html");
 }
 
 // ===================================================

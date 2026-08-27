@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SA_Enum, Numeric, ForeignKey, Index, Table, JSON
 from sqlalchemy.orm import relationship
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, timezone
 from app.core.database import Base, DbEnum
 from app.core.enums import DiscountType
 
@@ -53,10 +53,10 @@ class Offer(Base):
         return [product.id for product in self.products]
 
     def is_started(self):
-        return datetime.now(UTC).replace(tzinfo=None) >= self.valid_from
+        return datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None) >= self.valid_from
 
     def is_expired(self):
-        return datetime.now(UTC).replace(tzinfo=None) > self.valid_to
+        return datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None) > self.valid_to
 
     def is_usage_limit_reached(self) -> bool:
         return self.usage_limit is not None and int(self.current_usage or 0) >= self.usage_limit

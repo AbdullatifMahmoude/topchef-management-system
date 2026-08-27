@@ -4,8 +4,8 @@ from sqlalchemy import select, func, case, cast, Integer
 from datetime import date, timedelta, datetime, timezone
 from app.modules.orders.models import Order, OrderItem
 from app.modules.menu.models import Product
-from app.core.enums import OrderStatus
-from decimal import Decimal
+from app.core.enums import OrderStatus, OrderType
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List
 from . import schemas
 
@@ -29,6 +29,7 @@ def get_business_date() -> date:
 # الإحصائيات الإجمالية (query سريع بدون تحميل العلاقات)
 # ─────────────────────────────────────────────────────────
 async def get_report_summary(db: AsyncSession, start_date: date, end_date: date) -> schemas.ReportSummary:
+    delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     stmt = select(
         func.count(Order.id).label('total_orders'),
         func.sum(case((Order.order_status == OrderStatus.CANCELLED, 1), else_=0)).label('cancelled_orders'),
@@ -37,13 +38,17 @@ async def get_report_summary(db: AsyncSession, start_date: date, end_date: date)
         # restaurant sales and must not inflate report revenue or averages.
         func.sum(
             case(
-                (Order.order_status != OrderStatus.CANCELLED, Order.total_amount - Order.delivery_fee),
+                (Order.order_status != OrderStatus.CANCELLED, Order.total_amount - delivery_fee_only),
                 else_=0,
             )
         ).label('total_revenue'),
         func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.subtotal), else_=0)).label('total_subtotal'),
         func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.discount_amount), else_=0)).label('total_discount'),
-        func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.delivery_fee), else_=0)).label('total_delivery_fee'),
+        func.sum(case(
+            (Order.order_status != OrderStatus.CANCELLED,
+             case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)),
+            else_=0,
+        )).label('total_delivery_fee'),
     ).filter(
         Order.order_date >= start_date,
         Order.order_date <= end_date
@@ -95,11 +100,12 @@ def normalize_order_type(value) -> str:
 async def get_report_orders(
     db: AsyncSession, start_date: date, end_date: date, limit: int = 50, offset: int = 0
 ) -> List[schemas.OrderReportItem]:
+    delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     stmt = (
         select(
             Order.order_number,
             Order.order_type,
-            (Order.total_amount - Order.delivery_fee).label("total_amount"),
+            (Order.total_amount - delivery_fee_only).label("total_amount"),
             Order.order_date,
             Order.created_at,
             Order.order_status,
@@ -173,17 +179,18 @@ async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: da
         schemas.TopSellingItem(
             name=row.name,
             quantity=row.quantity or 0,
-            revenue=(row.revenue or Decimal("0.00")).quantize(Decimal("0.01")),
+            revenue=(row.revenue or Decimal("0.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
         )
         for row in rows
     ]
 
 
 async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date) -> List[schemas.RevenueTrendPoint]:
+    delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     stmt = (
         select(
             Order.order_date.label("period_date"),
-            func.sum(Order.total_amount - Order.delivery_fee).label("revenue"),
+            func.sum(Order.total_amount - delivery_fee_only).label("revenue"),
         )
         .filter(
             Order.order_date >= start_date,

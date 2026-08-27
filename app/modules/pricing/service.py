@@ -7,6 +7,7 @@ from app.modules.offer.service import OfferService
 from app.modules.pricing.domain import FinancialSnapshot
 
 from app.core.protocols import OfferServiceInterface
+from app.core.exceptions import ValidationError
 
 class PricingService:
     def __init__(self, db: AsyncSession, offer_service: Optional[OfferServiceInterface] = None):
@@ -31,10 +32,13 @@ class PricingService:
                 request.items,
                 request.customer_phone,
                 request.cashier_id,
-                commit_usage=False # This is a price calculation preview
+                commit_usage=False, # This is a price calculation preview
+                existing_order_id=request.redeemed_order_id,
             )
             discount_amount = offer_response.discount_amount
             waive_delivery_fee = offer_response.waive_delivery_fee
+            if waive_delivery_fee and request.order_type != OrderType.DELIVERY:
+                raise ValidationError("عرض التوصيل المجاني متاح لطلبات الدليفري فقط")
 
         # 2b. Apply manual discount if present (cashier-entered)
         if request.manual_discount_type and request.manual_discount_value and request.manual_discount_value > 0:
