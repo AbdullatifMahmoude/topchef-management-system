@@ -3293,13 +3293,11 @@ function renderAllOrders() {
     return oNum.includes(term) || phone.includes(term) || name.includes(term);
   });
 
-  const validOrders = allOrdersList.filter((order) => order.order_status !== "cancelled");
   const completedOrders = allOrdersList.filter((order) => ["completed", "delivered"].includes(order.order_status));
   const kpis = {
     allOrdersTotalKpi: allOrdersList.length.toLocaleString("ar-EG"),
     allOrdersDeliveryKpi: allOrdersList.filter((order) => order.order_type === "delivery").length.toLocaleString("ar-EG"),
     allOrdersCompletedKpi: completedOrders.length.toLocaleString("ar-EG"),
-    allOrdersValueKpi: `${validOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`,
   };
   Object.entries(kpis).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.textContent = value; });
   const resultCount = document.getElementById("allOrdersResultCount");
