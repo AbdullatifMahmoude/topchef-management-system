@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from app.core.exceptions import ValidationError
+from app.core.enums import UserRole
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.modules.pricing import schemas, service
@@ -57,8 +58,12 @@ async def get_price_preview(
 
     # IDOR Protection: If user is logged in, they must probe their own phone or be staff
     if current_user:
-        # Check if user is staff (admin or cashier)
-        is_staff = any(role.name.lower() in ["admin", "cashier"] for role in getattr(current_user, 'roles', []))
+        # UserResponse exposes one `role` field (not a `roles` collection).
+        # Checking the non-existent collection classified cashiers as customers,
+        # so delivery previews were rejected when they contained the customer's
+        # phone number.
+        user_role = getattr(current_user, "role", None)
+        is_staff = user_role in (UserRole.ADMIN, UserRole.CASHIER)
         
         # If not staff, enforce that the requested phone matches the user's own phone
         if not is_staff and request.customer_phone:
