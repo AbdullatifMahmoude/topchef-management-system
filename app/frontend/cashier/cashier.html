@@ -91,15 +91,69 @@
         </section>
       </div>
 
-      <!-- === Cart === -->
-      <div class="total_container">
-        <!-- مودال الدليفري - داخل الكارت -->
+      <!-- === Order setup screen === -->
+      <aside class="order_setup_panel" id="order_setup_panel" aria-label="إعداد الطلب">
+        <!-- اختيارات رسوم الصالة والدليفري تظهر داخل شاشة الإعداد -->
         <div
           id="delivery_modal_container"
           class="delivery_modal_container"
           style="display: none"
         ></div>
 
+        <header class="order_setup_header">
+          <div><span>الخطوة الثانية</span><h2>إعداد الطلب</h2><p>حدد نوع الطلب والدفع وأي خصم إضافي</p></div>
+          <button type="button" class="order_setup_close" onclick="toggleOrderSetup(false)" aria-label="إغلاق إعدادات الطلب">×</button>
+        </header>
+
+        <div class="order_setup_body">
+          <section class="order_setup_section payment_method_picker" aria-label="طريقة الدفع">
+            <div class="order_setup_section_title"><span>طريقة الدفع</span><small>اختر وسيلة التحصيل</small></div>
+            <div>
+              <button type="button" class="payment_method_btn active" data-payment-method="cash">نقدي</button>
+              <button type="button" class="payment_method_btn" data-payment-method="instapay">InstaPay</button>
+              <button type="button" class="payment_method_btn" data-payment-method="wallet">محفظة</button>
+            </div>
+          </section>
+
+          <section class="order_setup_section">
+            <div class="order_setup_section_title"><span>نوع الطلب</span><small>اختر طريقة الاستلام</small></div>
+            <div id="order_type_btns" class="order_type_btns"></div>
+            <div id="order_type_badge" class="order_type_badge" style="display:none"></div>
+          </section>
+
+          <!-- بيانات العميل تظهر هنا عند اختيار الدليفري -->
+          <div id="delivery_customer_form" style="display:none"></div>
+
+          <section id="discount_form" class="order_setup_section">
+            <div class="order_setup_section_title"><span>خصم إضافي</span><small>اختياري</small></div>
+            <div class="delivery_customer_card discount_card">
+              <div class="discount_fields">
+                <label><span>نوع الخصم</span><select id="discount_type" class="dcf_select" onchange="updatePricingPreview()">
+                  <option value="">بدون خصم</option>
+                  <option value="fixed">مبلغ ثابت</option>
+                  <option value="percentage">نسبة مئوية (%)</option>
+                </select></label>
+                <label><span>قيمة الخصم</span><input type="text" inputmode="decimal" id="discount_value" class="dcf_input touch_numeric_input" placeholder="0.00" oninput="updatePricingPreview(); syncOrderKeypadDisplay()" onfocus="setOrderKeypadTarget(this)"></label>
+              </div>
+              <label class="discount_reason_field"><span>السبب (اختياري)</span><input type="text" id="discount_reason" class="dcf_input" placeholder="مثال: عميل دائم"></label>
+            </div>
+          </section>
+
+          <section class="order_touch_keypad" id="orderTouchKeypad" aria-label="لوحة أرقام للإدخال">
+            <div class="order_keypad_display"><span id="orderKeypadLabel">قيمة الخصم</span><strong id="orderKeypadDisplay">0.00</strong></div>
+            <div class="order_keypad_keys">
+              <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+              <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
+              <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+              <button type="button" class="keypad_clear" data-key="clear">مسح</button><button type="button" data-key="0">0</button><button type="button" id="orderKeypadDecimal" data-key=".">.</button>
+              <button type="button" class="keypad_backspace" data-key="backspace">⌫ تراجع</button>
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <!-- === Cart === -->
+      <div class="total_container">
         <div class="total_header">
           <h1>الطلب الحالي</h1>
         </div>
@@ -124,52 +178,12 @@
           </div>
         </div>
 
-        <!-- فورم بيانات عميل الديليفري -->
-        <div id="delivery_customer_form" style="display:none"></div>
-
-        <!-- Discount Section -->
-        <!-- Discount Section -->
-        <div id="discount_form" style="border-top: 1px solid rgba(201, 168, 76, 0.3); padding: 12px 14px; flex-shrink: 0; margin-bottom: 8px;">
-          <div class="dcf_title" style="margin-bottom: 8px;">
-            <i class="fa-solid fa-tags"></i>
-            <span>خصم إضافي</span>
-          </div>
-          <div class="delivery_customer_card discount_card">
-            <div class="discount_fields">
-              <label><span>نوع الخصم</span><select id="discount_type" class="dcf_select" onchange="updatePricingPreview()">
-                <option value="">بدون خصم</option>
-                <option value="fixed">مبلغ ثابت</option>
-                <option value="percentage">نسبة مئوية (%)</option>
-              </select></label>
-              <label><span>قيمة الخصم</span><input type="number" id="discount_value" class="dcf_input" placeholder="0.00" min="0" step="0.01" oninput="updatePricingPreview()"></label>
-            </div>
-            <label class="discount_reason_field"><span>السبب (اختياري)</span><input type="text" id="discount_reason" class="dcf_input" placeholder="مثال: عميل دائم"></label>
-          </div>
-        </div>
-
         <div class="total_footer">
-          <!-- Badge نوع الطلب -->
-          <div
-            id="order_type_badge"
-            class="order_type_badge"
-            style="display: none"
-          ></div>
-
-          <!-- زراير نوع الطلب -->
-          <div id="order_type_btns" class="order_type_btns"></div>
-
           <div class="total_sum">
             <h1>الإجمالي</h1>
             <h2 id="total_price">0 ج.م</h2>
           </div>
-          <div class="payment_method_picker" aria-label="طريقة الدفع">
-            <span>طريقة الدفع</span>
-            <div>
-              <button type="button" class="payment_method_btn active" data-payment-method="cash">نقدي</button>
-              <button type="button" class="payment_method_btn" data-payment-method="instapay">InstaPay</button>
-              <button type="button" class="payment_method_btn" data-payment-method="wallet">محفظة</button>
-            </div>
-          </div>
+          <button type="button" class="open_order_setup_btn" onclick="toggleOrderSetup()"><span>⚙</span><span>إعداد الطلب</span><small id="orderSetupSummary">حدد النوع والدفع</small></button>
           <div class="footer_btns">
             <button class="btn_confirm" onclick="confirmOrder()">
               تأكيد الطلب
