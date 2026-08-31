@@ -9,6 +9,7 @@ from app.modules.offer.service import OfferService
 from app.core.exceptions import ValidationError, NotFoundError
 import contextlib
 from decimal import Decimal
+from sqlalchemy.exc import IntegrityError
 
 from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore
 from app.core.events import order_events_manager
@@ -140,15 +141,22 @@ class OrderService:
                 except NotFoundError:
                     # Phone not found — create new customer
                     try:
-                        new_cust = await customer_service.create_customer(CustomerCreate(
-                            name=order_data.customer_name,
-                            phone_number=order_data.customer_phone
-                        ))
+                        # Isolate the insert so a concurrent duplicate does not
+                        # invalidate the transaction used to create the order.
+                        async with self.db.begin_nested():
+                            new_cust = await customer_service.create_customer(CustomerCreate(
+                                name=order_data.customer_name,
+                                phone_number=order_data.customer_phone
+                            ))
                         order_data.customer_id = new_cust.id
-                    except (ValidationError, Exception):
+                    except (ValidationError, IntegrityError) as create_error:
                         # Race condition: phone was created between lookup and create
-                        # Fall back to lookup again
-                        fallback = await customer_service.get_customer_by_phone(order_data.customer_phone)
+                        # Fall back to lookup again. If no matching customer exists,
+                        # the failure was unrelated (for example a bad PK sequence),
+                        # so preserve the original error.
+                        fallback = await customer_service.repository.get_by_phone(order_data.customer_phone)
+                        if not fallback:
+                            raise create_error
                         order_data.customer_id = fallback.id
                 
                 if getattr(order_data, 'customer_address', None):

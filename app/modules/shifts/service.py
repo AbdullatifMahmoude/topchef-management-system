@@ -108,6 +108,7 @@ class ShiftsService:
             Order.delivery_fee,
             Order.discount_amount,
             Order.payment_method,
+            Order.order_type,
         ).where(
             Order.created_at >= start_local,
             Order.created_at < end_local,
