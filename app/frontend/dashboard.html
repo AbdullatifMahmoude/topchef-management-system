@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260822-advanced-offers" />
+  <link rel="stylesheet" href="css/admin.css?v=20260901-home-kpi-alignment" />
 </head>
 
 <body>
@@ -61,7 +61,7 @@
           <article class="ops_kpi ops_kpi_expense"><span>مصروفات اليوم</span><strong id="ops_total_expenses">0 ج.م</strong><small>مسجلة من الكاشير</small></article>
           <article class="ops_kpi"><span>إجمالي الطلبات</span><strong id="stat_total_orders">0</strong><small id="ops_orders_mix">لا توجد طلبات بعد</small></article>
           <article class="ops_kpi"><span>متوسط قيمة الطلب</span><strong id="ops_average_order">0 ج.م</strong><small>للطلب غير الملغي</small></article>
-          <article class="ops_kpi"><span>معدل نجاح الطلبات</span><strong id="ops_success_rate">0%</strong><small id="ops_cancel_summary">0 طلب ملغي</small></article>
+          <article class="ops_kpi"><span>معدل نجاح الطلبات</span><strong id="ops_success_rate" class="percentage_value"><b class="percentage_symbol">%</b><b class="percentage_number">0</b></strong><small id="ops_cancel_summary">0 طلب ملغي</small></article>
         </div>
 
         <div class="ops_grid">
@@ -481,7 +481,7 @@
           <div class="report_kpi report_kpi_expense"><span>المصروفات</span><strong id="total_expenses_value">0 ج.م</strong></div>
           <div class="report_kpi"><span>إجمالي الطلبات</span><strong id="total_orders_value">0</strong></div>
           <div class="report_kpi"><span>متوسط الطلب</span><strong id="average_order_value">0 ج.م</strong></div>
-          <div class="report_kpi"><span>نسبة الإتمام</span><strong id="completion_rate_value">0%</strong></div>
+          <div class="report_kpi"><span>نسبة الإتمام</span><strong id="completion_rate_value" class="percentage_value"><b class="percentage_symbol">%</b><b class="percentage_number">0</b></strong></div>
         </div>
 
         <div class="reports_charts_grid">
@@ -836,8 +836,8 @@
     <script src="js/shifts.js?v=20260825-shared-live"></script>
     <script src="js/settings.js?v=20260825-whatsapp-settings"></script>
 
-    <script src="js/chart.js?v=20260822-negative-profit"></script>
-    <script src="js/orders_dashboard.js?v=20260825-shared-live"></script>
+    <script src="js/chart.js?v=20260901-report-ui-fixes"></script>
+    <script src="js/orders_dashboard.js?v=20260901-report-ui-fixes"></script>
     <script src="js/admin.js?v=20260820-cloud-only"></script>
     <script>
       // ===== عرض اسم المستخدم =====

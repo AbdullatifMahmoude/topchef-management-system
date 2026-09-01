@@ -54,7 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const rate = total ? Math.round(completed / total * 100) : 0;
     document.getElementById("ordersStatusChart").style.setProperty("--completion", `${rate * 3.6}deg`);
     document.getElementById("donut_rate").textContent = `${number(rate)}%`;
-    document.getElementById("completion_rate_value").textContent = `${number(rate)}%`;
+    document.querySelector("#completion_rate_value .percentage_number").textContent = number(rate);
   }
 
   function renderBars(targetId, rows, formatValue = number) {
@@ -163,7 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderStatus(summary); renderTrend(data.revenue_trend); renderTypes(data.activity_breakdown); renderPeakHours(data.activity_breakdown); renderTopItems(data.top_items);
     renderBars("financialBreakdownChart", [
       { label: "صافي المبيعات", value: Number(summary.total_revenue || 0), color: "#f1c75b" },
-      { label: "قبل الخصم", value: Number(summary.total_subtotal || 0), color: "#4fb3bf" },
+      { label: "الإيراد قبل الخصم", value: Number(summary.total_subtotal || 0), color: "#4fb3bf" },
       { label: "الخصومات", value: Number(summary.total_discount || 0), color: "#eb6a67" },
       { label: "رسوم التوصيل", value: Number(summary.total_delivery_fee || 0), color: "#9b7de3" },
       { label: "المصروفات", value: Number(summary.total_expenses || 0), color: "#ef8a75" },

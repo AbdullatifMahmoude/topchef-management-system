@@ -3969,3 +3969,142 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   .sidemenu .sidebar_greeting #admin_username { font-size:13px !important; }
 }
 
+/* Date fields: keep the value readable and place every calendar icon on the
+   opposite (left) side in the RTL interface. */
+input[type="date"] {
+  position: relative;
+  padding-left: 58px !important;
+  padding-right: 12px !important;
+  direction: ltr;
+  text-align: right;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M3 11h18'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: left 11px center !important;
+  background-size: 16px 16px !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute !important;
+  right: auto !important;
+  left: 9px !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin: 0 !important;
+  opacity: 0 !important;
+  cursor: pointer;
+}
+
+/* Large financial values must remain complete instead of turning into an
+   ellipsis. Isolate their bidirectional text so Arabic currency stays stable. */
+.ops_kpi > strong,
+.report_kpi > strong {
+  min-width: 0;
+  overflow: visible !important;
+  font-size: clamp(21px, 2vw, 29px) !important;
+  line-height: 1.35;
+  letter-spacing: -0.035em;
+  text-overflow: clip !important;
+  white-space: nowrap;
+  unicode-bidi: plaintext;
+}
+
+/* Percentages follow the Arabic UI convention (%99), unlike mixed currency
+   values which need plaintext bidi isolation. */
+#ops_success_rate,
+#completion_rate_value,
+#donut_rate {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.percentage_value {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  direction: ltr !important;
+}
+
+.percentage_value > b {
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.percentage_value > .percentage_symbol { order: 1; }
+.percentage_value > .percentage_number { order: 2; }
+
+/* Titles can wrap, but every report value starts on the same baseline. */
+.report_kpi {
+  display: grid;
+  grid-template-rows: minmax(42px, auto) auto;
+  align-content: center;
+  min-width: 0;
+}
+
+.report_kpi > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  margin-bottom: 6px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+/* Home summary cards share fixed title/value/footer rows. Long titles may wrap
+   without pushing their number below the neighboring cards. */
+.ops_kpi {
+  display: grid;
+  grid-template-rows: 42px 46px minmax(18px, auto);
+  align-content: center;
+  min-width: 0;
+}
+
+.ops_kpi > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  margin: 0 !important;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.ops_kpi > strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  margin: 0 !important;
+  text-align: center;
+}
+
+.ops_kpi > small {
+  align-self: start;
+  margin: 0;
+  text-align: center;
+}
+
+.report_kpi > strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  text-align: center;
+}
+
+@media (min-width: 1281px) {
+  .ops_kpis,
+  .reports_kpis {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .ops_kpi,
+  .report_kpi {
+    padding-inline: 18px !important;
+  }
+}
+

@@ -126,7 +126,10 @@
     const cancelEl = document.getElementById("ops_cancel_summary");
     const salesCompareEl = document.getElementById("ops_sales_vs_yesterday");
     if (averageEl) averageEl.textContent = average.toLocaleString("ar-EG", { maximumFractionDigits: 2 }) + " ج.م";
-    if (successEl) successEl.textContent = successRate.toLocaleString("ar-EG", { maximumFractionDigits: 1 }) + "%";
+    if (successEl) {
+      const successNumber = successEl.querySelector(".percentage_number");
+      if (successNumber) successNumber.textContent = successRate.toLocaleString("ar-EG", { maximumFractionDigits: 1 });
+    }
     if (cancelEl) cancelEl.textContent = `${Number(stats.cancelled_count || 0).toLocaleString("ar-EG")} طلب ملغي`;
     if (salesCompareEl) {
       if (stats.is_holiday) {

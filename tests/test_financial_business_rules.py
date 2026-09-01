@@ -143,6 +143,10 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(report_source.count("Order.order_type == OrderType.DELIVERY"), 4)
         self.assertGreaterEqual(repository_source.count("models.Order.order_type == OrderType.DELIVERY"), 2)
 
+    def test_report_before_discount_includes_hall_service_fee(self):
+        report_source = open("app/modules/report/service.py", encoding="utf-8").read()
+        self.assertIn("Order.subtotal + hall_service_fee", report_source)
+
     def test_edit_repricing_keeps_existing_offer_and_does_not_redeem_again(self):
         source = open("app/modules/orders/service.py", encoding="utf-8").read()
         self.assertIn("offer_code=existing_offer_code", source)

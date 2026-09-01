@@ -30,6 +30,7 @@ def get_business_date() -> date:
 # ─────────────────────────────────────────────────────────
 async def get_report_summary(db: AsyncSession, start_date: date, end_date: date) -> schemas.ReportSummary:
     delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
+    hall_service_fee = case((Order.order_type == OrderType.HALL, Order.delivery_fee), else_=0)
     stmt = select(
         func.count(Order.id).label('total_orders'),
         func.sum(case((Order.order_status == OrderStatus.CANCELLED, 1), else_=0)).label('cancelled_orders'),
@@ -42,7 +43,13 @@ async def get_report_summary(db: AsyncSession, start_date: date, end_date: date)
                 else_=0,
             )
         ).label('total_revenue'),
-        func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.subtotal), else_=0)).label('total_subtotal'),
+        # "Before discount" must include the restaurant-owned hall service
+        # fee. Otherwise net revenue can appear higher than its own base even
+        # when the report correctly shows zero discounts.
+        func.sum(case(
+            (Order.order_status != OrderStatus.CANCELLED, Order.subtotal + hall_service_fee),
+            else_=0,
+        )).label('total_subtotal'),
         func.sum(case((Order.order_status != OrderStatus.CANCELLED, Order.discount_amount), else_=0)).label('total_discount'),
         func.sum(case(
             (Order.order_status != OrderStatus.CANCELLED,

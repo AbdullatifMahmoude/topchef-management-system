@@ -464,80 +464,14 @@ function renderCart() {
 }
 
 let selectedPaymentMethod = "cash";
-let orderKeypadTarget = null;
-
-function updateOrderSetupSummary() {
-  const summary = document.getElementById("orderSetupSummary");
-  if (!summary) return;
-  const typeLabel = ORDER_TYPES.find((item) => item.key === orderType)?.label || "حدد النوع";
-  const paymentLabels = { cash: "نقدي", instapay: "InstaPay", wallet: "محفظة" };
-  summary.textContent = `${typeLabel} • ${paymentLabels[selectedPaymentMethod] || "نقدي"}`;
-}
-
-function toggleOrderSetup(forceOpen) {
-  const layout = document.getElementById("local_orders_layout");
-  if (!layout) return;
-  const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : layout.classList.contains("order_setup_collapsed");
-  layout.classList.toggle("order_setup_collapsed", !shouldOpen);
-  document.getElementById("order_setup_panel")?.setAttribute("aria-hidden", String(!shouldOpen));
-  if (shouldOpen) setTimeout(() => document.getElementById("discount_value")?.focus(), 120);
-}
-
-function setOrderKeypadTarget(input) {
-  orderKeypadTarget = input || document.getElementById("discount_value");
-  const keypad = document.getElementById("orderTouchKeypad");
-  const label = document.getElementById("orderKeypadLabel");
-  const decimal = document.getElementById("orderKeypadDecimal");
-  const isPhone = orderKeypadTarget?.id === "dcf_phone";
-  if (label) label.textContent = isPhone ? "رقم تليفون العميل" : "قيمة الخصم";
-  if (decimal) {
-    decimal.textContent = isPhone ? "00" : ".";
-    decimal.dataset.key = isPhone ? "00" : ".";
-  }
-  const anchor = isPhone ? document.getElementById("delivery_customer_form") : document.getElementById("discount_form");
-  if (keypad && anchor && keypad.previousElementSibling !== anchor) anchor.insertAdjacentElement("afterend", keypad);
-  syncOrderKeypadDisplay();
-}
-
-function syncOrderKeypadDisplay() {
-  const input = orderKeypadTarget || document.getElementById("discount_value");
-  const display = document.getElementById("orderKeypadDisplay");
-  if (display) display.textContent = input?.value || "0.00";
-}
-
-function pressOrderKeypad(key) {
-  const input = orderKeypadTarget || document.getElementById("discount_value");
-  if (!input || input.disabled) return;
-  let value = String(input.value || "");
-  if (key === "clear") value = "";
-  else if (key === "backspace") value = value.slice(0, -1);
-  else if (key === ".") {
-    if (!value.includes(".")) value = value ? `${value}.` : "0.";
-  } else if (/^\d+$/.test(key)) {
-    // Preserve explicitly entered leading zeroes. This is essential when the
-    // shared keypad targets a phone number (for example, 01xxxxxxxxx).
-    value += key;
-  }
-  if (input.maxLength > 0) value = value.slice(0, input.maxLength);
-  input.value = value;
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.focus({ preventScroll: true });
-}
 
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".payment_method_btn").forEach((button) => {
     button.addEventListener("click", () => {
       selectedPaymentMethod = button.dataset.paymentMethod || "cash";
       document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item === button));
-      updateOrderSetupSummary();
     });
   });
-  document.querySelectorAll(".order_keypad_keys [data-key]").forEach((button) => {
-    button.addEventListener("click", () => pressOrderKeypad(button.dataset.key || ""));
-  });
-  setOrderKeypadTarget(document.getElementById("discount_value"));
-  if (window.matchMedia("(max-width: 1180px)").matches) toggleOrderSetup(false);
-  updateOrderSetupSummary();
 });
 
 async function openShiftCashModal() {
@@ -1105,8 +1039,6 @@ function showConfirmModal(orderData) {
       if (discType) discType.value = "";
       if (discValue) discValue.value = "";
       if (discReason) discReason.value = "";
-      syncOrderKeypadDisplay();
-      updateOrderSetupSummary();
       renderCart();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
@@ -1324,7 +1256,6 @@ function renderOrderTypeButtons() {
     btn.onclick = () => selectOrderType(t.key);
     container.appendChild(btn);
   });
-  updateOrderSetupSummary();
 }
 
 function renderOrderTypeBadge() {
@@ -1791,8 +1722,7 @@ function renderDeliveryCustomerForm() {
           <input type="tel" id="dcf_phone" class="dcf_input"
             placeholder="01xxxxxxxxx" maxlength="11" inputmode="numeric"
             value="${deliveryCustomerInfo.phone}"
-            onfocus="setOrderKeypadTarget(this)"
-            oninput="this.value = normalizePhoneDigits(this.value); handlePhoneInput(this.value); syncOrderKeypadDisplay()" />
+            oninput="this.value = normalizePhoneDigits(this.value); handlePhoneInput(this.value)" />
           <span class="dcf_status" id="dcf_phone_status"></span>
         </div>
       </div>
