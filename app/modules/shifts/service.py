@@ -36,6 +36,18 @@ class ShiftsService:
 
     async def start_shift(self, user_id: int):
         target_date = get_business_date()
+        # A cashier may stay logged in across the business-day cutoff (05:00).
+        # In that case the existing shift must remain the current one instead of
+        # creating a second shift under the new target date.
+        active_shift = await self.db.scalar(
+            select(CashierShift).where(
+                CashierShift.user_id == user_id,
+                CashierShift.end_time.is_(None),
+            ).order_by(desc(CashierShift.id))
+        )
+        if active_shift:
+            return
+
         # Get the absolute last shift for today, regardless of who owns it
         last_shift_query = select(CashierShift).where(
             CashierShift.target_date == target_date
@@ -58,7 +70,7 @@ class ShiftsService:
             new_shift = CashierShift(
                 user_id=user_id,
                 target_date=target_date,
-                start_time=datetime.utcnow()
+                start_time=datetime.now(timezone.utc).replace(tzinfo=None)
             )
             self.db.add(new_shift)
             await self.db.flush() # To get the ID
@@ -67,24 +79,24 @@ class ShiftsService:
             
 
     async def end_shift(self, user_id: int):
-        target_date = get_business_date()
+        # Do not restrict this lookup by target_date: a night shift can start on
+        # one business date and be closed after the 05:00 cutoff on the next.
         query = select(CashierShift).where(
             CashierShift.user_id == user_id,
-            CashierShift.target_date == target_date,
             CashierShift.end_time.is_(None)
-        )
+        ).order_by(desc(CashierShift.id))
         result = await self.db.execute(query)
         active_shift = result.scalars().first()
         
         if active_shift:
-            active_shift.end_time = datetime.utcnow()
+            active_shift.end_time = datetime.now(timezone.utc).replace(tzinfo=None)
             await self.db.commit()
             
         else:
             logger.warning(
                 "end_shift: no active shift found for user_id=%s on %s",
                 user_id,
-                target_date,
+                get_business_date(),
             )
 
     async def get_shifts_report(self, target_date: date) -> List[Dict[str, Any]]:
@@ -100,6 +112,24 @@ class ShiftsService:
         start_local = datetime.combine(target_date, datetime.min.time()).replace(hour=5)
         end_local = start_local + timedelta(days=1)
 
+        def shift_time_to_local(dt):
+            if not dt:
+                return None
+            if dt.tzinfo is not None:
+                return dt.astimezone(timezone(timedelta(hours=3))).replace(tzinfo=None)
+            # CashierShift timestamps are written with datetime.utcnow().
+            return dt + timedelta(hours=3)
+
+        now_local = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+        # The normal report window ends at 05:00, but an actual shift is the
+        # source of truth when it continues beyond that cutoff.
+        report_end_local = max(
+            [end_local, *(
+                shift_time_to_local(shift.end_time) or now_local
+                for shift in shifts
+            )]
+        )
+
         orders_query = select(
             Order.created_by_user_id,
             Order.created_at,
@@ -111,7 +141,7 @@ class ShiftsService:
             Order.order_type,
         ).where(
             Order.created_at >= start_local,
-            Order.created_at < end_local,
+            Order.created_at < report_end_local,
             Order.is_deleted == False,
         )
 
@@ -122,14 +152,6 @@ class ShiftsService:
             ShiftExpense.is_deleted == False,
         ))
         day_expenses = expenses_result.scalars().all()
-
-        def shift_time_to_local(dt):
-            if not dt:
-                return None
-            if dt.tzinfo is not None:
-                return dt.astimezone(timezone(timedelta(hours=3))).replace(tzinfo=None)
-            # CashierShift timestamps are written with datetime.utcnow().
-            return dt + timedelta(hours=3)
 
         def format_dt(dt):
             if not dt:
@@ -144,7 +166,7 @@ class ShiftsService:
         report = []
         for shift in shifts:
             shift_start_local = shift_time_to_local(shift.start_time) or start_local
-            shift_end_local = shift_time_to_local(shift.end_time) if shift.end_time else end_local
+            shift_end_local = shift_time_to_local(shift.end_time) or now_local
             shift_orders = [
                 order for order in day_orders
                 if order.created_by_user_id == shift.user_id
@@ -173,7 +195,7 @@ class ShiftsService:
                 (shift.actual_closing_cash - expected_cash)
                 if shift.actual_closing_cash is not None else None
             )
-            duration_end = shift_time_to_local(shift.end_time) or datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+            duration_end = shift_time_to_local(shift.end_time) or now_local
             duration_minutes = max(0, int((duration_end - shift_start_local).total_seconds() // 60))
             report.append({
                 "id": shift.id,
