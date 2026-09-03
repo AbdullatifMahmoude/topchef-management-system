@@ -138,20 +138,18 @@ async def get_rider_stats(
     from app.modules.users.models import User
     from app.core.enums import OrderStatus, OrderType, UserRole, PaymentMethod
     
-    # Calculate business day start (5 AM boundary)
-    # Using Egypt timezone (UTC+3)
-    tz = timezone(timedelta(hours=3))
-    now = datetime.now(tz).replace(tzinfo=None)
-    business_day_start = now.replace(hour=5, minute=0, second=0, microsecond=0)
-    
-    # If current time is before 5 AM, the business day started yesterday at 5 AM
-    if now.hour < 5:
-        business_day_start = business_day_start - timedelta(days=1)
-    
-    # `order_date` is set from the 5 AM business-day boundary when the order is
+    from app.core.business_calendar import (
+        EGYPT_TZ,
+        business_day_start as get_business_day_start,
+        get_current_business_date,
+    )
+
+    # `order_date` is set from the 7 AM business-day boundary when the order is
     # created. It is the authoritative order response.
     # browser/device timestamps or page-limited frontend lists.
-    business_date = business_day_start.date()
+    business_date = get_current_business_date()
+    business_day_start = get_business_day_start(business_date)
+    now = datetime.now(EGYPT_TZ).replace(tzinfo=None)
     users_result = await db.execute(
         select(User)
         .where(and_(User.role == UserRole.DELIVERY, User.is_deleted == False))

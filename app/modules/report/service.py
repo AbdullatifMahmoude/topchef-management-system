@@ -1,28 +1,21 @@
 import calendar
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case, cast, Integer
-from datetime import date, timedelta, datetime, timezone
+from datetime import date, timedelta
 from app.modules.orders.models import Order, OrderItem
 from app.modules.menu.models import Product
 from app.core.enums import OrderStatus, OrderType
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List
 from . import schemas
+from app.core.business_calendar import get_current_business_date
 
 
 # ─────────────────────────────────────────────────────────
-# يوم العمل بيبدأ 5 الصبح (نفس المنطق المستخدم في orders)
+# يوم العمل بيبدأ 7 الصبح (نفس المنطق المستخدم في orders)
 # ─────────────────────────────────────────────────────────
-BUSINESS_DAY_START_HOUR = 5
-EGYPT_TZ = timezone(timedelta(hours=3))
-
-
 def get_business_date() -> date:
-    """يحسب يوم العمل الحالي (الشيفت بيبدأ 5 صباحاً)"""
-    now = datetime.now(EGYPT_TZ)
-    if now.hour < BUSINESS_DAY_START_HOUR:
-        return (now - timedelta(days=1)).date()
-    return now.date()
+    return get_current_business_date()
 
 
 # ─────────────────────────────────────────────────────────
@@ -294,7 +287,7 @@ async def get_report_data(db: AsyncSession, start_date: date, end_date: date, li
 # التقارير
 # ─────────────────────────────────────────────────────────
 async def get_daily_report(db: AsyncSession, target_date: date, limit: int = 50, offset: int = 0) -> schemas.DailyReportResponse:
-    # التقرير اليومي بيستخدم يوم العمل (الشيفت من 5 صباحاً)
+    # التقرير اليومي بيستخدم يوم العمل (الشيفت من 7 صباحاً)
     business_date = target_date or get_business_date()
     data = await get_report_data(db, business_date, business_date, limit, offset)
     return schemas.DailyReportResponse(report_date=business_date, **data)

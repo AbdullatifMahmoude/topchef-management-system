@@ -8,6 +8,7 @@ from app.modules.shifts.models import CashierShift, ShiftExpense
 from app.modules.orders.models import Order
 from app.core.enums import OrderStatus, PaymentMethod, OrderType
 from app.core.logging import logger
+from app.core.business_calendar import business_day_start, get_current_business_date
 
 
 def restaurant_sales_amount(order):
@@ -18,12 +19,7 @@ def restaurant_sales_amount(order):
     return total
 
 def get_business_date() -> date:
-    # Business shift starts at 5am (UTC+3)
-    tz = timezone(timedelta(hours=3))
-    now = datetime.now(tz)
-    if now.hour < 5:
-        return (now - timedelta(days=1)).date()
-    return now.date()
+    return get_current_business_date()
 
 class ShiftsService:
     def __init__(self, db: AsyncSession):
@@ -36,17 +32,19 @@ class ShiftsService:
 
     async def start_shift(self, user_id: int):
         target_date = get_business_date()
-        # A cashier may stay logged in across the business-day cutoff (05:00).
-        # In that case the existing shift must remain the current one instead of
-        # creating a second shift under the new target date.
+        # Detect sessions left logged in across the 07:00 business-day cutoff.
         active_shift = await self.db.scalar(
             select(CashierShift).where(
                 CashierShift.user_id == user_id,
                 CashierShift.end_time.is_(None),
             ).order_by(desc(CashierShift.id))
         )
+        if active_shift and active_shift.target_date == target_date:
+            return active_shift
         if active_shift:
-            return
+            # End stale shifts so their expenses cannot appear in the new day.
+            active_shift.end_time = datetime.now(timezone.utc).replace(tzinfo=None)
+            await self.db.flush()
 
         # Get the absolute last shift for today, regardless of who owns it
         last_shift_query = select(CashierShift).where(
@@ -65,6 +63,8 @@ class ShiftsService:
                 # The shift is already open.
                 await self.db.commit()
 
+            return last_shift
+
         else:
             # Create a new shift since the last one belongs to someone else, or no shifts exist today
             new_shift = CashierShift(
@@ -76,11 +76,12 @@ class ShiftsService:
             await self.db.flush() # To get the ID
             
             await self.db.commit()
+            return new_shift
             
 
     async def end_shift(self, user_id: int):
         # Do not restrict this lookup by target_date: a night shift can start on
-        # one business date and be closed after the 05:00 cutoff on the next.
+        # one business date and be closed after the 07:00 cutoff on the next.
         query = select(CashierShift).where(
             CashierShift.user_id == user_id,
             CashierShift.end_time.is_(None)
@@ -108,8 +109,8 @@ class ShiftsService:
         shifts = result.scalars().all()
         # Fetch orders for the day to compute stats
         # We define business day boundaries in LOCAL naive time because Order.created_at is stored in LOCAL naive time.
-        # From 5 AM target_date to 4:59:59 AM next day
-        start_local = datetime.combine(target_date, datetime.min.time()).replace(hour=5)
+        # From 7 AM target_date to 6:59:59 AM next day
+        start_local = business_day_start(target_date)
         end_local = start_local + timedelta(days=1)
 
         def shift_time_to_local(dt):
@@ -121,7 +122,7 @@ class ShiftsService:
             return dt + timedelta(hours=3)
 
         now_local = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
-        # The normal report window ends at 05:00, but an actual shift is the
+        # The normal report window ends at 07:00, but an actual shift is the
         # source of truth when it continues beyond that cutoff.
         report_end_local = max(
             [end_local, *(

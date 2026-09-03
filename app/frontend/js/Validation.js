@@ -54,16 +54,16 @@ const VALIDATION_RULES = {
     message: "الاسم: 3-30 حرف، حروف عربية أو إنجليزية وأرقام فقط",
   },
   productName: {
-    regex: /^[\u0600-\u06FF a-zA-Z0-9\-_().،,]{2,50}$/,
-    message: "اسم الصنف: 2-50 حرف، حروف وأرقام فقط",
+    regex: /^[\p{L}\p{M}\p{N}\p{Extended_Pictographic}\u200D\uFE0F _\-().،,]{2,255}$/u,
+    message: "اسم الصنف: 2-255 حرف، ويمكن إضافة إيموجي",
   },
   categoryName: {
-    regex: /^[\u0600-\u06FF a-zA-Z0-9\-_]{2,30}$/,
-    message: "اسم التصنيف: 2-30 حرف، حروف وأرقام فقط",
+    regex: /^[\p{L}\p{M}\p{N}\p{Extended_Pictographic}\u200D\uFE0F _\-().،,]{2,255}$/u,
+    message: "اسم التصنيف: 2-255 حرف، ويمكن إضافة إيموجي",
   },
   sizeName: {
-    regex: /^[\u0600-\u06FF a-zA-Z0-9\-_/.()]{1,20}$/,
-    message: "اسم الحجم: 1-20 حرف (أرقام وحروف)",
+    regex: /^[\p{L}\p{M}\p{N}\p{Extended_Pictographic}\u200D\uFE0F _\-/.()،,]{1,255}$/u,
+    message: "اسم الحجم: 1-255 حرف، ويمكن إضافة إيموجي",
   },
   price: {
     regex: /^\d+(\.\d{1,2})?$/,

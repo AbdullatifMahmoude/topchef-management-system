@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.business_calendar import (
+    business_day_start,
+    get_current_business_date,
     holiday_name,
     is_weekly_holiday,
     previous_business_date,
@@ -22,12 +24,7 @@ class OrderRepository:
         self.db = db
 
     def get_business_date(self) -> date:
-        # Business shift starts at 5am (UTC+3)
-        tz = timezone(timedelta(hours=3))
-        now = datetime.now(tz)
-        if now.hour < 5:
-            return (now - timedelta(days=1)).date()
-        return now.date()
+        return get_current_business_date()
 
 
     async def get_by_id(self, order_id: int) -> models.Order | None:
@@ -112,7 +109,7 @@ class OrderRepository:
                 )
             )
 
-        # Filter by current business shift (24h starting at 5am)
+        # Filter by the current business day.
         query = query.where(models.Order.order_date == self.get_business_date())
 
         
@@ -175,7 +172,7 @@ class OrderRepository:
                 )
             )
 
-        # Filter by current business shift (24h starting at 5am)
+        # Filter by the current business day.
         query = query.where(models.Order.order_date == self.get_business_date())
 
         query = query.order_by(desc(models.Order.created_at))
@@ -310,13 +307,13 @@ class OrderRepository:
         )
         active_count = await self.db.scalar(active_query) or 0
 
-        # Compare like-for-like: yesterday from 5 AM up to the same elapsed
+        # Compare like-for-like from the business-day cutoff to the same elapsed
         # point in its business day, rather than yesterday's completed day.
         local_now = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
-        today_start = datetime.combine(business_date, datetime.min.time()).replace(hour=5)
+        today_start = business_day_start(business_date)
         elapsed = max(timedelta(0), local_now - today_start)
         comparison_date = previous_business_date(business_date)
-        comparison_start = datetime.combine(comparison_date, datetime.min.time()).replace(hour=5)
+        comparison_start = business_day_start(comparison_date)
         comparison_cutoff = comparison_start + min(elapsed, timedelta(days=1))
         yesterday_sales_query = select(
             func.sum(

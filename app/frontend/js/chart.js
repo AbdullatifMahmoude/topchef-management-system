@@ -70,11 +70,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderPeakHours(activity) {
     const buckets = [
-      { label: "5 - 9 صباحًا", value: 0, test: (hour) => hour >= 5 && hour < 9 },
+      { label: "7 - 9 صباحًا", value: 0, test: (hour) => hour >= 7 && hour < 9 },
       { label: "9 ص - 1 ظهرًا", value: 0, test: (hour) => hour >= 9 && hour < 13 },
       { label: "1 - 5 عصرًا", value: 0, test: (hour) => hour >= 13 && hour < 17 },
       { label: "5 - 9 مساءً", value: 0, test: (hour) => hour >= 17 && hour < 21 },
-      { label: "9 مساءً - 5 صباحًا", value: 0, test: (hour) => hour >= 21 || hour < 5 },
+      { label: "9 مساءً - 7 صباحًا", value: 0, test: (hour) => hour >= 21 || hour < 7 },
     ];
     (activity || []).forEach((item) => {
       const hour = Number(item.hour);

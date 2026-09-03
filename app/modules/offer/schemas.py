@@ -24,7 +24,7 @@ class OfferBase(BaseModel):
     @field_validator("valid_from", "valid_to", mode="after")
     @classmethod
     def use_normal_calendar_time(cls, value: datetime) -> datetime:
-        # Offers use normal midnight-to-midnight calendar time, not the 5am
+        # Offers use normal midnight-to-midnight calendar time, not the business-day
         # restaurant business-day cutoff. Store the Cairo wall clock as naive.
         if value.tzinfo is not None:
             value = value.astimezone(timezone(timedelta(hours=3)))

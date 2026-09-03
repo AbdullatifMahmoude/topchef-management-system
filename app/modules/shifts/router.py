@@ -27,9 +27,12 @@ class ExpenseCreate(BaseModel):
     note: Optional[str] = Field(default=None, max_length=500)
 
 async def _current_shift(db: AsyncSession, user_id: int):
+    # Roll over sessions left logged in past the 07:00 business-day boundary.
+    await ShiftsService(db).start_shift(user_id)
     from app.modules.shifts.models import CashierShift
     result = await db.execute(select(CashierShift).where(
         CashierShift.user_id == user_id,
+        CashierShift.target_date == get_business_date(),
         CashierShift.end_time.is_(None),
     ).order_by(desc(CashierShift.id)))
     return result.scalars().first()

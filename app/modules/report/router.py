@@ -24,13 +24,13 @@ async def get_report_orders_page(
 
 @router.get("/daily", response_model=schemas.DailyReportResponse)
 async def get_daily_report(
-    target_date: Optional[date] = Query(default=None, description="Date for the report (YYYY-MM-DD). Defaults to current business day (5 AM shift)"),
+    target_date: Optional[date] = Query(default=None, description="Date for the report (YYYY-MM-DD). Defaults to current business day (7 AM shift)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    # لو ماحددش تاريخ، نستخدم يوم العمل الحالي (الشيفت من 5 صباحاً)
+    # لو ماحددش تاريخ، نستخدم يوم العمل الحالي (الشيفت من 7 صباحاً)
     actual_date = target_date or service.get_business_date()
     return await service.get_daily_report(db, actual_date, limit, offset)
 

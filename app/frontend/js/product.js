@@ -302,7 +302,7 @@
     div.classList.add("size_row");
     div.innerHTML =
       '<input type="text" placeholder="السعر" value="' + price + '" class="size_price" />' +
-      '<input type="text" placeholder="الحجم" value="' + name + '" class="size_name" />' +
+      '<input type="text" placeholder="الحجم" maxlength="255" value="' + name + '" class="size_name" />' +
       '<button type="button" class="remove_size_btn" style="margin:0;background:#e74c3c;color:white;border:none;border-radius:6px;width:26px;height:26px;font-size:12px;cursor:pointer;line-height:1;flex-shrink:0;">✕</button>';
 
     // Real-time validation على الـ size rows

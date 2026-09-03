@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from app.core.enums import OrderStatus, OrderType, PaymentMethod
 from app.modules.shifts.service import ShiftsService
+from app.modules.shifts.models import CashierShift
+from app.core.business_calendar import get_current_business_date
 
 
 class _Scalars:
@@ -34,13 +36,13 @@ class _Result:
 async def test_active_night_shift_keeps_orders_after_business_day_cutoff():
     egypt_tz = timezone(timedelta(hours=3))
     now_local = datetime.now(egypt_tz).replace(tzinfo=None)
-    # Keep the fixture in the past so the 06:00 order is always before now,
+    # Keep the fixture in the past so the post-cutoff order is always before now,
     # regardless of the wall-clock time at which the test runs.
     target_date = now_local.date() - timedelta(days=2)
     start_local = datetime.combine(target_date + timedelta(days=1), datetime.min.time()).replace(
         hour=0, minute=30
     )
-    order_local = start_local.replace(hour=6)
+    order_local = start_local.replace(hour=8)
     shift = SimpleNamespace(
         id=1,
         user_id=7,
@@ -81,4 +83,24 @@ async def test_end_shift_finds_open_shift_without_target_date_restriction():
     await ShiftsService(db).end_shift(user_id=7)
 
     assert shift.end_time is not None
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_start_shift_closes_stale_shift_and_creates_current_day_shift(monkeypatch):
+    current_date = get_current_business_date()
+    stale = SimpleNamespace(
+        id=1, user_id=7, end_time=None, target_date=current_date - timedelta(days=1)
+    )
+    db = AsyncMock()
+    db.scalar.return_value = stale
+    db.execute.return_value = _Result([])
+    db.add = Mock()
+
+    created = await ShiftsService(db).start_shift(user_id=7)
+
+    assert stale.end_time is not None
+    assert isinstance(created, CashierShift)
+    assert created.target_date == current_date
+    db.add.assert_called_once_with(created)
     db.commit.assert_awaited_once()
