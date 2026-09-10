@@ -215,10 +215,15 @@ async def get_rider_stats(
             elif order.order_status in [OrderStatus.CONFIRMED, OrderStatus.OUT_FOR_DELIVERY]:
                 rider["active_orders"] += 1
                 rider["availability"] = "busy"
+            # A rider settlement needs to show the full amount attached to the
+            # payment method.  The rider fee is already exposed separately in
+            # `delivery_fees`, while `order_value` is the amount to remit to the
+            # restaurant (gross total minus the rider-owned delivery fee).
+            gross_amount = float(order.total_amount or 0)
             if order.payment_method == PaymentMethod.CASH:
-                rider["cash_amount"] += order_value
+                rider["cash_amount"] += gross_amount
             else:
-                rider["digital_amount"] += order_value
+                rider["digital_amount"] += gross_amount
 
         if order.order_status in [OrderStatus.CONFIRMED, OrderStatus.OUT_FOR_DELIVERY]:
             age_minutes = max(0, int((now - order.created_at).total_seconds() // 60))
