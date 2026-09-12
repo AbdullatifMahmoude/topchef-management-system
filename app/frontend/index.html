@@ -42,14 +42,13 @@
       </form>
       <form id="passwordResetForm" class="password_reset_form" hidden>
         <h2>استعادة كلمة المرور</h2>
-        <p>أدخل اسم المستخدم وسنرسل كود تحقق إلى رقم واتساب المسجل.</p>
+        <p>أدخل اسم المستخدم، ثم أرسل رسالة التأكيد الجاهزة من رقم واتساب المسجل. لن يرسل النظام رسالة مدفوعة.</p>
         <label class="reset_field" for="resetUsername">
           <span>اسم المستخدم</span>
           <input id="resetUsername" type="text" placeholder="اكتب اسم المستخدم" autocomplete="username">
         </label>
-        <button id="sendResetCode" type="button">إرسال كود التحقق</button>
+        <button id="sendResetCode" type="button">فتح واتساب للتأكيد</button>
         <div id="resetCodeFields" hidden>
-          <input id="resetCode" type="text" inputmode="numeric" maxlength="6" placeholder="كود التحقق المكون من 6 أرقام">
           <input id="resetNewPassword" type="password" placeholder="كلمة المرور الجديدة">
           <button type="submit">تغيير كلمة المرور</button>
         </div>

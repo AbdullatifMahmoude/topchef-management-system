@@ -11,8 +11,9 @@
   const languageCodeInput = document.getElementById("whatsappLanguageCode");
   const enabledInput = document.getElementById("whatsappEnabled");
   const bulkTemplateInput = document.getElementById("whatsappBulkTemplateName");
-  const resetTemplateInput = document.getElementById("whatsappResetTemplateName");
-  const resetExpiryInput = document.getElementById("whatsappResetExpiry");
+  const businessPhoneInput = document.getElementById("whatsappBusinessPhone");
+  const webhookTokenInput = document.getElementById("whatsappWebhookToken");
+  const appSecretInput = document.getElementById("whatsappAppSecret");
   const bulkLimitInput = document.getElementById("whatsappBulkLimit");
   const bulkSendButton = document.getElementById("sendWhatsAppBulk");
   const messageCount = document.getElementById("whatsappMessageCount");
@@ -48,8 +49,9 @@
       languageCodeInput.value = data.language_code || "ar";
       enabledInput.checked = Boolean(data.enabled);
       bulkTemplateInput.value = data.bulk_template_name || "topchef_bulk_message";
-      resetTemplateInput.value = data.password_reset_template_name || "topchef_password_reset";
-      resetExpiryInput.value = data.reset_code_expiry_minutes || 10;
+      businessPhoneInput.value = data.business_phone_number || "";
+      webhookTokenInput.placeholder = data.webhook_verify_token_configured ? "محفوظ — اتركه فارغًا للاحتفاظ به" : "أدخل Verify Token";
+      appSecretInput.placeholder = data.app_secret_configured ? "محفوظ — اتركه فارغًا للاحتفاظ به" : "أدخل Meta App Secret";
       bulkLimitInput.value = data.bulk_send_limit || 500;
       apiKeyStatus.textContent = data.api_key_configured
         ? "يوجد مفتاح محفوظ — اترك الخانة فارغة للاحتفاظ به"
@@ -81,11 +83,14 @@
       language_code: languageCodeInput.value.trim(),
       enabled: enabledInput.checked,
       bulk_template_name: bulkTemplateInput.value.trim(),
-      password_reset_template_name: resetTemplateInput.value.trim(),
-      reset_code_expiry_minutes: Number(resetExpiryInput.value),
+      password_reset_template_name: "",
+      reset_code_expiry_minutes: 10,
       bulk_send_limit: Number(bulkLimitInput.value),
+      business_phone_number: businessPhoneInput.value.trim(),
     };
     if (apiKeyInput.value.trim()) payload.api_key = apiKeyInput.value.trim();
+    if (webhookTokenInput.value.trim()) payload.webhook_verify_token = webhookTokenInput.value.trim();
+    if (appSecretInput.value.trim()) payload.app_secret = appSecretInput.value.trim();
 
     try {
       const response = await window.apiFetch("/settings/whatsapp", {
@@ -96,6 +101,8 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(errorMessage(data, "فشل حفظ إعدادات واتساب"));
       apiKeyInput.value = "";
+      webhookTokenInput.value = "";
+      appSecretInput.value = "";
       apiKeyStatus.textContent = data.api_key_configured
         ? "يوجد مفتاح محفوظ — اترك الخانة فارغة للاحتفاظ به"
         : "لا يوجد مفتاح API محفوظ";
@@ -128,4 +135,39 @@
   });
 
   loadSettings();
+})();
+
+(function () {
+  const form = document.getElementById("paymentSettingsForm");
+  if (!form) return;
+  const fields = {
+    instapay_enabled: document.getElementById("instapayEnabled"),
+    instapay_account: document.getElementById("instapayAccount"),
+    wallet_enabled: document.getElementById("walletEnabled"),
+    wallet_number: document.getElementById("walletNumber"),
+    payment_account_name: document.getElementById("paymentAccountName"),
+  };
+  const notice = document.getElementById("paymentSettingsNotice");
+  const save = document.getElementById("savePaymentSettings");
+  const show = (message, type) => { notice.hidden = false; notice.className = `settings_notice ${type}`; notice.textContent = message; };
+  async function load() {
+    try {
+      const response = await window.apiFetch("/settings/payments");
+      const data = await response.json();
+      if (!response.ok) throw new Error("تعذر تحميل بيانات الدفع");
+      Object.entries(fields).forEach(([key, input]) => { if (input.type === "checkbox") input.checked = Boolean(data[key]); else input.value = data[key] || ""; });
+    } catch (error) { show(error.message, "error"); }
+  }
+  form.addEventListener("submit", async event => {
+    event.preventDefault(); save.disabled = true; save.textContent = "جاري الحفظ...";
+    const payload = Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.type === "checkbox" ? input.checked : input.value.trim()]));
+    try {
+      const response = await window.apiFetch("/settings/payments", {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "تعذر حفظ بيانات الدفع");
+      show("تم حفظ بيانات الدفع", "success");
+    } catch (error) { show(error.message, "error"); }
+    finally { save.disabled = false; save.textContent = "حفظ بيانات الدفع"; }
+  });
+  load();
 })();

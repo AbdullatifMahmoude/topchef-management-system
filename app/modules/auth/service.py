@@ -1,21 +1,15 @@
 import hashlib
-import secrets
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings as app_settings
 from app.core.exceptions import AuthenticationError
 from app.core.logging import logger
 from app.core.security import create_access_token, get_password_hash, verify_password
-from app.modules.auth.models import PasswordResetCode
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.schemas import LoginRequest, TokenResponse
-from app.modules.settings.service import SettingsService
-from app.modules.settings.whatsapp import send_template_text, whatsapp_config_ready
+from app.modules.settings.whatsapp_verification import create_inbound_challenge, consume_verified_challenge
 from app.modules.users.repository import UserRepository
 
 # In-memory failed login tracker: { username: { "count": int, "locked_until": float } }
@@ -91,41 +85,15 @@ class AuthService:
                 username_key, _LOCKOUT_DURATION_SECONDS, attempt_info["count"],
             )
 
-    @staticmethod
-    def _reset_code_hash(user_id: int, code: str) -> str:
-        value = f"{user_id}:{code}:{app_settings.SECRET_KEY}"
-        return hashlib.sha256(value.encode()).hexdigest()
-
-    async def request_password_reset(self, username: str) -> None:
+    async def request_password_reset(self, username: str) -> dict:
         if not await self._allow_password_reset_request(username):
-            return
+            raise AuthenticationError("انتظر دقيقة قبل إنشاء محاولة تحقق جديدة")
         user = await UserRepository(self.db).get_by_name(username)
-        # Always return the same public response to prevent account discovery.
-        if not user or not user.is_active:
-            return
-        config = await SettingsService(self.db).get_whatsapp_settings()
-        if not whatsapp_config_ready(config, template_name=config.password_reset_template_name):
-            logger.info("Password reset skipped: WhatsApp integration is incomplete or disabled")
-            return
-        code = f"{secrets.randbelow(1_000_000):06d}"
-        now = datetime.utcnow()
-        previous = await self.db.execute(
-            select(PasswordResetCode).where(
-                PasswordResetCode.user_id == user.id,
-                PasswordResetCode.is_used == False,
-            )
+        phone = user.phone if user and user.is_active else "01000000000"
+        return await create_inbound_challenge(
+            self.db, self.redis, phone=phone, actor_type="staff",
+            actor_id=user.id if user and user.is_active else None, purpose="reset_password",
         )
-        for reset in previous.scalars().all():
-            reset.is_used = True
-        self.db.add(PasswordResetCode(
-            user_id=user.id,
-            code_hash=self._reset_code_hash(user.id, code),
-            expires_at=now + timedelta(minutes=config.reset_code_expiry_minutes),
-        ))
-        await self.db.flush()
-        sent = await send_template_text(user.phone, code, config.password_reset_template_name)
-        if not sent:
-            logger.warning("Password reset WhatsApp was not accepted for user id=%s", user.id)
 
     async def _allow_password_reset_request(self, username: str) -> bool:
         username_key = username.lower().strip()
@@ -153,26 +121,15 @@ class AuthService:
         _password_reset_requests[key_hash] = now
         return True
 
-    async def reset_password(self, username: str, code: str, new_password: str) -> None:
+    async def reset_password(self, username: str, challenge_id: str, new_password: str) -> None:
         user = await UserRepository(self.db).get_by_name(username)
         if not user or not user.is_active:
-            raise AuthenticationError("كود التحقق غير صحيح أو انتهت صلاحيته")
-        result = await self.db.execute(
-            select(PasswordResetCode)
-            .where(
-                PasswordResetCode.user_id == user.id,
-                PasswordResetCode.is_used == False,
-                PasswordResetCode.expires_at >= datetime.utcnow(),
-            )
-            .order_by(PasswordResetCode.created_at.desc())
+            raise AuthenticationError("تعذر تأكيد الحساب")
+        record = await consume_verified_challenge(
+            self.redis, challenge_id, actor_type="staff", purpose="reset_password",
         )
-        reset = result.scalars().first()
-        if not reset or reset.attempts >= 5:
-            raise AuthenticationError("كود التحقق غير صحيح أو انتهت صلاحيته")
-        reset.attempts += 1
-        if not secrets.compare_digest(reset.code_hash, self._reset_code_hash(user.id, code)):
-            raise AuthenticationError("كود التحقق غير صحيح أو انتهت صلاحيته")
+        if record.get("actor_id") != user.id:
+            raise AuthenticationError("تعذر تأكيد الحساب")
         user.hashed_password = get_password_hash(new_password)
-        reset.is_used = True
         _login_attempts.pop(user.username.lower(), None)
         await self.db.flush()

@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore
 from app.core.events import order_events_manager
-from app.core.enums import OrderStatus, OrderSource, OrderType, UserRole
+from app.core.enums import OrderStatus, OrderSource, OrderType, PaymentMethod, UserRole
 from app.core.business_calendar import get_current_business_date, is_weekly_holiday
 from app.modules.orders.notifications import OrderNotificationPort, OutboxOrderNotifications
 
@@ -100,8 +100,13 @@ class OrderService:
 
             # Check if online orders are enabled
             if order_data.source == models.OrderSource.ONLINE:
-                if not await self.settings_service.get_web_orders_status():
-                    raise ValidationError("Online ordering is currently disabled.")
+                checkout = await self.settings_service.get_menu_checkout_settings()
+                if not checkout.ordering_enabled:
+                    raise ValidationError(checkout.ordering_message)
+                if order_data.payment_method == PaymentMethod.INSTAPAY and not checkout.instapay_enabled:
+                    raise ValidationError("الدفع عن طريق InstaPay غير متاح حاليًا")
+                if order_data.payment_method == PaymentMethod.WALLET and not checkout.wallet_enabled:
+                    raise ValidationError("الدفع عن طريق المحفظة غير متاح حاليًا")
 
             # A cashier-created delivery is operational immediately, so it
             # must never enter the database without an active delivery rider.

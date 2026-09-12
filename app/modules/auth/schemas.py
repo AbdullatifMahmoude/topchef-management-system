@@ -27,8 +27,16 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     username: Annotated[str, Field(min_length=3, max_length=200)]
-    code: Annotated[str, Field(pattern=r"^\d{6}$")]
+    challenge_id: Annotated[str, Field(min_length=20, max_length=200)]
     new_password: Annotated[str, Field(min_length=6, pattern=r"^[A-Za-z0-9]+$")]
 
 class PasswordResetResponse(BaseModel):
     message: str
+
+class VerificationChallengeResponse(BaseModel):
+    challenge_id: str
+    whatsapp_url: str
+    expires_in: int
+
+class VerificationStatusResponse(BaseModel):
+    verified: bool

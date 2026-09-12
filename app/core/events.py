@@ -53,7 +53,7 @@ event_bus = EventBus()
 class OrderEventsManager:
     CHANNEL_PREFIX = "topchef:orders:events"
     CLIENT_HEARTBEAT_INTERVAL_SECONDS = 25.0
-    PUBLIC_EVENT_TYPES = {"PRODUCT_UPDATED", "CATEGORY_UPDATED", "OFFER_UPDATED"}
+    PUBLIC_EVENT_TYPES = {"PRODUCT_UPDATED", "CATEGORY_UPDATED", "OFFER_UPDATED", "SETTING_UPDATED"}
 
     def __init__(self) -> None:
         self.active_connections: dict[str, list[WebSocket]] = {}

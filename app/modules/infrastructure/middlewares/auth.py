@@ -17,7 +17,9 @@ PUBLIC_PATHS = {
     "/auth/login",
     "/auth/forgot-password",
     "/auth/reset-password",
+    "/whatsapp/webhook",
     "/pricing/preview",
+    "/settings/menu-checkout",
     "/health",
     "/metrics",
 }
@@ -28,6 +30,8 @@ PUBLIC_PREFIXES = {
     "/redoc",
     "/openapi.json",
     "/orders/ws",
+    "/auth/password-reset-status",
+    "/customer-auth",
 }
 
 

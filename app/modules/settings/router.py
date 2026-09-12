@@ -12,6 +12,21 @@ from app.modules.settings.whatsapp_outbox import enqueue_bulk_notifications
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
+@router.get("/menu-checkout", response_model=schemas.MenuCheckoutSettings)
+async def get_menu_checkout_settings(db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
+    return await service.SettingsService(db, redis).get_menu_checkout_settings()
+
+@router.get("/payments", response_model=schemas.PaymentSettingsResponse)
+async def get_payment_settings(db: AsyncSession = Depends(get_db), redis=Depends(get_redis),
+                               _current_user=Depends(require_role(UserRole.ADMIN))):
+    return await service.SettingsService(db, redis).get_payment_settings()
+
+@router.patch("/payments", response_model=schemas.PaymentSettingsResponse)
+async def update_payment_settings(update_data: schemas.PaymentSettingsUpdate,
+                                  db: AsyncSession = Depends(get_db), redis=Depends(get_redis),
+                                  _current_user=Depends(require_role(UserRole.ADMIN))):
+    return await service.SettingsService(db, redis).update_payment_settings(update_data)
+
 @router.get("/web-orders", response_model=bool)
 async def get_web_orders_status(
     db: AsyncSession = Depends(get_db),

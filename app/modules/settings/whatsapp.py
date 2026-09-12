@@ -49,6 +49,18 @@ def whatsapp_config_ready(settings, *, template_name: str = "") -> bool:
     )
 
 
+def inbound_verification_config_ready(settings) -> bool:
+    """Fail closed unless the complete direct Meta webhook integration is configured."""
+    return bool(
+        settings.enabled
+        and settings.api_key_configured
+        and settings.phone_number_id.strip()
+        and settings.business_phone_number.strip()
+        and settings.webhook_verify_token_configured
+        and settings.app_secret_configured
+    )
+
+
 def normalize_whatsapp_phone(phone: str | None) -> str | None:
     digits = re.sub(r"\D", "", phone or "")
     if digits.startswith("0020"):

@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260901-home-kpi-alignment" />
+  <link rel="stylesheet" href="css/admin.css?v=20260912-payment-settings" />
 </head>
 
 <body>
@@ -583,16 +583,17 @@
           </label>
           <div class="settings_grid">
             <label class="settings_field"><span>Phone Number ID</span><input id="whatsappPhoneNumberId" type="text" inputmode="numeric" placeholder="مثال: 123456789012345"></label>
+            <label class="settings_field"><span>رقم واتساب العام</span><input id="whatsappBusinessPhone" type="text" inputmode="tel" dir="ltr" placeholder="201012345678"></label>
             <label class="settings_field"><span>Graph API Version</span><input id="whatsappGraphVersion" type="text" dir="ltr" placeholder="v23.0"></label>
             <label class="settings_field"><span>اسم قالب Utility المعتمد</span><input id="whatsappTemplateName" type="text" dir="ltr" placeholder="topchef_order_update"></label>
             <label class="settings_field"><span>كود لغة القالب</span><input id="whatsappLanguageCode" type="text" dir="ltr" placeholder="ar"></label>
             <label class="settings_field"><span>قالب الرسالة الجماعية</span><input id="whatsappBulkTemplateName" type="text" dir="ltr" placeholder="topchef_bulk_message"></label>
-            <label class="settings_field"><span>قالب استعادة كلمة المرور</span><input id="whatsappResetTemplateName" type="text" dir="ltr" placeholder="topchef_password_reset"></label>
-            <label class="settings_field"><span>صلاحية كود الاستعادة (دقائق)</span><input id="whatsappResetExpiry" type="number" min="5" max="60" value="10"></label>
+            <label class="settings_field"><span>Webhook Verify Token</span><input id="whatsappWebhookToken" type="password" autocomplete="new-password" placeholder="يُحفظ مشفرًا"></label>
+            <label class="settings_field"><span>Meta App Secret</span><input id="whatsappAppSecret" type="password" autocomplete="new-password" placeholder="يُحفظ مشفرًا"></label>
             <label class="settings_field"><span>الحد الأقصى للإرسال الجماعي</span><input id="whatsappBulkLimit" type="number" min="1" max="5000" value="500"></label>
           </div>
           <label class="settings_toggle"><input id="whatsappEnabled" type="checkbox"><span>تفعيل الإشعارات التلقائية للطلبات</span></label>
-          <div class="settings_template_help">أنشئ في Meta ثلاثة قوالب Utility: قالب تحديث الطلب، وقالب الرسالة الجماعية، وقالب استعادة كلمة المرور. كل قالب يحتوي في الـBody على متغير نصي واحد <code>{{1}}</code>.</div>
+          <div class="settings_template_help">استعادة الدخول وتفعيل حساب العميل يعتمدان على رسالة يرسلها صاحب الرقم إلى المطعم؛ لا نرسل OTP مدفوعًا. اضبط Webhook على <code>/whatsapp/webhook</code>.</div>
           <label class="settings_field">
             <span>نص الرسالة الجماعية</span>
             <textarea id="whatsappBulkMessage" rows="7" maxlength="5000" placeholder="اكتب الرسالة الافتراضية هنا..."></textarea>
@@ -603,6 +604,19 @@
             <button id="saveWhatsAppSettings" type="submit">حفظ الإعدادات</button>
             <button id="sendWhatsAppBulk" class="settings_secondary_btn" type="button">إرسال الرسالة الجماعية</button>
           </div>
+        </form>
+        <form id="paymentSettingsForm" class="settings_card payment_settings_card">
+          <div class="settings_card_title">
+            <span class="payment_mark">ج.م</span>
+            <div><h2>الدفع من المنيو</h2><p>الوسيلة غير المفعلة تظهر للعميل باهتة ولا يمكن اختيارها.</p></div>
+          </div>
+          <label class="settings_field"><span>اسم صاحب الحساب</span><input id="paymentAccountName" type="text" dir="rtl" placeholder="الاسم الذي سيظهر للعميل"></label>
+          <div class="settings_grid">
+            <div><label class="settings_toggle"><input id="instapayEnabled" type="checkbox"><span>تفعيل InstaPay</span></label><label class="settings_field"><span>رقم أو عنوان InstaPay</span><input id="instapayAccount" type="text" dir="ltr" placeholder="01xxxxxxxxx أو username@instapay"></label></div>
+            <div><label class="settings_toggle"><input id="walletEnabled" type="checkbox"><span>تفعيل المحفظة</span></label><label class="settings_field"><span>رقم المحفظة</span><input id="walletNumber" type="tel" dir="ltr" placeholder="01xxxxxxxxx"></label></div>
+          </div>
+          <div id="paymentSettingsNotice" class="settings_notice" role="status" hidden></div>
+          <div class="settings_actions"><button id="savePaymentSettings" type="submit">حفظ بيانات الدفع</button></div>
         </form>
       </section>
     </div>
@@ -834,7 +848,7 @@
     <script src="js/delivery-operations.js?v=20260820-delivery-desk"></script>
     <script src="js/offer.js?v=20260825-shared-live"></script>
     <script src="js/shifts.js?v=20260825-shared-live"></script>
-    <script src="js/settings.js?v=20260825-whatsapp-settings"></script>
+    <script src="js/settings.js?v=20260912-payment-settings"></script>
 
     <script src="js/chart.js?v=20260901-report-ui-fixes"></script>
     <script src="js/orders_dashboard.js?v=20260901-report-ui-fixes"></script>

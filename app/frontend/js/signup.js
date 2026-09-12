@@ -149,11 +149,12 @@
 
   if (resetForm && forgotButton) {
     const resetUsername = document.getElementById("resetUsername");
-    const resetCode = document.getElementById("resetCode");
     const resetPassword = document.getElementById("resetNewPassword");
     const resetFields = document.getElementById("resetCodeFields");
     const resetNotice = document.getElementById("passwordResetNotice");
     const sendCodeButton = document.getElementById("sendResetCode");
+    let resetChallengeId = "";
+    let resetPollTimer = null;
 
     const showResetNotice = (message, type) => {
       resetNotice.hidden = false;
@@ -166,6 +167,9 @@
       resetForm.hidden = false;
     });
     document.getElementById("backToLogin").addEventListener("click", () => {
+      if (resetPollTimer) clearTimeout(resetPollTimer);
+      resetPollTimer = null;
+      resetChallengeId = "";
       resetForm.hidden = true;
       form.hidden = false;
       resetNotice.hidden = true;
@@ -179,9 +183,25 @@
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username }),
         });
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "تعذر إرسال الكود");
-        resetFields.hidden = false;
-        showResetNotice(data.message, "success");
+        if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "تعذر بدء التحقق");
+        resetChallengeId = data.challenge_id;
+        const whatsappWindow = window.open(data.whatsapp_url, "_blank", "noopener,noreferrer");
+        if (!whatsappWindow) showResetNotice("اسمح بفتح النوافذ ثم اضغط الزر مرة أخرى", "error");
+        else showResetNotice("أرسل الرسالة الجاهزة من واتساب. ننتظر التأكيد...", "success");
+        const poll = async () => {
+          if (!resetChallengeId) return;
+          try {
+            const statusResponse = await fetch(`${API_BASE}/auth/password-reset-status/${encodeURIComponent(resetChallengeId)}`);
+            const status = await statusResponse.json().catch(() => ({}));
+            if (statusResponse.ok && status.verified) {
+              resetFields.hidden = false;
+              showResetNotice("تم تأكيد واتساب. اختر كلمة المرور الجديدة.", "success");
+              return;
+            }
+          } catch (_) {}
+          resetPollTimer = setTimeout(poll, 2000);
+        };
+        poll();
       } catch (error) {
         showResetNotice(error.message || "تعذر الاتصال بالخادم", "error");
       } finally {
@@ -191,14 +211,14 @@
     resetForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const newPassword = resetPassword.value.trim();
-      if (!/^\d{6}$/.test(resetCode.value.trim())) return showResetNotice("أدخل كود التحقق المكون من 6 أرقام", "error");
+      if (!resetChallengeId) return showResetNotice("ابدأ تأكيد واتساب أولاً", "error");
       if (!/^[A-Za-z0-9]{6,}$/.test(newPassword)) return showResetNotice("كلمة المرور 6 خانات على الأقل، حروف إنجليزية أو أرقام فقط", "error");
       const button = resetForm.querySelector("button[type='submit']");
       button.disabled = true;
       try {
         const response = await fetch(`${API_BASE}/auth/reset-password`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: resetUsername.value.trim(), code: resetCode.value.trim(), new_password: newPassword }),
+          body: JSON.stringify({ username: resetUsername.value.trim(), challenge_id: resetChallengeId, new_password: newPassword }),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "تعذر تغيير كلمة المرور");

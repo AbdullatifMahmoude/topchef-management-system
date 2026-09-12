@@ -22,16 +22,28 @@ def get_business_date() -> date:
     return get_current_business_date()
 
 class ShiftsService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, redis=None):
         self.db = db
+        self.redis = redis
+
+    async def _open_web_orders_for_first_shift(self, was_active: bool, sync_web_orders: bool) -> None:
+        if sync_web_orders and not was_active:
+            from app.modules.settings.service import SettingsService
+            await SettingsService(self.db, self.redis).toggle_web_orders(True)
+            await self.db.commit()
 
     async def _username_for(self, user_id: int) -> Optional[str]:
         from app.modules.users.models import User
         user = await self.db.get(User, user_id)
         return user.username if user else None
 
-    async def start_shift(self, user_id: int):
+    async def start_shift(self, user_id: int, sync_web_orders: bool = False):
         target_date = get_business_date()
+        was_active = True
+        if sync_web_orders:
+            active_count = await self.db.scalar(select(func.count(CashierShift.id)).where(
+                CashierShift.target_date == target_date, CashierShift.end_time.is_(None))) or 0
+            was_active = active_count > 0
         # Detect sessions left logged in across the 07:00 business-day cutoff.
         active_shift = await self.db.scalar(
             select(CashierShift).where(
@@ -40,6 +52,7 @@ class ShiftsService:
             ).order_by(desc(CashierShift.id))
         )
         if active_shift and active_shift.target_date == target_date:
+            await self._open_web_orders_for_first_shift(was_active, sync_web_orders)
             return active_shift
         if active_shift:
             # End stale shifts so their expenses cannot appear in the new day.
@@ -63,6 +76,7 @@ class ShiftsService:
                 # The shift is already open.
                 await self.db.commit()
 
+            await self._open_web_orders_for_first_shift(was_active, sync_web_orders)
             return last_shift
 
         else:
@@ -76,10 +90,11 @@ class ShiftsService:
             await self.db.flush() # To get the ID
             
             await self.db.commit()
+            await self._open_web_orders_for_first_shift(was_active, sync_web_orders)
             return new_shift
             
 
-    async def end_shift(self, user_id: int):
+    async def end_shift(self, user_id: int, sync_web_orders: bool = False):
         # Do not restrict this lookup by target_date: a night shift can start on
         # one business date and be closed after the 07:00 cutoff on the next.
         query = select(CashierShift).where(
@@ -92,6 +107,13 @@ class ShiftsService:
         if active_shift:
             active_shift.end_time = datetime.now(timezone.utc).replace(tzinfo=None)
             await self.db.commit()
+            if sync_web_orders:
+                remaining = await self.db.scalar(select(func.count(CashierShift.id)).where(
+                    CashierShift.end_time.is_(None))) or 0
+                if not remaining:
+                    from app.modules.settings.service import SettingsService
+                    await SettingsService(self.db, self.redis).toggle_web_orders(False)
+                    await self.db.commit()
             
         else:
             logger.warning(
