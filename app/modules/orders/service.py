@@ -403,10 +403,10 @@ class OrderService:
                                 None
                             )
                         if existing_match:
-                            update_data.address_id = existing_match.id
+                            self._apply_resolved_address(order, update_data, existing_match)
                         else:
                             new_addr = await customer_service.add_address(update_data.customer_id, CustomerAddressCreate(address=update_data.customer_address))
-                            update_data.address_id = new_addr.id
+                            self._apply_resolved_address(order, update_data, new_addr)
 
             needs_reprice = False
             if update_data.delivery_fee is not None and update_data.delivery_fee != order.delivery_fee:
@@ -503,6 +503,12 @@ class OrderService:
         })
         await self.notifications.enqueue(payload_data, "updated")
         return completed_order
+
+    @staticmethod
+    def _apply_resolved_address(order, update_data, address) -> None:
+        """Synchronize the address FK and loaded relationship for the PATCH response."""
+        update_data.address_id = address.id
+        order.address = address
 
     async def get_today_stats(self) -> dict:
         return await self.repository.get_today_stats()

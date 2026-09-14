@@ -5265,6 +5265,9 @@ async function updateEditOrderConfirm() {
         ...updatedLocalOrder,
         cart: cartMapped,
         itemsTotal: itemsTotal,
+        // The native print agent checks the camelCase field first. Override any
+        // stale value retained from the pre-edit local order.
+        customerAddress: getOrderAddressText(updatedLocalOrder),
       };
 
       printReceipt(printData);
