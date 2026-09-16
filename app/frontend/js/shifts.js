@@ -1,6 +1,7 @@
 let shiftsRefreshTimer = null;
 let shiftsData = [];
 let selectedShift = null;
+let shiftBusinessDatePromise = null;
 
 const shiftMoney = (value) => `${Number(value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`;
 const shiftNumber = (value) => Number(value || 0).toLocaleString("ar-EG");
@@ -14,12 +15,12 @@ const shiftDuration = (minutes) => {
 
 document.addEventListener("DOMContentLoaded", () => {
   const dateInput = document.getElementById("shiftsDateFilter");
-  if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
+  if (dateInput) initializeShiftBusinessDate();
   document.getElementById("shiftsDateBtn")?.addEventListener("click", fetchShiftsReport);
   document.getElementById("shiftsStatusFilter")?.addEventListener("change", renderShiftsTable);
   document.getElementById("shiftsCashierFilter")?.addEventListener("change", renderShiftsTable);
   document.querySelectorAll('.side_btn[data-page="shifts"]').forEach((button) => button.addEventListener("click", () => {
-    fetchShiftsReport();
+    initializeShiftBusinessDate().then(fetchShiftsReport);
     startShiftsAutoRefresh();
   }));
   document.getElementById("closeShiftDrawer")?.addEventListener("click", closeShiftDrawer);
@@ -36,6 +37,32 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+function initializeShiftBusinessDate() {
+  if (shiftBusinessDatePromise) return shiftBusinessDatePromise;
+  shiftBusinessDatePromise = window.apiFetch("/shifts/business-date", { hideLoader: true })
+    .then(async (response) => {
+      if (!response.ok) throw new Error("Failed to fetch business date");
+      const data = await response.json();
+      const dateInput = document.getElementById("shiftsDateFilter");
+      if (dateInput && data.business_date) {
+        dateInput.value = data.business_date;
+        window.refreshStableDateInput?.(dateInput);
+      }
+    })
+    .catch((error) => {
+      console.error("Error fetching shift business date:", error);
+      const now = new Date();
+      if (now.getHours() < 7) now.setDate(now.getDate() - 1);
+      const dateInput = document.getElementById("shiftsDateFilter");
+      if (dateInput && !dateInput.value) {
+        const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        dateInput.value = localDate;
+        window.refreshStableDateInput?.(dateInput);
+      }
+    });
+  return shiftBusinessDatePromise;
+}
 
 function startShiftsAutoRefresh() {
   if (shiftsRefreshTimer) return;

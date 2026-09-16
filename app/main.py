@@ -65,10 +65,11 @@ async def lifespan(app: FastAPI):
         logger.info("[WORKER] Starting Global Workers...")
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()
-        await global_leader_manager.start()
         from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
-        await whatsapp_outbox_worker.start()
-        logger.info(f"[WORKER] Global Worker active [PID: {pid}]")
+        global_leader_manager.on_leader_elected(whatsapp_outbox_worker.start)
+        global_leader_manager.on_leader_lost(whatsapp_outbox_worker.stop)
+        await global_leader_manager.start()
+        logger.info(f"[WORKER] Global Worker awaiting leadership [PID: {pid}]")
     
     logger.info(f"[SUCCESS] Application startup complete [PID: {pid}] [Role: {APP_ROLE}]")
     _startup_executed = True

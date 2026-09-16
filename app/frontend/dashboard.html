@@ -399,7 +399,7 @@
         <header class="shifts_header">
           <div><p>الرقابة التشغيلية</p><h1 id="shifts_page_title">إدارة وتسليم الشيفتات</h1><span>متابعة أداء الكاشير وحركة يوم العمل</span></div>
           <div class="shifts_date_filter">
-            <input type="date" id="shiftsDateFilter" />
+            <span class="stable_date_input"><input type="date" id="shiftsDateFilter" /><span class="stable_date_value" aria-hidden="true"></span></span>
             <button id="shiftsDateBtn" type="button">عرض اليوم</button>
           </div>
         </header>
@@ -466,8 +466,8 @@
             <button id="yearlyBtn" class="filter-btn" data-period="year">سنوي</button>
           </div>
           <div class="custom-date-filter">
-            <label>من <input type="date" id="customStartDate" /></label>
-            <label>إلى <input type="date" id="customEndDate" /></label>
+            <label>من <span class="stable_date_input"><input type="date" id="customStartDate" /><span class="stable_date_value" aria-hidden="true"></span></span></label>
+            <label>إلى <span class="stable_date_input"><input type="date" id="customEndDate" /><span class="stable_date_value" aria-hidden="true"></span></span></label>
             <button id="customDateBtn" type="button">تطبيق</button>
           </div>
         </div>
@@ -717,8 +717,8 @@
               <section class="offer_form_section">
                 <div class="offer_section_title"><strong>المدة وحدود الاستخدام</strong><span>اترك الحدود فارغة لو العرض غير محدود</span></div>
                 <div class="offer_fields_grid offer_limits_grid">
-                  <label>متاح من<input name="valid_from" type="date" required></label>
-                  <label>متاح إلى<input name="valid_to" type="date" required></label>
+                  <label>متاح من<span class="stable_date_input"><input name="valid_from" type="date" required><span class="stable_date_value" aria-hidden="true"></span></span></label>
+                  <label>متاح إلى<span class="stable_date_input"><input name="valid_to" type="date" required><span class="stable_date_value" aria-hidden="true"></span></span></label>
                   <label>إجمالي مرات الاستخدام<input name="usage_limit" type="number" min="1" step="1" placeholder="غير محدود"></label>
                   <label>مرات الاستخدام لكل عميل<input name="usage_per_user" type="number" min="1" step="1" placeholder="غير محدود"></label>
                 </div>
@@ -849,12 +849,12 @@
     <script src="js/delivery.js?v=20260820-users-operations"></script>
     <script src="js/delivery-operations.js?v=20260820-delivery-desk"></script>
     <script src="js/offer.js?v=20260825-shared-live"></script>
-    <script src="js/shifts.js?v=20260916-cash-additions"></script>
+    <script src="js/shifts.js?v=20260916-business-date-format"></script>
     <script src="js/settings.js?v=20260912-payment-settings"></script>
 
-    <script src="js/chart.js?v=20260901-report-ui-fixes"></script>
+    <script src="js/chart.js?v=20260916-business-date"></script>
     <script src="js/orders_dashboard.js?v=20260901-report-ui-fixes"></script>
-    <script src="js/admin.js?v=20260820-cloud-only"></script>
+    <script src="js/admin.js?v=20260916-stable-dates"></script>
     <script>
       // ===== عرض اسم المستخدم =====
       (function () {

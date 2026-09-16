@@ -36,13 +36,13 @@ async def get_daily_report(
 
 @router.get("/weekly", response_model=schemas.WeeklyReportResponse)
 async def get_weekly_report(
-    target_date: date = Query(default_factory=date.today, description="Any date within the target week (YYYY-MM-DD)"),
+    target_date: Optional[date] = Query(default=None, description="Any date within the target week (YYYY-MM-DD)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    return await service.get_weekly_report(db, target_date, limit, offset)
+    return await service.get_weekly_report(db, target_date or service.get_business_date(), limit, offset)
 
 @router.get("/monthly", response_model=schemas.MonthlyReportResponse)
 async def get_monthly_report(

@@ -15,10 +15,15 @@ class LeaderManager:
         self.is_leader = False
         self._heartbeat_task = None
         self._leader_callbacks = []
+        self._leader_lost_callbacks = []
 
     def on_leader_elected(self, callback):
         """Register a callback to run when this instance becomes leader."""
         self._leader_callbacks.append(callback)
+
+    def on_leader_lost(self, callback):
+        """Register a callback to stop singleton work after leadership loss."""
+        self._leader_lost_callbacks.append(callback)
 
     async def start(self):
         if self._heartbeat_task:
@@ -50,6 +55,8 @@ class LeaderManager:
                         asyncio.create_task(callback())
                 elif not self.is_leader and was_leader:
                     logger.warning(f"🏳️ Instance {self.instance_id} lost leadership for {self.service_name}")
+                    for callback in self._leader_lost_callbacks:
+                        asyncio.create_task(callback())
                 
                 await asyncio.sleep(10)
             except asyncio.CancelledError:

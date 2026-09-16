@@ -23,6 +23,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentSummary = { total_orders: 0 };
   let currentRange = { start: "", end: "" };
   let currentPageOrders = [];
+  let currentBusinessDate = new Date();
+  if (currentBusinessDate.getHours() < 7) currentBusinessDate.setDate(currentBusinessDate.getDate() - 1);
 
   const dateLabel = (value, options = { day: "numeric", month: "short" }) => value ? new Date(`${value}T12:00:00`).toLocaleDateString("ar-EG", options) : "—";
   function reportTitle(type, data = {}) {
@@ -202,7 +204,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function periodUrl(type) {
-    const today = new Date();
+    const today = currentBusinessDate;
     if (type === "daily") return "/reports/daily";
     if (type === "weekly") return "/reports/weekly";
     if (type === "monthly") return `/reports/monthly?year=${today.getFullYear()}&month=${today.getMonth() + 1}`;
@@ -214,7 +216,19 @@ document.addEventListener("DOMContentLoaded", () => {
     filterBtns.forEach((item) => item.classList.remove("active_report")); button.classList.add("active_report");
     const type = buttonTypes[button.id]; loadReport(periodUrl(type), type, 0);
   }));
-  const today = new Date().toISOString().split("T")[0]; startInput.value = today; endInput.value = today;
+  const localBusinessDate = `${currentBusinessDate.getFullYear()}-${String(currentBusinessDate.getMonth() + 1).padStart(2, "0")}-${String(currentBusinessDate.getDate()).padStart(2, "0")}`;
+  startInput.value = localBusinessDate; endInput.value = localBusinessDate;
+  window.apiFetch("/shifts/business-date", { hideLoader: true }).then(async (response) => {
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.business_date) return;
+    const [year, month, day] = data.business_date.split("-").map(Number);
+    currentBusinessDate = new Date(year, month - 1, day, 12);
+    startInput.value = data.business_date;
+    endInput.value = data.business_date;
+    window.refreshStableDateInput?.(startInput);
+    window.refreshStableDateInput?.(endInput);
+  }).catch((error) => console.warn("Could not load report business date", error));
   document.getElementById("customDateBtn").addEventListener("click", () => {
     if (!startInput.value || !endInput.value) { errorBox.textContent = "اختر تاريخ البداية والنهاية"; errorBox.hidden = false; return; }
     filterBtns.forEach((item) => item.classList.remove("active_report"));

@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 
 from app.modules.settings.whatsapp_outbox import (
+    WhatsAppOutboxWorker,
     enqueue_order_notification,
     order_event_key,
     order_message_plan,
@@ -32,6 +33,13 @@ def test_outbox_retry_uses_bounded_exponential_backoff():
     assert retry_delay(1) == timedelta(seconds=2)
     assert retry_delay(4) == timedelta(seconds=16)
     assert retry_delay(20) == timedelta(seconds=300)
+
+
+def test_outbox_worker_connection_failure_backoff_is_bounded():
+    worker = WhatsAppOutboxWorker(poll_seconds=2)
+    delays = [min(60, worker.poll_seconds * (2 ** min(attempt, 5))) for attempt in range(1, 8)]
+
+    assert delays == [4, 8, 16, 32, 60, 60, 60]
 
 
 def test_order_events_use_the_approved_two_template_contract():

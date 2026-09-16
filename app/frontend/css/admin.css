@@ -4008,6 +4008,40 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
+/* Native date controls use the device locale (MM/DD on some Android tablets).
+   Keep the native picker clickable, but render one stable DD/MM/YYYY value. */
+.stable_date_input {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+}
+.stable_date_input input[type="date"] {
+  width: 100%;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  caret-color: transparent;
+}
+.stable_date_value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 38px 0 10px;
+  direction: ltr;
+  color: #fff7e5;
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.form_modal_offers .stable_date_input { width: 100%; }
+.custom-date-filter .stable_date_input { width: 135px; }
+.shifts_date_filter .stable_date_input { width: 168px; }
+@media (max-width: 620px) {
+  .shifts_date_filter .stable_date_input { width: 100%; }
+}
+
 /* Large financial values must remain complete instead of turning into an
    ellipsis. Isolate their bidirectional text so Arabic currency stays stable. */
 .ops_kpi > strong,

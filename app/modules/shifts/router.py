@@ -176,6 +176,14 @@ async def get_shifts(
     dt = target_date or get_business_date()
     return await shifts_service.get_shifts_report(dt)
 
+@router.get("/business-date")
+async def get_shift_business_date(
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("Only admin can view shifts report")
+    return {"business_date": get_business_date().isoformat()}
+
 @router.post("/{shift_id}/cash-additions")
 async def create_shift_cash_addition(
     shift_id: int,

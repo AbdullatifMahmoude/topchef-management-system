@@ -1,6 +1,22 @@
 // ============================================
 // Toggle switch functionality
 // ============================================
+function refreshStableDateInput(input) {
+  const display = input?.parentElement?.querySelector(".stable_date_value");
+  if (!display) return;
+  const [year, month, day] = String(input.value || "").split("-");
+  display.textContent = year && month && day ? `${day}/${month}/${year}` : "يوم/شهر/سنة";
+}
+
+window.refreshStableDateInput = refreshStableDateInput;
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".stable_date_input input[type='date']").forEach((input) => {
+    refreshStableDateInput(input);
+    input.addEventListener("input", () => refreshStableDateInput(input));
+    input.addEventListener("change", () => refreshStableDateInput(input));
+  });
+});
+
 document.querySelectorAll(".switch").forEach((t) => {
   t.addEventListener("click", () => t.classList.toggle("active"));
 });

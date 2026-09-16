@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import event
+from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
@@ -70,6 +72,77 @@ def _is_sqlite_url(url: str) -> bool:
     return url.startswith("sqlite+aiosqlite://") or url.startswith("sqlite:///")
 
 
+def _is_transaction_pooler_url(url: str) -> bool:
+    """Return whether the database endpoint uses transaction pooling.
+
+    Supabase exposes its transaction pooler on port 6543. Unlike session mode,
+    a client connection must not retain session state between transactions.
+    """
+    return make_url(url).port == 6543
+
+
+def _resolve_runtime_database_url(url: str) -> str:
+    """Use Supabase transaction mode without replacing an integration secret.
+
+    FastAPI Cloud's Supabase integration owns DATABASE_URL and may expose it
+    read-only in session mode. The shared pooler's host and credentials are the
+    same for transaction mode; only its port changes from 5432 to 6543.
+    """
+    parsed_url = make_url(url)
+    hostname = (parsed_url.host or "").lower()
+    if hostname.endswith(".pooler.supabase.com") and parsed_url.port == 5432:
+        parsed_url = parsed_url.set(port=6543)
+        return parsed_url.render_as_string(hide_password=False)
+    return url
+
+
+def _prepare_async_database_url(url: str) -> str:
+    if not _is_transaction_pooler_url(url):
+        return url
+
+    # SQLAlchemy's asyncpg dialect maintains its own prepared-statement cache
+    # in addition to asyncpg's cache. Supabase transaction mode supports
+    # neither, so both layers must be disabled.
+    prepared_url = make_url(url).update_query_dict(
+        {"prepared_statement_cache_size": "0"}
+    )
+    return prepared_url.render_as_string(hide_password=False)
+
+
+def _build_async_engine_kwargs(url: str) -> dict:
+    kwargs = {
+        "echo": False,
+        "future": True,
+    }
+
+    if _is_sqlite_url(url):
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 15}
+    elif _is_transaction_pooler_url(url):
+        # Supavisor owns pooling in transaction mode. NullPool prevents every
+        # horizontally scaled API replica from reserving idle client sessions.
+        kwargs.update(
+            {
+                "poolclass": NullPool,
+                "connect_args": {"statement_cache_size": 0},
+            }
+        )
+    else:
+        kwargs.update(
+            {
+                "pool_pre_ping": True,
+                "pool_recycle": 1800,
+                # Supabase session-mode poolers commonly enforce a small global
+                # client limit. Keep each API replica bounded so one process
+                # cannot consume the entire database pool.
+                "pool_size": settings.DB_POOL_SIZE,
+                "max_overflow": settings.DB_MAX_OVERFLOW,
+                "pool_timeout": settings.DB_POOL_TIMEOUT_SECONDS,
+            }
+        )
+
+    return kwargs
+
+
 def _to_sync_database_url(url: str) -> str:
     if url.startswith("postgresql+asyncpg://"):
         return url.replace("postgresql+asyncpg://", "postgresql://", 1).split("?")[0]
@@ -78,25 +151,10 @@ def _to_sync_database_url(url: str) -> str:
     return url
 
 
-engine_kwargs = {
-    "echo": False,
-    "future": True,
-}
-
-if _is_sqlite_url(settings.DATABASE_URL):
-    engine_kwargs["connect_args"] = {"check_same_thread": False, "timeout": 15}
-else:
-    engine_kwargs.update(
-        {
-            "pool_pre_ping": True,
-            "pool_recycle": 1800,
-            "pool_size": 5,
-            "max_overflow": 10,
-        }
-    )
-
-
-engine: AsyncEngine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
+runtime_database_url = _resolve_runtime_database_url(settings.DATABASE_URL)
+async_database_url = _prepare_async_database_url(runtime_database_url)
+engine_kwargs = _build_async_engine_kwargs(runtime_database_url)
+engine: AsyncEngine = create_async_engine(async_database_url, **engine_kwargs)
 
 if _is_sqlite_url(settings.DATABASE_URL):
     @event.listens_for(engine.sync_engine, "connect")

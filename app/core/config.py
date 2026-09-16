@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Top chef restaurant management system"
     VERSION: str = "0.0.1"
     DATABASE_URL: str | None = None
+    DB_POOL_SIZE: int = Field(default=3, ge=1, le=10)
+    DB_MAX_OVERFLOW: int = Field(default=2, ge=0, le=10)
+    DB_POOL_TIMEOUT_SECONDS: int = Field(default=10, ge=1, le=60)
     SECRET_KEY: str | None = None
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720

@@ -122,6 +122,7 @@ class WhatsAppOutboxWorker:
         self.batch_size = batch_size
         self.max_attempts = max_attempts
         self._task: asyncio.Task | None = None
+        self._failure_count = 0
 
     async def start(self):
         if not self._task:
@@ -140,13 +141,15 @@ class WhatsAppOutboxWorker:
         while True:
             try:
                 processed = await self.process_once()
+                self._failure_count = 0
                 if not processed:
                     await asyncio.sleep(self.poll_seconds)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 logger.error("WhatsApp outbox worker failed: %s", exc, exc_info=True)
-                await asyncio.sleep(self.poll_seconds)
+                self._failure_count += 1
+                await asyncio.sleep(min(60, self.poll_seconds * (2 ** min(self._failure_count, 5))))
 
     async def process_once(self) -> int:
         now = datetime.utcnow()
