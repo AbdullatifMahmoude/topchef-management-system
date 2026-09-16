@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -17,7 +18,17 @@ STATUS_NAMES = {
     "completed": "تم اكتمال الطلب",
     "cancelled": "تم إلغاء الطلب",
 }
+ORDER_TYPE_NAMES = {"delivery": "توصيل", "takeaway": "استلام من المطعم", "hall": "صالة"}
+PAYMENT_METHOD_NAMES = {"cash": "نقدي", "instapay": "إنستا باي", "wallet": "محفظة إلكترونية"}
 _http_client: httpx.AsyncClient | None = None
+
+
+@dataclass(frozen=True)
+class WhatsAppSendResult:
+    accepted: bool
+    message_id: str | None = None
+    error: str | None = None
+    error_code: int | None = None
 
 
 def get_whatsapp_http_client() -> httpx.AsyncClient:
@@ -78,6 +89,50 @@ def _money(value: Any) -> str:
     return f"{Decimal(str(value or 0)):.2f} ج.م"
 
 
+def _amount(value: Any) -> str:
+    return f"{Decimal(str(value or 0)):.2f}"
+
+
+def _value(value: Any) -> str:
+    return str(getattr(value, "value", value) or "").lower()
+
+
+def _items_text(order: dict[str, Any]) -> str:
+    items = order.get("items") or []
+    if not items:
+        return "لا توجد أصناف"
+    lines = []
+    for item in items:
+        name = item.get("product_name") or f"صنف {item.get('product_id', '')}"
+        lines.append(f"{item.get('quantity', 1)} × {name} — {_money(item.get('total_price'))}")
+    return "\n".join(lines)
+
+
+def order_template_parameters(order: dict[str, Any], event_type: str, *, first_order: bool = False) -> list[str]:
+    order_number = str(order.get("order_number") or "-")
+    status = STATUS_NAMES.get(_value(order.get("order_status")), str(order.get("order_status") or "-"))
+    if event_type == "status_changed":
+        return [order_number, status, _amount(order.get("total_amount"))]
+
+    common = [
+        order_number,
+        status,
+        ORDER_TYPE_NAMES.get(_value(order.get("order_type")), str(order.get("order_type") or "-")),
+        _items_text(order),
+        _amount(order.get("subtotal")),
+        _amount(order.get("discount_amount")),
+        _amount(order.get("delivery_fee")),
+        _amount(order.get("total_amount")),
+        PAYMENT_METHOD_NAMES.get(_value(order.get("payment_method")), str(order.get("payment_method") or "-")),
+        str(order.get("customer_address") or "استلام من المطعم"),
+        str(order.get("customer_notes") or "لا توجد"),
+    ]
+    if first_order:
+        return common
+    update_label = "تم تعديل تفاصيل الطلب" if event_type == "updated" else "تم استلام طلب جديد"
+    return [update_label, *common]
+
+
 def build_order_message(order: dict[str, Any], event_type: str) -> str:
     headings = {
         "created": "تم إنشاء طلبك بنجاح",
@@ -86,7 +141,7 @@ def build_order_message(order: dict[str, Any], event_type: str) -> str:
     }
     lines = [
         headings.get(event_type, "تحديث على طلبك"),
-        f"رقم الطلب: #{order.get('order_number', '-')}",
+        f"رقم الطلب: {order.get('order_number', '-')}",
         f"الحالة: {STATUS_NAMES.get(str(order.get('order_status', '')).lower(), order.get('order_status', '-'))}",
     ]
     if event_type != "status_changed":
@@ -118,50 +173,30 @@ async def send_order_notification(order: dict[str, Any], event_type: str) -> boo
         settings = await service.get_whatsapp_settings()
         token = await service.get_whatsapp_access_token()
 
-    if not token or not whatsapp_config_ready(settings, template_name=settings.template_name):
+    template_name = (
+        settings.order_status_template_name
+        if event_type == "status_changed"
+        else settings.order_details_template_name
+    )
+    if not token or not whatsapp_config_ready(settings, template_name=template_name):
         logger.debug("WhatsApp skipped for order %s: integration is incomplete or disabled", order.get("order_number"))
         return False
 
     url = f"https://graph.facebook.com/{settings.graph_api_version}/{settings.phone_number_id}/messages"
-    payload = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": phone,
-        "type": "template",
-        "template": {
-            "name": settings.template_name,
-            "language": {"code": settings.language_code},
-            "components": [{
-                "type": "body",
-                "parameters": [{"type": "text", "text": build_order_message(order, event_type)}],
-            }],
-        },
-    }
-    try:
-        response = await get_whatsapp_http_client().post(
-            url,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json=payload,
-        )
-        if response.is_success:
-            logger.info("WhatsApp %s sent for order %s", event_type, order.get("order_number"))
-            return True
-        logger.warning(
-            "WhatsApp delivery rejected for order %s status=%s",
-            order.get("order_number"), response.status_code,
-        )
-    except Exception as exc:
-        logger.warning("WhatsApp request failed for order %s: %s", order.get("order_number"), exc)
-    return False
+    result = await send_template_message(
+        phone, order_template_parameters(order, event_type), template_name,
+        config=settings, token=token, client=get_whatsapp_http_client(),
+    )
+    return result.accepted
 
 
-async def send_template_text(
-    phone: str, text: str, template_name: str, *, config=None,
-    token: str | None = None, client: httpx.AsyncClient | None = None,
-) -> bool:
+async def send_template_message(
+    phone: str, parameters: list[str], template_name: str, *, button_payloads: list[str] | None = None,
+    config=None, token: str | None = None, client: httpx.AsyncClient | None = None,
+) -> WhatsAppSendResult:
     normalized = normalize_whatsapp_phone(phone)
     if not normalized:
-        return False
+        return WhatsAppSendResult(False, error="Invalid Egyptian mobile number")
     settings = config
     if settings is None or token is None:
         async with AsyncSessionLocal() as db:
@@ -169,13 +204,20 @@ async def send_template_text(
             settings = await service.get_whatsapp_settings()
             token = await service.get_whatsapp_access_token()
     if not token or not whatsapp_config_ready(settings, template_name=template_name):
-        return False
+        return WhatsAppSendResult(False, error="WhatsApp integration is incomplete or disabled")
+    components = [{
+        "type": "body",
+        "parameters": [{"type": "text", "text": str(value)} for value in parameters],
+    }]
+    for index, payload_value in enumerate(button_payloads or []):
+        components.append({
+            "type": "button", "sub_type": "quick_reply", "index": str(index),
+            "parameters": [{"type": "payload", "payload": payload_value}],
+        })
     payload = {
-        "messaging_product": "whatsapp", "recipient_type": "individual",
-        "to": normalized, "type": "template",
-        "template": {
-            "name": template_name, "language": {"code": settings.language_code},
-            "components": [{"type": "body", "parameters": [{"type": "text", "text": text}]}],
+        "messaging_product": "whatsapp", "recipient_type": "individual", "to": normalized,
+        "type": "template", "template": {
+            "name": template_name, "language": {"code": settings.language_code}, "components": components,
         },
     }
     try:
@@ -183,9 +225,30 @@ async def send_template_text(
             f"https://graph.facebook.com/{settings.graph_api_version}/{settings.phone_number_id}/messages",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, json=payload,
         )
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
         if response.is_success:
-            return True
+            messages = data.get("messages") or []
+            message_id = messages[0].get("id") if messages else None
+            return WhatsAppSendResult(True, message_id=message_id)
+        error = data.get("error") or {}
+        error_code = error.get("code")
         logger.warning("WhatsApp template '%s' rejected status=%s", template_name, response.status_code)
+        return WhatsAppSendResult(
+            False, error=error.get("message") or f"Meta API rejected the message ({response.status_code})",
+            error_code=int(error_code) if str(error_code).isdigit() else None,
+        )
     except Exception as exc:
         logger.warning("WhatsApp template '%s' request failed: %s", template_name, type(exc).__name__)
-    return False
+        return WhatsAppSendResult(False, error="WhatsApp request failed")
+
+
+async def send_template_text(
+    phone: str, text: str, template_name: str, *, config=None,
+    token: str | None = None, client: httpx.AsyncClient | None = None,
+) -> WhatsAppSendResult:
+    return await send_template_message(
+        phone, [text], template_name, config=config, token=token, client=client,
+    )

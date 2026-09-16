@@ -7,7 +7,9 @@
   const messageInput = document.getElementById("whatsappBulkMessage");
   const phoneNumberIdInput = document.getElementById("whatsappPhoneNumberId");
   const graphVersionInput = document.getElementById("whatsappGraphVersion");
-  const templateNameInput = document.getElementById("whatsappTemplateName");
+  const firstOrderTemplateInput = document.getElementById("whatsappFirstOrderTemplateName");
+  const orderDetailsTemplateInput = document.getElementById("whatsappOrderDetailsTemplateName");
+  const orderStatusTemplateInput = document.getElementById("whatsappOrderStatusTemplateName");
   const languageCodeInput = document.getElementById("whatsappLanguageCode");
   const enabledInput = document.getElementById("whatsappEnabled");
   const bulkTemplateInput = document.getElementById("whatsappBulkTemplateName");
@@ -20,6 +22,7 @@
   const notice = document.getElementById("whatsappSettingsNotice");
   const saveButton = document.getElementById("saveWhatsAppSettings");
   const toggleButton = document.getElementById("toggleWhatsAppApiKey");
+  let currentSettings = {};
 
   function showNotice(message, type) {
     notice.hidden = false;
@@ -42,10 +45,13 @@
       const response = await window.apiFetch("/settings/whatsapp");
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(errorMessage(data, "تعذر تحميل إعدادات واتساب"));
+      currentSettings = data;
       messageInput.value = data.bulk_message || "";
       phoneNumberIdInput.value = data.phone_number_id || "";
       graphVersionInput.value = data.graph_api_version || "v23.0";
-      templateNameInput.value = data.template_name || "topchef_order_update";
+      firstOrderTemplateInput.value = data.first_order_template_name || "topchef_first_order_details";
+      orderDetailsTemplateInput.value = data.order_details_template_name || "topchef_order_details";
+      orderStatusTemplateInput.value = data.order_status_template_name || "topchef_order_status";
       languageCodeInput.value = data.language_code || "ar";
       enabledInput.checked = Boolean(data.enabled);
       bulkTemplateInput.value = data.bulk_template_name || "topchef_bulk_message";
@@ -79,12 +85,14 @@
       bulk_message: messageInput.value.trim(),
       phone_number_id: phoneNumberIdInput.value.trim(),
       graph_api_version: graphVersionInput.value.trim(),
-      template_name: templateNameInput.value.trim(),
+      first_order_template_name: firstOrderTemplateInput.value.trim(),
+      order_details_template_name: orderDetailsTemplateInput.value.trim(),
+      order_status_template_name: orderStatusTemplateInput.value.trim(),
       language_code: languageCodeInput.value.trim(),
       enabled: enabledInput.checked,
       bulk_template_name: bulkTemplateInput.value.trim(),
-      password_reset_template_name: "",
-      reset_code_expiry_minutes: 10,
+      password_reset_template_name: currentSettings.password_reset_template_name || "topchef_password_reset",
+      reset_code_expiry_minutes: currentSettings.reset_code_expiry_minutes || 10,
       bulk_send_limit: Number(bulkLimitInput.value),
       business_phone_number: businessPhoneInput.value.trim(),
     };

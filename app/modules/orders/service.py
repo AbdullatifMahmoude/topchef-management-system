@@ -16,6 +16,7 @@ from app.core.events import order_events_manager
 from app.core.enums import OrderStatus, OrderSource, OrderType, PaymentMethod, UserRole
 from app.core.business_calendar import get_current_business_date, is_weekly_holiday
 from app.modules.orders.notifications import OrderNotificationPort, OutboxOrderNotifications
+from app.modules.orders.consent import resolve_order_message_consent
 
 
 class OrderService:
@@ -136,7 +137,6 @@ class OrderService:
                 try:
                     existing_cust = await customer_service.get_customer_by_phone(order_data.customer_phone)
                     order_data.customer_id = existing_cust.id
-                    
                     # Update local customer name if different, and push sync event
                     if existing_cust.name != order_data.customer_name and order_data.customer_name:
                         existing_cust.name = order_data.customer_name
@@ -151,7 +151,7 @@ class OrderService:
                         async with self.db.begin_nested():
                             new_cust = await customer_service.create_customer(CustomerCreate(
                                 name=order_data.customer_name,
-                                phone_number=order_data.customer_phone
+                                phone_number=order_data.customer_phone,
                             ))
                         order_data.customer_id = new_cust.id
                     except (ValidationError, IntegrityError) as create_error:
@@ -178,7 +178,8 @@ class OrderService:
                     else:
                         new_addr = await customer_service.add_address(order_data.customer_id, CustomerAddressCreate(address=order_data.customer_address))
                         order_data.address_id = new_addr.id
-            
+            order_data = await resolve_order_message_consent(self.db, self.redis, order_data)
+
             # 1. Prepare Pricing Request
             pricing_items = [
                 PricingItem(

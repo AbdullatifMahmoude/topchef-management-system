@@ -83,6 +83,7 @@ async def send_whatsapp_bulk_message(
         from app.core.exceptions import ValidationError
         raise ValidationError("اكتب نص الرسالة الجماعية واحفظ الإعدادات أولًا")
     customers = await CustomerRepository(db).list_customers()
+    customers = [customer for customer in customers if customer.whatsapp_status == "enabled"]
     phones = [customer.phone_number for customer in customers[:config.bulk_send_limit]]
     queued = await enqueue_bulk_notifications(db, phones, config.bulk_message, config.bulk_template_name)
     return schemas.BulkSendResponse(queued_count=queued, message="تمت إضافة الرسائل إلى قائمة الإرسال")

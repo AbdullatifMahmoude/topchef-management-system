@@ -26,6 +26,10 @@ class ExpenseCreate(BaseModel):
     amount: Decimal = Field(gt=0)
     note: Optional[str] = Field(default=None, max_length=500)
 
+class CashAdditionCreate(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    reason: str = Field(min_length=2, max_length=500)
+
 async def _current_shift(db: AsyncSession, user_id: int):
     # Roll over sessions left logged in past the 07:00 business-day boundary.
     await ShiftsService(db).start_shift(user_id)
@@ -171,3 +175,53 @@ async def get_shifts(
     shifts_service = ShiftsService(db)
     dt = target_date or get_business_date()
     return await shifts_service.get_shifts_report(dt)
+
+@router.post("/{shift_id}/cash-additions")
+async def create_shift_cash_addition(
+    shift_id: int,
+    payload: CashAdditionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("Only admin can add recovered shift cash")
+
+    from app.modules.shifts.models import CashierShift, ShiftCashAddition
+    shift = await db.scalar(
+        select(CashierShift).where(CashierShift.id == shift_id).with_for_update()
+    )
+    if not shift:
+        raise NotFoundError("Shift")
+    if shift.end_time is None:
+        raise ValidationError("لا يمكن إضافة مبلغ قبل إغلاق الشيفت")
+    if shift.actual_closing_cash is None:
+        raise ValidationError("يجب تسجيل النقد الفعلي للشيفت قبل إضافة المبلغ")
+
+    reason = payload.reason.strip()
+    if len(reason) < 2:
+        raise ValidationError("سبب إضافة المبلغ مطلوب")
+
+    addition = ShiftCashAddition(
+        shift_id=shift.id,
+        admin_id=current_user.id,
+        amount=payload.amount,
+        reason=reason,
+    )
+    db.add(addition)
+    await db.commit()
+    await db.refresh(addition)
+
+    additions_total = await db.scalar(select(func.sum(ShiftCashAddition.amount)).where(
+        ShiftCashAddition.shift_id == shift.id,
+    )) or Decimal("0")
+    adjusted_closing_cash = (shift.actual_closing_cash or Decimal("0")) + additions_total
+    return {
+        "id": addition.id,
+        "shift_id": shift.id,
+        "amount": float(addition.amount),
+        "reason": addition.reason,
+        "admin_id": addition.admin_id,
+        "created_at": addition.created_at.isoformat(),
+        "cash_additions_total": float(additions_total),
+        "adjusted_closing_cash": float(adjusted_closing_cash),
+    }

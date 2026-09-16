@@ -15,7 +15,9 @@ class SettingResponse(SettingBase):
 class WhatsAppSettingsUpdate(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=2000)
     phone_number_id: str = Field(default="", max_length=100)
-    template_name: str = Field(default="topchef_order_update", max_length=512)
+    first_order_template_name: str = Field(default="topchef_first_order_details", max_length=512)
+    order_details_template_name: str = Field(default="topchef_order_details", max_length=512)
+    order_status_template_name: str = Field(default="topchef_order_status", max_length=512)
     language_code: str = Field(default="ar", max_length=20)
     graph_api_version: str = Field(default="v23.0", pattern=r"^v\d+\.\d+$")
     enabled: bool = True
@@ -31,7 +33,9 @@ class WhatsAppSettingsUpdate(BaseModel):
 class WhatsAppSettingsResponse(BaseModel):
     api_key_configured: bool
     phone_number_id: str
-    template_name: str
+    first_order_template_name: str
+    order_details_template_name: str
+    order_status_template_name: str
     language_code: str
     graph_api_version: str
     enabled: bool

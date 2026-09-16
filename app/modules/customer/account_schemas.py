@@ -42,6 +42,7 @@ class CustomerProfile(BaseModel):
     id: int
     name: str
     phone_number: str
+    whatsapp_status: str = "unknown"
     addresses: list[CustomerAddressResponse]
 
 class CustomerDeviceResponse(BaseModel):

@@ -8,7 +8,10 @@ from app.core.secrets import decrypt_secret, encrypt_secret
 class SettingsService:
     WHATSAPP_API_KEY = "whatsapp_api_key"
     WHATSAPP_PHONE_NUMBER_ID = "whatsapp_phone_number_id"
+    WHATSAPP_FIRST_ORDER_TEMPLATE_NAME = "whatsapp_first_order_template_name"
     WHATSAPP_TEMPLATE_NAME = "whatsapp_template_name"
+    WHATSAPP_ORDER_DETAILS_TEMPLATE_NAME = "whatsapp_order_details_template_name"
+    WHATSAPP_ORDER_STATUS_TEMPLATE_NAME = "whatsapp_order_status_template_name"
     WHATSAPP_LANGUAGE_CODE = "whatsapp_language_code"
     WHATSAPP_GRAPH_API_VERSION = "whatsapp_graph_api_version"
     WHATSAPP_ENABLED = "whatsapp_enabled"
@@ -161,7 +164,9 @@ class SettingsService:
     async def get_whatsapp_settings(self) -> schemas.WhatsAppSettingsResponse:
         keys = (
             self.WHATSAPP_API_KEY, self.WHATSAPP_PHONE_NUMBER_ID,
-            self.WHATSAPP_TEMPLATE_NAME, self.WHATSAPP_LANGUAGE_CODE,
+            self.WHATSAPP_FIRST_ORDER_TEMPLATE_NAME,
+            self.WHATSAPP_TEMPLATE_NAME, self.WHATSAPP_ORDER_DETAILS_TEMPLATE_NAME,
+            self.WHATSAPP_ORDER_STATUS_TEMPLATE_NAME, self.WHATSAPP_LANGUAGE_CODE,
             self.WHATSAPP_GRAPH_API_VERSION, self.WHATSAPP_ENABLED,
             self.WHATSAPP_BULK_TEMPLATE_NAME, self.WHATSAPP_PASSWORD_RESET_TEMPLATE_NAME,
             self.WHATSAPP_RESET_EXPIRY_MINUTES, self.WHATSAPP_BULK_SEND_LIMIT,
@@ -176,7 +181,16 @@ class SettingsService:
         return schemas.WhatsAppSettingsResponse(
             api_key_configured=bool(decrypt_secret(text(self.WHATSAPP_API_KEY))),
             phone_number_id=text(self.WHATSAPP_PHONE_NUMBER_ID),
-            template_name=text(self.WHATSAPP_TEMPLATE_NAME, "topchef_order_update"),
+            first_order_template_name=text(
+                self.WHATSAPP_FIRST_ORDER_TEMPLATE_NAME, "topchef_first_order_details"
+            ),
+            order_details_template_name=text(
+                self.WHATSAPP_ORDER_DETAILS_TEMPLATE_NAME,
+                text(self.WHATSAPP_TEMPLATE_NAME, "topchef_order_details"),
+            ),
+            order_status_template_name=text(
+                self.WHATSAPP_ORDER_STATUS_TEMPLATE_NAME, "topchef_order_status"
+            ),
             language_code=text(self.WHATSAPP_LANGUAGE_CODE, "ar"),
             graph_api_version=text(self.WHATSAPP_GRAPH_API_VERSION, "v23.0"),
             enabled=text(self.WHATSAPP_ENABLED, "true").lower() == "true",
@@ -212,7 +226,15 @@ class SettingsService:
                     )
             text_settings = {
                 self.WHATSAPP_PHONE_NUMBER_ID: (data.phone_number_id.strip(), "Meta WhatsApp phone number ID"),
-                self.WHATSAPP_TEMPLATE_NAME: (data.template_name.strip(), "Approved WhatsApp utility template"),
+                self.WHATSAPP_FIRST_ORDER_TEMPLATE_NAME: (
+                    data.first_order_template_name.strip(), "Approved first-order WhatsApp utility template"
+                ),
+                self.WHATSAPP_ORDER_DETAILS_TEMPLATE_NAME: (
+                    data.order_details_template_name.strip(), "Approved WhatsApp order details utility template"
+                ),
+                self.WHATSAPP_ORDER_STATUS_TEMPLATE_NAME: (
+                    data.order_status_template_name.strip(), "Approved WhatsApp order status utility template"
+                ),
                 self.WHATSAPP_LANGUAGE_CODE: (data.language_code.strip(), "WhatsApp template language"),
                 self.WHATSAPP_GRAPH_API_VERSION: (data.graph_api_version.strip(), "Meta Graph API version"),
                 self.WHATSAPP_ENABLED: (str(data.enabled).lower(), "Enable automatic WhatsApp notifications"),

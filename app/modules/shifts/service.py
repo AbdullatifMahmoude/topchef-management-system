@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import List, Dict, Any, Optional
 
-from app.modules.shifts.models import CashierShift, ShiftExpense
+from app.modules.shifts.models import CashierShift, ShiftExpense, ShiftCashAddition
 from app.modules.orders.models import Order
 from app.core.enums import OrderStatus, PaymentMethod, OrderType
 from app.core.logging import logger
@@ -175,6 +175,12 @@ class ShiftsService:
             ShiftExpense.is_deleted == False,
         ))
         day_expenses = expenses_result.scalars().all()
+        additions_result = await self.db.execute(
+            select(ShiftCashAddition).options(selectinload(ShiftCashAddition.admin)).where(
+                ShiftCashAddition.shift_id.in_([shift.id for shift in shifts])
+            )
+        ) if shifts else None
+        day_additions = additions_result.scalars().all() if additions_result else []
 
         def format_dt(dt):
             if not dt:
@@ -214,9 +220,15 @@ class ShiftsService:
             opening_cash = shift.opening_cash or 0
             cash_expenses = sum((expense.amount or 0) for expense in day_expenses if expense.shift_id == shift.id)
             expected_cash = opening_cash + payment_sales[PaymentMethod.CASH.value] - cash_expenses
-            cash_difference = (
-                (shift.actual_closing_cash - expected_cash)
+            shift_additions = [addition for addition in day_additions if addition.shift_id == shift.id]
+            cash_additions_total = sum((addition.amount or 0) for addition in shift_additions)
+            adjusted_closing_cash = (
+                shift.actual_closing_cash + cash_additions_total
                 if shift.actual_closing_cash is not None else None
+            )
+            cash_difference = (
+                (adjusted_closing_cash - expected_cash)
+                if adjusted_closing_cash is not None else None
             )
             duration_end = shift_time_to_local(shift.end_time) or now_local
             duration_minutes = max(0, int((duration_end - shift_start_local).total_seconds() // 60))
@@ -240,6 +252,16 @@ class ShiftsService:
                 "cash_expenses": float(cash_expenses),
                 "expected_cash": float(expected_cash),
                 "actual_closing_cash": float(shift.actual_closing_cash) if shift.actual_closing_cash is not None else None,
+                "cash_additions_total": float(cash_additions_total),
+                "adjusted_closing_cash": float(adjusted_closing_cash) if adjusted_closing_cash is not None else None,
+                "cash_additions": [{
+                    "id": addition.id,
+                    "amount": float(addition.amount),
+                    "reason": addition.reason,
+                    "admin_id": addition.admin_id,
+                    "admin_name": addition.admin.full_name or addition.admin.username if addition.admin else "—",
+                    "created_at": format_dt(addition.created_at),
+                } for addition in shift_additions],
                 "cash_difference": float(cash_difference) if cash_difference is not None else None,
                 "closing_note": shift.closing_note,
                 "duration_minutes": duration_minutes,

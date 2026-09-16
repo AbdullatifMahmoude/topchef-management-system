@@ -2298,7 +2298,7 @@ async function fetchOnlineOrdersServer(page = 1, silent = false) {
   onlineOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    const url = `/orders/?page=1&page_size=500&source=online`;
+    const url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=online`;
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch online orders");
     const data = await res.json();
@@ -2324,7 +2324,7 @@ async function fetchAllOrdersServer(page = 1, silent = false) {
   allOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    const url = `/orders/?page=1&page_size=500&source=cashier`;
+    const url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch all orders");
     const data = await res.json();

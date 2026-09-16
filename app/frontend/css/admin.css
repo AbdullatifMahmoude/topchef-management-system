@@ -3293,6 +3293,19 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .drawer_shift_total span { color: rgba(240,230,204,.6); font-size: 11px; }
 .drawer_shift_total strong { color: var(--color-primary); font-size: 20px; }
 .print_shift_btn { width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 9px; background: var(--color-primary); color: #241a08; font-family: inherit; font-weight: 800; cursor: pointer; }
+.shift_additions { margin-top: 18px; padding-top: 17px; border-top: 1px solid rgba(255,255,255,.08); }
+.shift_additions h3 { margin: 0 0 12px; color: #fff7e5; font-size: 15px; }
+.shift_additions ul { display: grid; gap: 8px; margin: 0 0 14px; padding: 0; list-style: none; }
+.shift_additions li { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px; border-radius: 8px; background: rgba(255,255,255,.04); }
+.shift_additions li div { display: grid; gap: 3px; }
+.shift_additions li strong { color: #71dda2; font-size: 13px; }
+.shift_additions li span, .shift_additions li small, .shift_addition_hint { color: rgba(240,230,204,.48); font-size: 10px; }
+.shift_additions li.is_empty { justify-content: center; color: rgba(240,230,204,.35); }
+.shift_additions form { display: grid; gap: 10px; }
+.shift_additions label { display: grid; gap: 5px; color: rgba(240,230,204,.6); font-size: 11px; }
+.shift_additions input, .shift_additions textarea { width: 100%; padding: 9px 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; background: rgba(0,0,0,.2); color: #fff7e5; font: inherit; resize: vertical; }
+.shift_additions form button { padding: 10px; border: 0; border-radius: 8px; background: #71dda2; color: #14251c; font-family: inherit; font-weight: 800; cursor: pointer; }
+.shift_additions form button:disabled { opacity: .55; cursor: wait; }
 
 @media (max-width: 900px) { .shifts_kpis { grid-template-columns: repeat(2,minmax(0,1fr)); } .shifts_grid { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .shifts_header, .shifts_table_heading, .shifts_date_filter, .shifts_filters { align-items: stretch; flex-direction: column; } .shifts_date_filter input[type="date"], .shifts_date_filter button { width: 100% !important; } .shifts_kpis { grid-template-columns: 1fr; } .shifts_kpis article { border-inline-start: 0; border-bottom: 1px solid rgba(255,255,255,.08); } .shifts_filters select { width: 100%; } }

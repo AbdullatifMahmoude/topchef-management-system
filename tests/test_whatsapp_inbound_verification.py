@@ -8,7 +8,9 @@ from app.modules.settings.schemas import WhatsAppSettingsResponse
 
 def ready_settings():
     return WhatsAppSettingsResponse(
-        api_key_configured=True, phone_number_id="123", template_name="order",
+        api_key_configured=True, phone_number_id="123",
+        first_order_template_name="first",
+        order_details_template_name="details", order_status_template_name="status",
         language_code="ar", graph_api_version="v23.0", enabled=True,
         bulk_template_name="bulk", password_reset_template_name="reset",
         reset_code_expiry_minutes=10, bulk_send_limit=500, bulk_message="",

@@ -65,13 +65,59 @@ async def test_active_night_shift_keeps_orders_after_business_day_cutoff():
         order_type=OrderType.HALL,
     )
     db = AsyncMock()
-    db.execute.side_effect = [_Result([shift]), _Result([order]), _Result([])]
+    db.execute.side_effect = [_Result([shift]), _Result([order]), _Result([]), _Result([])]
 
     report = await ShiftsService(db).get_shifts_report(target_date)
 
     assert report[0]["total_orders"] == 1
     assert report[0]["total_sales"] == 100
     assert report[0]["duration_minutes"] > 270
+
+
+@pytest.mark.asyncio
+async def test_admin_cash_additions_adjust_difference_without_overwriting_cashier_count():
+    target_date = get_current_business_date() - timedelta(days=1)
+    start_local = datetime.combine(target_date, datetime.min.time()).replace(hour=10)
+    shift = SimpleNamespace(
+        id=1,
+        user_id=7,
+        user=SimpleNamespace(full_name="Cashier", username="cashier"),
+        start_time=start_local - timedelta(hours=3),
+        end_time=start_local.replace(hour=18) - timedelta(hours=3),
+        target_date=target_date,
+        opening_cash=100,
+        actual_closing_cash=180,
+        closing_note=None,
+    )
+    order = SimpleNamespace(
+        created_by_user_id=7,
+        created_at=start_local.replace(hour=12),
+        order_status=OrderStatus.COMPLETED,
+        total_amount=100,
+        delivery_fee=0,
+        discount_amount=0,
+        payment_method=PaymentMethod.CASH,
+        order_type=OrderType.HALL,
+    )
+    addition = SimpleNamespace(
+        id=5,
+        shift_id=1,
+        admin_id=2,
+        admin=SimpleNamespace(full_name="Admin", username="admin"),
+        amount=20,
+        reason="تم العثور عليه في الدرج الجانبي",
+        created_at=start_local.replace(hour=19),
+    )
+    db = AsyncMock()
+    db.execute.side_effect = [_Result([shift]), _Result([order]), _Result([]), _Result([addition])]
+
+    report = await ShiftsService(db).get_shifts_report(target_date)
+
+    assert report[0]["actual_closing_cash"] == 180
+    assert report[0]["cash_additions_total"] == 20
+    assert report[0]["adjusted_closing_cash"] == 200
+    assert report[0]["cash_difference"] == 0
+    assert report[0]["cash_additions"][0]["reason"] == addition.reason
 
 
 @pytest.mark.asyncio

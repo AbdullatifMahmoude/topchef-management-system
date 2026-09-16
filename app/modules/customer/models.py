@@ -14,6 +14,10 @@ class Customer(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     pin_hash = Column(String(255), nullable=True)
     account_activated_at = Column(DateTime, nullable=True)
+    whatsapp_status = Column(String(20), nullable=False, default="unknown", server_default="unknown")
+    whatsapp_consent_at = Column(DateTime, nullable=True)
+    whatsapp_checked_at = Column(DateTime, nullable=True)
+    whatsapp_failure_reason = Column(String(255), nullable=True)
 
     addresses = relationship("CustomerAddress", back_populates="customer", cascade="all, delete-orphan", lazy="selectin")
 

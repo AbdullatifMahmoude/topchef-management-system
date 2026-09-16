@@ -140,6 +140,7 @@ async def _profile(customer_id: int, db, redis):
     if not customer:
         raise AuthenticationError("الحساب غير متاح")
     data = CustomerProfile(id=customer.id, name=customer.name, phone_number=customer.phone_number,
+                           whatsapp_status=customer.whatsapp_status,
                            addresses=customer.addresses).model_dump(mode="json")
     if redis:
         await redis.setex(key, 300, json.dumps(data, ensure_ascii=False))
