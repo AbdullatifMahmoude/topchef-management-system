@@ -29,4 +29,8 @@ class CustomerResponse(CustomerBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime
+    whatsapp_status: str = "unknown"
+    whatsapp_consent_at: Optional[datetime] = None
+    whatsapp_checked_at: Optional[datetime] = None
+    whatsapp_failure_reason: Optional[str] = None
     addresses: List[CustomerAddressResponse] = []

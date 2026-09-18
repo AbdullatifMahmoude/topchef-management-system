@@ -22,10 +22,17 @@ class DiscountType(CaseInsensitiveEnum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
     BUY_ONE_GET_ONE = "buy_one_get_one"
+    COMBO = "combo"
+    BUY_X_GET_Y = "buy_x_get_y"
+    QUANTITY_DISCOUNT = "quantity_discount"
+    FREE_DELIVERY = "free_delivery"
+    CATEGORY_DISCOUNT = "category_discount"
+    HAPPY_HOUR = "happy_hour"
 
 class OrderStatus(CaseInsensitiveEnum):
     NEW = "new"
     CONFIRMED = "confirmed"
+    OUT_FOR_DELIVERY = "out_for_delivery"
     COMPLETED = "completed"
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
@@ -40,3 +47,8 @@ class OrderType(CaseInsensitiveEnum):
 class OrderSource(CaseInsensitiveEnum):
     CASHIER = "cashier"
     ONLINE = "online"
+
+class PaymentMethod(CaseInsensitiveEnum):
+    CASH = "cash"
+    INSTAPAY = "instapay"
+    WALLET = "wallet"

@@ -1,6 +1,22 @@
 // ============================================
 // Toggle switch functionality
 // ============================================
+function refreshStableDateInput(input) {
+  const display = input?.parentElement?.querySelector(".stable_date_value");
+  if (!display) return;
+  const [year, month, day] = String(input.value || "").split("-");
+  display.textContent = year && month && day ? `${day}/${month}/${year}` : "يوم/شهر/سنة";
+}
+
+window.refreshStableDateInput = refreshStableDateInput;
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".stable_date_input input[type='date']").forEach((input) => {
+    refreshStableDateInput(input);
+    input.addEventListener("input", () => refreshStableDateInput(input));
+    input.addEventListener("change", () => refreshStableDateInput(input));
+  });
+});
+
 document.querySelectorAll(".switch").forEach((t) => {
   t.addEventListener("click", () => t.classList.toggle("active"));
 });
@@ -17,7 +33,6 @@ function normalizeArabic(text) {
     .replace(/[ًٌٍَُِّْ]/g, "")
     .trim();
 }
-
 // ============================================
 // نظام التنقل بين الصفحات - SPA Navigation
 // ============================================
@@ -36,9 +51,8 @@ function showPage(pageId) {
   if (pageId === "home") {
     if (typeof refreshDashboard === "function") refreshDashboard();
   }
-
-  if (pageId === "events") {
-    if (typeof refreshSyncStatus === "function") refreshSyncStatus();
+  if (pageId === "delivery-ops" && typeof window.refreshDeliveryOperations === "function") {
+    window.refreshDeliveryOperations();
   }
 
   history.pushState({ page: pageId }, "", "#" + pageId);
@@ -115,12 +129,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // --- زرار الأحداث ---
-  const eventsBtn = document.getElementById("goeventspage");
-  if (eventsBtn) {
-    eventsBtn.addEventListener("click", () => showPage("events"));
-  }
-
   // --- موديل الأصناف ---
   const itemModal = document.querySelector(".modal");
   const addItemBtn = document.querySelector(".add_btn");
@@ -166,7 +174,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // --- تحديد الصفحة الأولى ---
   const hash = window.location.hash.replace("#", "");
-  const validPages = ["home", "items", "categories", "delivery", "reports", "offers", "events"];
+  const validPages = ["home", "items", "categories", "delivery", "delivery-ops", "shifts", "reports", "offers", "settings", "events"];
   showPage(validPages.includes(hash) ? hash : "home");
 
   // --- Back/Forward ---
@@ -199,14 +207,3 @@ function filterTable(value, tbodySelector, emptyMessage) {
   }
   if (message) message.style.display = found ? "none" : "";
 }
-
-setInterval(() => {
-  const eventsPage = document.getElementById("page-events");
-  if (
-    eventsPage &&
-    eventsPage.style.display !== "none" &&
-    typeof refreshSyncStatus === "function"
-  ) {
-    refreshSyncStatus();
-  }
-}, 30000);

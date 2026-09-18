@@ -1,8 +1,0 @@
-{
-  "version": "1.0.0",
-  "mandatory": false,
-  "notes": "Initial desktop release – Top Chef POS",
-  "download_url": "https://topchef-system.fastapicloud.dev/api/desktop/download?filename=TopChefSetup.exe",
-  "released_at": "2026-04-23T00:00:00",
-  "min_supported_version": "1.0.0"
-}

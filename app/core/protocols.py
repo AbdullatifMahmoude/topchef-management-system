@@ -20,5 +20,6 @@ class OfferServiceInterface(Protocol):
         customer_phone: Optional[str] = None, 
         cashier_id: Optional[int] = None,
         commit_usage: bool = False, 
-        order_id: Optional[int] = None
+        order_id: Optional[int] = None,
+        existing_order_id: Optional[int] = None,
     ) -> Any: ...

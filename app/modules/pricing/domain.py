@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -21,8 +21,8 @@ class FinancialSnapshot(BaseModel):
     ) -> "FinancialSnapshot":
         total = (subtotal - discount_amount) + delivery_fee
         return cls(
-            subtotal=subtotal.quantize(Decimal("0.00")),
-            discount_amount=discount_amount.quantize(Decimal("0.00")),
-            delivery_fee=delivery_fee.quantize(Decimal("0.00")),
-            total_amount=max(Decimal("0.00"), total).quantize(Decimal("0.00"))
+            subtotal=subtotal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+            discount_amount=discount_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+            delivery_fee=delivery_fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+            total_amount=max(Decimal("0.00"), total).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         )

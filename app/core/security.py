@@ -1,11 +1,10 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+import hashlib
+from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
-import hashlib
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -19,16 +18,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         if pwd_context.verify(plain_password, hashed_password):
             return True
-    except Exception:
-        pass
+    except (TypeError, ValueError):
+        return False
 
     # 2. Try legacy fallback (SHA256 then Bcrypt)
     try:
         legacy_hash = hashlib.sha256(plain_password.encode()).hexdigest()
         if pwd_context.verify(legacy_hash, hashed_password):
             return True
-    except Exception:
-        pass
+    except (TypeError, ValueError):
+        return False
 
     return False
 
@@ -40,14 +39,14 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(
         data: dict,
-        expire_delta: Optional[timedelta] = None) -> str:
+        expire_delta: timedelta | None = None) -> str:
 
     to_encode = data.copy()
 
     if expire_delta:
-        expire = datetime.now(timezone.utc) + expire_delta
+        expire = datetime.now(UTC) + expire_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(
@@ -58,13 +57,16 @@ def create_access_token(
     return encoded_jwt
 
 
-def decode_token(token: str) -> Optional[dict]:
+def decode_token(token: str) -> dict | None:
     try:
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
+            algorithms=[settings.ALGORITHM],
+            options={"require_exp": True, "require_sub": True},
         )
+        if not isinstance(payload.get("user_id"), int) or not payload.get("role"):
+            return None
         return payload
     except JWTError:
         return None

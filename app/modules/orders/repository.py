@@ -1,30 +1,40 @@
+from datetime import date, datetime, timedelta, timezone
+
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
 from sqlalchemy.orm import selectinload
-from datetime import date, timedelta, datetime, timezone
-from typing import Optional, List, Tuple
-from app.modules.orders import models, schemas
+
+from app.core.business_calendar import (
+    business_day_start,
+    get_current_business_date,
+    holiday_name,
+    is_weekly_holiday,
+    previous_business_date,
+)
 from app.core.enums import OrderSource, OrderStatus, OrderType
+from app.modules.offer.models import OfferUsage
+from app.modules.orders import models, schemas
+
+
+def _offer_load_option():
+    return selectinload(models.Order.offer_usage).selectinload(OfferUsage.offer)
 
 class OrderRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
     def get_business_date(self) -> date:
-        # Business shift starts at 5am (UTC+3)
-        tz = timezone(timedelta(hours=3))
-        now = datetime.now(tz)
-        if now.hour < 5:
-            return (now - timedelta(days=1)).date()
-        return now.date()
+        return get_current_business_date()
 
 
-    async def get_by_id(self, order_id: int) -> Optional[models.Order]:
+    async def get_by_id(self, order_id: int) -> models.Order | None:
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            selectinload(models.Order.modifications),
+            _offer_load_option()
         ).where(
             models.Order.id == order_id,
             models.Order.is_deleted == False
@@ -32,12 +42,13 @@ class OrderRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_by_idempotency_key(self, key: str) -> Optional[models.Order]:
+    async def get_by_idempotency_key(self, key: str) -> models.Order | None:
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            _offer_load_option()
         ).where(
             models.Order.idempotency_key == key,
             models.Order.is_deleted == False
@@ -45,14 +56,15 @@ class OrderRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_by_number(self, order_number: str, order_date: Optional[date] = None) -> Optional[models.Order]:
+    async def get_by_number(self, order_number: str, order_date: date | None = None) -> models.Order | None:
         if order_date is None:
             order_date = self.get_business_date()
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            _offer_load_option()
         ).where(
             models.Order.order_number == order_number,
             models.Order.order_date == order_date,
@@ -63,19 +75,22 @@ class OrderRepository:
 
     async def list_orders_paginated(
         self,
-        source: Optional[OrderSource] = None,
-        status: Optional[OrderStatus] = None,
-        order_type: Optional[OrderType] = None,
+        source: OrderSource | None = None,
+        status: OrderStatus | None = None,
+        order_type: OrderType | None = None,
         page: int = 1,
-        page_size: int = 50
-    ) -> Tuple[int, List[models.Order]]:
+        page_size: int = 50,
+        cashier_id: int | None = None
+    ) -> tuple[int, list[models.Order]]:
 
         """Get paginated orders."""
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            selectinload(models.Order.modifications),
+            _offer_load_option()
         ).where(models.Order.is_deleted == False)
         
         if source:
@@ -84,8 +99,17 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
+            
+        if cashier_id:
+            from sqlalchemy import and_, or_
+            query = query.where(
+                or_(
+                    and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
+                    models.Order.order_source == OrderSource.ONLINE,
+                )
+            )
 
-        # Filter by current business shift (24h starting at 5am)
+        # Filter by the current business day.
         query = query.where(models.Order.order_date == self.get_business_date())
 
         
@@ -97,6 +121,15 @@ class OrderRepository:
             count_query = count_query.where(models.Order.order_status == status)
         if order_type:
             count_query = count_query.where(models.Order.order_type == order_type)
+            
+        if cashier_id:
+            count_query = count_query.where(
+                or_(
+                    and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
+                    models.Order.order_source == OrderSource.ONLINE,
+                )
+            )
+            
         count_query = count_query.where(models.Order.order_date == self.get_business_date())
         
         total = await self.db.scalar(count_query) or 0
@@ -110,15 +143,18 @@ class OrderRepository:
 
     async def list_orders(
         self,
-        source: Optional[OrderSource] = None,
-        status: Optional[OrderStatus] = None,
-        order_type: Optional[OrderType] = None
-    ) -> List[models.Order]:
+        source: OrderSource | None = None,
+        status: OrderStatus | None = None,
+        order_type: OrderType | None = None,
+        cashier_id: int | None = None
+    ) -> list[models.Order]:
         query = select(models.Order).options(
-            selectinload(models.Order.items),
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
             selectinload(models.Order.creator),
             selectinload(models.Order.delivery_person),
-            selectinload(models.Order.address)
+            selectinload(models.Order.address),
+            selectinload(models.Order.modifications),
+            _offer_load_option()
         ).where(models.Order.is_deleted == False)
         if source:
             query = query.where(models.Order.order_source == source)
@@ -127,7 +163,16 @@ class OrderRepository:
         if order_type:
             query = query.where(models.Order.order_type == order_type)
 
-        # Filter by current business shift (24h starting at 5am)
+        if cashier_id:
+            from sqlalchemy import and_, or_
+            query = query.where(
+                or_(
+                    and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
+                    models.Order.order_source == OrderSource.ONLINE,
+                )
+            )
+
+        # Filter by the current business day.
         query = query.where(models.Order.order_date == self.get_business_date())
 
         query = query.order_by(desc(models.Order.created_at))
@@ -136,25 +181,15 @@ class OrderRepository:
         return result.scalars().all()
 
     async def get_next_order_number(self) -> str:
-        """Get next order number using a daily PostgreSQL sequence (atomic)."""
-        from sqlalchemy import text
-        from app.core.database import engine
-        from app.core.logging import logger
-        from app.core.exceptions import ValidationError
+        """Atomically increment the per-terminal, per-business-day counter."""
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
         from app.core.config import settings
+        from app.core.exceptions import ValidationError
         
         business_date = self.get_business_date()
         prefix = settings.TERMINAL_ID
         
-        # In desktop mode, if the prefix is the default 'T1', use the unique device_id
-        # to prevent collisions between multiple desktop installations.
-        if settings.RUNTIME_MODE == "desktop" and prefix == "T1":
-            try:
-                from desktop.config import config as desktop_config
-                prefix = desktop_config.device_id[:4].upper()
-            except ImportError:
-                pass
-
         bind = self.db.bind
         if bind is not None and bind.dialect.name == "sqlite":
             count_query = select(func.count()).select_from(models.Order).where(
@@ -164,33 +199,20 @@ class OrderRepository:
             current_count = await self.db.scalar(count_query) or 0
             return f"{prefix}-{current_count + 1:04d}"
 
-        seq_name = f"order_seq_{business_date.strftime('%Y_%m_%d')}"
-        
         try:
-            # Try to get next value from the daily sequence
-            result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
-            seq_value = result.scalar()
-            return f"{prefix}-{seq_value:04d}"
-        except Exception as e:
-            # If sequence doesn't exist for the day, try to create it
-            if seq_name in str(e).lower() or "does not exist" in str(e).lower() or "relation" in str(e).lower():
-                try:
-                    logger.info(f"Sequence '{seq_name}' missing. Creating via independent connection...")
-                    async with engine.begin() as conn:
-                        await conn.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {seq_name} START WITH 1"))
-                    
-                    # Manual rollback of the failed transaction in the current session
-                    await self.db.rollback()
-                    
-                    # Retry after creation
-                    result = await self.db.execute(text(f"SELECT nextval('{seq_name}')"))
-                    seq_value = result.scalar()
-                    return f"{prefix}-{seq_value:04d}"
-                except Exception as create_err:
-                    logger.error(f"Critical: Failed to self-heal sequence: {create_err}")
-            
-            logger.error(f"Error generating order number: {e}")
-            raise ValidationError("Failed to generate order number")
+            statement = pg_insert(models.DailyOrderCounter).values(
+                business_date=business_date,
+                terminal_id=prefix,
+                last_value=1,
+            )
+            statement = statement.on_conflict_do_update(
+                index_elements=["business_date", "terminal_id"],
+                set_={"last_value": models.DailyOrderCounter.last_value + 1},
+            ).returning(models.DailyOrderCounter.last_value)
+            counter = (await self.db.execute(statement)).scalar_one()
+            return f"{prefix}-{counter:04d}"
+        except Exception as exc:
+            raise ValidationError("Failed to generate order number") from exc
 
     async def save_in_transaction(self, order: models.Order) -> models.Order:
         """Adds to session without explicit commit (delegates to context manager)."""
@@ -199,16 +221,12 @@ class OrderRepository:
         return order
 
     async def save(self, order: models.Order) -> models.Order:
+        """Persist without committing; the request unit of work owns commit."""
         self.db.add(order)
-        try:
-            await self.db.commit()
-            await self.db.refresh(order)
-            return order
-        except Exception:
-            await self.db.rollback()
-            raise
+        await self.db.flush()
+        return order
 
-    async def update(self, order: models.Order, update_data: schemas.OrderUpdate, changed_by_user_id: Optional[int] = None) -> models.Order:
+    async def update(self, order: models.Order, update_data: schemas.OrderUpdate, changed_by_user_id: int | None = None) -> models.Order:
         """
         Update order status and related fields - database operations only.
         Assumes all validation has been done in the service layer.
@@ -225,7 +243,7 @@ class OrderRepository:
         order.updated_at = datetime.now(tz).replace(tzinfo=None)
         
         # Record history if status changed
-        if old_status != new_status:
+        if new_status is not None and old_status != new_status:
             history = models.OrderStatusHistory(
                 order_id=order.id,
                 status=new_status,
@@ -236,7 +254,7 @@ class OrderRepository:
         self.db.add(order)
         return order
 
-    async def update_order_full(self, order: models.Order, update_data: schemas.OrderUpdateFull, changed_by_user_id: Optional[int] = None) -> models.Order:
+    async def update_order_full(self, order: models.Order, update_data: schemas.OrderUpdateFull, changed_by_user_id: int | None = None) -> models.Order:
         """
         Comprehensive order update - database operations only.
         Assumes all validation has been done in the service layer.
@@ -246,6 +264,8 @@ class OrderRepository:
         
         # Update all provided fields
         for field, value in update_dict.items():
+            if value is None and field in ["order_type", "subtotal", "total_amount"]:
+                continue
             setattr(order, field, value)
         
         # Update timestamp
@@ -261,8 +281,15 @@ class OrderRepository:
         
         query = select(
             func.count(models.Order.id).label("total_count"),
-            func.sum(models.Order.total_amount).label("total_sales"),
-            func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.COMPLETED).label("completed_count"),
+            # Dashboard sales use the same net-sales definition as reports and
+            # cashier shifts: delivery fees are excluded.
+            func.sum(
+                models.Order.total_amount
+                - case((models.Order.order_type == OrderType.DELIVERY, models.Order.delivery_fee), else_=0)
+            ).filter(
+                models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.NEW, OrderStatus.CONFIRMED, OrderStatus.OUT_FOR_DELIVERY])
+            ).label("total_sales"),
+            func.count(models.Order.id).filter(models.Order.order_status.in_([OrderStatus.COMPLETED, OrderStatus.DELIVERED])).label("completed_count"),
             func.count(models.Order.id).filter(models.Order.order_status == OrderStatus.CANCELLED).label("cancelled_count"),
         ).where(
             models.Order.order_date == business_date,
@@ -279,11 +306,57 @@ class OrderRepository:
             models.Order.order_status.in_([OrderStatus.NEW, OrderStatus.CONFIRMED])
         )
         active_count = await self.db.scalar(active_query) or 0
+
+        # Compare like-for-like from the business-day cutoff to the same elapsed
+        # point in its business day, rather than yesterday's completed day.
+        local_now = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+        today_start = business_day_start(business_date)
+        elapsed = max(timedelta(0), local_now - today_start)
+        comparison_date = previous_business_date(business_date)
+        comparison_start = business_day_start(comparison_date)
+        comparison_cutoff = comparison_start + min(elapsed, timedelta(days=1))
+        yesterday_sales_query = select(
+            func.sum(
+                models.Order.total_amount
+                - case((models.Order.order_type == OrderType.DELIVERY, models.Order.delivery_fee), else_=0)
+            )
+        ).where(
+            models.Order.order_date == comparison_date,
+            models.Order.created_at >= comparison_start,
+            models.Order.created_at < comparison_cutoff,
+            models.Order.is_deleted == False,
+            models.Order.order_status.in_([
+                OrderStatus.COMPLETED,
+                OrderStatus.DELIVERED,
+                OrderStatus.NEW,
+                OrderStatus.CONFIRMED,
+                OrderStatus.OUT_FOR_DELIVERY,
+            ]),
+        )
+        yesterday_sales = float(await self.db.scalar(yesterday_sales_query) or 0)
+        today_sales = float(row["total_sales"] or 0)
+        from app.modules.shifts.models import ShiftExpense
+        today_expenses = float(await self.db.scalar(select(func.sum(ShiftExpense.amount)).where(
+            ShiftExpense.target_date == business_date,
+            ShiftExpense.is_deleted == False,
+        )) or 0)
+        sales_change_percent = (
+            ((today_sales - yesterday_sales) / yesterday_sales) * 100
+            if yesterday_sales > 0 else None
+        )
         
         return {
             "total_count": row["total_count"] or 0,
-            "total_sales": float(row["total_sales"] or 0),
+            "total_sales": today_sales,
+            "total_expenses": today_expenses,
+            "net_profit": today_sales - today_expenses,
+            "yesterday_sales": yesterday_sales,
+            "sales_change_percent": sales_change_percent,
+            "comparison_date": comparison_date.isoformat(),
+            "comparison_label": "آخر يوم تشغيل" if comparison_date != business_date - timedelta(days=1) else "أمس",
             "completed_count": row["completed_count"] or 0,
             "cancelled_count": row["cancelled_count"] or 0,
-            "active_count": active_count
+            "active_count": active_count,
+            "is_holiday": is_weekly_holiday(business_date),
+            "holiday_name": holiday_name(business_date),
         }

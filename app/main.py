@@ -1,30 +1,32 @@
 import os
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from contextlib import asynccontextmanager
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import engine
 from sqlalchemy import text
 from app.core.events import order_events_manager
 from app.core.redis import redis_client
 from app.core.logging import logger
+from app.core.observability import ObservabilityMiddleware, metrics
 from app.cors import add_cors_middleware
 
 from app.modules.auth import register_auth
 from app.modules.comments import register_comments
 from app.modules.customer import register_customer
-from app.modules.desktop_updates import register_desktop_updates
 from app.modules.infrastructure.middlewares.auth import AuthMiddleware
-from app.modules.infrastructure.middlewares.error_handler import ErrorHandlerMiddleware
+from app.modules.infrastructure.middlewares.error_handler import ErrorHandlerMiddleware, register_error_handlers
 from app.modules.menu import register_menu
 from app.modules.offer import register_offer
 from app.modules.orders import register_orders
 from app.modules.pricing import register_pricing
 from app.modules.settings import register_settings
 from app.modules.users import register_user
+from app.modules.report import register_report
+from app.modules.shifts import register_shifts
 from app.core.leader import global_leader_manager
 
 APP_ROLE = os.getenv("APP_ROLE", "all").lower()
@@ -41,94 +43,16 @@ async def lifespan(app: FastAPI):
         yield
         return
 
-    logger.info(f"[STARTUP] Initializing application [PID: {pid}] [Mode: {settings.RUNTIME_MODE}]")
-    
-    if settings.RUNTIME_MODE == "desktop":
-        logger.info("[DESKTOP] Desktop Mode: Verifying local DB schema...")
-        async with engine.begin() as conn:
-            # 1. Create any missing tables
-            await conn.run_sync(Base.metadata.create_all)
-            
-            # 2. Self-heal missing columns (SQLite doesn't support 'IF NOT EXISTS' in ALTER TABLE easily)
-            tables_to_fix = [
-                "categories", "products", "variants", "users", "customers", 
-                "customer_addresses", "offers", "comments", "orders", 
-                "order_items", "order_status_history", "app_settings"
-            ]
-            
-            for table in tables_to_fix:
-                try:
-                    # Check existing columns
-                    res = await conn.execute(text(f"PRAGMA table_info({table})"))
-                    existing_cols = [r[1] for r in res.all()]
-                    
-                    if "is_deleted" not in existing_cols:
-                        logger.info(f"Adding 'is_deleted' to {table}...")
-                        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN is_deleted BOOLEAN DEFAULT 0 NOT NULL"))
-                    
-                    if "updated_at" not in existing_cols:
-                        # Only certain tables need updated_at for sync
-                        if table in ["categories", "products", "variants", "customers", "customer_addresses", "offers", "comments", "app_settings", "order_items", "order_status_history"]:
-                            logger.info(f"Adding 'updated_at' to {table}...")
-                            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
-                except Exception as e:
-                    logger.warning(f"Could not self-heal table {table}: {e}")
-                    
-        logger.info("[DESKTOP] Desktop Mode: Local DB schema verified.")
-
-
-    # Cloud/General Self-Healing (Postgres Only)
-    if settings.RUNTIME_MODE != "desktop":
-        try:
-            async with engine.begin() as conn:
-                # A. Ensure active_devices exists
-                await conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS active_devices (
-                        device_id VARCHAR(100) PRIMARY KEY,
-                        last_seen TIMESTAMP WITHOUT TIME ZONE,
-                        version VARCHAR(20),
-                        ip_address VARCHAR(50)
-                    )
-                """))
-                
-                # B. Discovery: List all existing constraints
-                try:
-                    res = await conn.execute(text("""
-                        SELECT conname FROM pg_constraint 
-                        WHERE conrelid = 'products'::regclass
-                    """))
-                    constraints = [r[0] for r in res.all()]
-                    logger.info(f"[INFO] Current constraints on 'products': {constraints}")
-                except Exception as e_disc:
-                    logger.warning(f"Could not list constraints: {e_disc}")
-
-                # C. Nuclear Drop of strict constraints
-                try:
-                    # 1. Drop the name-only unique constraint
-                    await conn.execute(text("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_product_name_key CASCADE"))
-                    await conn.execute(text("DROP INDEX IF EXISTS products_product_name_key CASCADE"))
-                    
-                    # 2. Reset the composite one
-                    await conn.execute(text("ALTER TABLE products DROP CONSTRAINT IF EXISTS uq_product_name_cat_id CASCADE"))
-                    await conn.execute(text("ALTER TABLE products ADD CONSTRAINT uq_product_name_cat_id UNIQUE (product_name, cat_id)"))
-                    
-                    logger.info("[SECURITY] Cloud DB hardening successful: Product constraints updated.")
-                except Exception as inner_e:
-                    logger.error(f"[ERROR] Failed to apply product constraint fix: {inner_e}")
-                    
-        except Exception as e:
-            logger.warning(f"Self-healing database update skipped or failed: {e}")
+    logger.info(f"[STARTUP] Initializing application [PID: {pid}]")
+    # Database schema changes are applied exclusively through Alembic before
+    # the application starts. Runtime DDL makes startup destructive and masks
+    # missing deployment migrations.
 
     # 2. Infrastructure & Cache (Cloud Only)
-    if settings.RUNTIME_MODE != "desktop":
-        logger.info("[NETWORK] Connecting to Redis/Infrastructure...")
-        if not redis_client.is_available:
-            await redis_client.connect()
-        logger.info("[NETWORK] Infrastructure connected.")
-    else:
-        logger.info("[DESKTOP] Desktop Mode: Skipping external Redis connection.")
-        # Ensure the client is initialized with InMemoryCache for desktop
+    logger.info("[NETWORK] Connecting to Redis/Infrastructure...")
+    if not redis_client.is_available:
         await redis_client.connect()
+    logger.info("[NETWORK] Infrastructure connected.")
 
     # 3. Shared Services (WebSockets & Broadcasters)
     if APP_ROLE in ("api", "all"):
@@ -137,14 +61,15 @@ async def lifespan(app: FastAPI):
         logger.info(f"[NETWORK] API Broadcaster started [PID: {pid}]")
 
     # 4. Global Worker (Cloud Only)
-    if settings.RUNTIME_MODE != "desktop" and APP_ROLE in ("worker", "all"):
+    if APP_ROLE in ("worker", "all"):
         logger.info("[WORKER] Starting Global Workers...")
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()
+        from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
+        global_leader_manager.on_leader_elected(whatsapp_outbox_worker.start)
+        global_leader_manager.on_leader_lost(whatsapp_outbox_worker.stop)
         await global_leader_manager.start()
-        logger.info(f"[WORKER] Global Worker active [PID: {pid}]")
-    elif settings.RUNTIME_MODE == "desktop":
-        logger.info("[DESKTOP] Desktop Mode: Global Workers/Leader Election disabled.")
+        logger.info(f"[WORKER] Global Worker awaiting leadership [PID: {pid}]")
     
     logger.info(f"[SUCCESS] Application startup complete [PID: {pid}] [Role: {APP_ROLE}]")
     _startup_executed = True
@@ -153,12 +78,15 @@ async def lifespan(app: FastAPI):
     
     # --- SHUTDOWN ---
     logger.info(f"[SHUTDOWN] Shutting down application [PID: {pid}]")
-    if settings.RUNTIME_MODE != "desktop" and APP_ROLE in ("worker", "all"):
+    if APP_ROLE in ("worker", "all"):
+        from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
+        await whatsapp_outbox_worker.stop()
         await global_leader_manager.stop()
     if APP_ROLE in ("api", "all"):
         await order_events_manager.stop()
-    if settings.RUNTIME_MODE != "desktop":
-        await redis_client.disconnect()
+    await redis_client.disconnect()
+    from app.modules.settings.whatsapp import close_whatsapp_http_client
+    await close_whatsapp_http_client()
 
 
 
@@ -167,33 +95,44 @@ app = FastAPI(
     version=settings.VERSION,
     lifespan=lifespan,
 )
+register_error_handlers(app)
+
+async def collect_health(db_engine=engine, cache=redis_client) -> tuple[int, dict]:
+    try:
+        async with db_engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.error("Database health check failed: %s", exc)
+        return 503, {"status": "unhealthy", "database": "disconnected", "redis": cache.status_label}
+
+    redis_status = cache.status_label
+    if cache.redis is not None:
+        try:
+            await cache.redis.ping()
+        except Exception as exc:
+            logger.warning("Redis health check failed: %s", exc)
+            redis_status = "disconnected"
+    status = "healthy" if redis_status == "connected" else "degraded"
+    return 200, {"status": status, "database": "connected", "redis": redis_status}
+
 
 @app.get("/health")
 async def health_check():
     """
     Health check endpoint for the application.
-    Used by the desktop launcher to verify server readiness.
+    Used by the hosting platform to verify server readiness.
     """
-    try:
-        redis_stats = redis_client.get_stats()
-        return {
-            "status": "healthy",
-            "mode": settings.RUNTIME_MODE,
-            "redis": {
-                "status": redis_client.status_label,
-                "stats": redis_stats,
-            },
-            "database": "connected",
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unhealthy", "detail": str(e)}
-        )
+    status_code, payload = await collect_health()
+    return JSONResponse(status_code=status_code, content=payload)
 
-app.add_middleware(ErrorHandlerMiddleware)
+
+@app.get("/metrics", include_in_schema=False)
+async def application_metrics():
+    return PlainTextResponse(metrics.render(), media_type="text/plain; version=0.0.4")
+
 app.add_middleware(AuthMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(ObservabilityMiddleware)
 add_cors_middleware(app)
 
 register_auth(app)
@@ -205,7 +144,8 @@ register_orders(app)
 register_customer(app)
 register_settings(app)
 register_comments(app)
-register_desktop_updates(app)
+register_report(app)
+register_shifts(app)
 
 
 

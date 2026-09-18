@@ -12,13 +12,8 @@ class CommentRepository:
         """Create a new comment in the database."""
         comment = models.Comment(**comment_data.model_dump())
         self.db.add(comment)
-        try:
-            await self.db.commit()
-            await self.db.refresh(comment)
-            return comment
-        except Exception:
-            await self.db.rollback()
-            raise
+        await self.db.flush()
+        return comment
 
     async def get_by_id(self, comment_id: int) -> Optional[models.Comment]:
         """Get a comment by ID."""

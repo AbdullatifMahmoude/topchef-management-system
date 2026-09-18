@@ -48,6 +48,19 @@ class InMemoryCache:
         self._store.pop(key, None)
         return 1 if existed else 0
 
+    async def getdel(self, key: str) -> Optional[Any]:
+        value = await self.get(key)
+        await self.delete(key)
+        return value
+
+    async def expire(self, key: str, ttl_seconds: int) -> bool:
+        self._purge_if_expired(key)
+        if key not in self._store:
+            return False
+        value, _ = self._store[key]
+        self._store[key] = (value, time.time() + ttl_seconds)
+        return True
+
     async def incr(self, key: str) -> int:
         self._purge_if_expired(key)
         current = self._store.get(key, (0, None))[0]
@@ -75,12 +88,6 @@ class RedisClient:
 
     async def connect(self):
         if self.redis:
-            return self.redis
-
-        if settings.RUNTIME_MODE == "desktop":
-            self.redis = InMemoryCache()
-            self.backend_name = "memory"
-            logger.info("Desktop mode cache initialized with in-memory backend")
             return self.redis
 
         try:

@@ -1,7 +1,42 @@
 const API_BASE = window.location.origin;
-const IS_DESKTOP_RUNTIME = ["127.0.0.1", "localhost"].includes(
-  window.location.hostname,
-);
+const TOPCHEF_PRINT_AGENT_URL = "http://127.0.0.1:8199";
+
+// Print Agent bridge: sends invoice data to the native local service only.
+function printReceipt(orderData) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1800);
+
+  fetch(`${TOPCHEF_PRINT_AGENT_URL}/api/print`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order: orderData, receipt_type: "customer" }),
+    targetAddressSpace: "loopback",
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      clearTimeout(timeout);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || `Print Agent returned ${response.status}`);
+      }
+      console.debug("Invoice queued in Top Chef Print Agent.");
+    })
+    .catch((error) => {
+      clearTimeout(timeout);
+      console.error("Top Chef Print Agent is unavailable.", error);
+      const message = "تطبيق Top Chef Print Agent غير مُشغّل أو لم يتم اختيار طابعة";
+      if (typeof showToast === "function") showToast(message, "error");
+      else alert(message);
+    });
+}
+// End Print Agent bridge.
+
+// Show the human-friendly sequence part of the order number.
+function displayOrderNumber(orderNumber, fallback = "---") {
+  const value = orderNumber ?? fallback;
+  const text = String(value);
+  return text.includes("-") ? text.split("-").pop() : text;
+}
 
 // ===================================================
 //  Global API Fetch Wrapper
@@ -42,6 +77,10 @@ async function apiFetch(path, options = {}) {
 // ===================================================
 let categories = [];
 let products = [];
+let popularProducts = [];
+let activeOffers = [];
+let offersRefreshTimer = null;
+let selectedOfferCode = null;
 let activeCatId = null;
 let cart = [];
 
@@ -52,11 +91,10 @@ let onlineOrdersSearchTerm = "";
 let onlineOrdersCurrentPage = 1;
 let onlineOrdersTotal = 0;
 let totalNewOrdersGlobalCount = 0; // New orders only
-const ordersPageSize = 12;
+const ordersPageSize = 30;
 let lastNewOrdersCount = 0;
 let isNotificationSoundEnabled = true;
-let socket = null;
-let reconnectTimerId = null;
+let cashierLiveSocket = null;
 let ordersSnapshotLoaded = false;
 let lastSocketOrderUpdate = Date.now();
 
@@ -79,7 +117,33 @@ let deliveryCustomerInfo = {
 let _phoneSearchTimeout = null;
 
 function normalizePhoneDigits(phone) {
-  return String(phone || "").replace(/\D/g, "").slice(0, 11);
+  const arabicMap = {
+    "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4",
+    "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9",
+    "۰": "0", "۱": "1", "۲": "2", "۳": "3", "۴": "4",
+    "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9",
+  };
+  let digits = String(phone || "")
+    .replace(/[٠-٩۰-۹]/g, (d) => arabicMap[d] || d)
+    .replace(/\D/g, "");
+
+  // +20 / 20 country code → local 01xxxxxxxxx
+  if (digits.startsWith("20") && digits.length >= 12) {
+    digits = "0" + digits.slice(2);
+  }
+  if (digits.length === 10 && digits.startsWith("1")) {
+    digits = "0" + digits;
+  }
+  return digits.slice(0, 11);
+}
+
+function hasFeeValue(value) {
+  return value !== null && value !== undefined && value !== "";
+}
+
+function formatFeeValue(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? `${numericValue.toFixed(0)} ج.م` : "0 ج.م";
 }
 
 function isValidEgyptianPhone(phone) {
@@ -89,7 +153,7 @@ function isValidEgyptianPhone(phone) {
 
 function getOrderAddressText(order) {
   if (!order) return "";
-  const raw = order.customer_address || order.address || order.customer_notes || "";
+  const raw = order.customer_address || order.address || "";
   if (raw && typeof raw === "object") {
     return raw.address || raw.address_line || raw.full_address || raw.street || raw.name || "";
   }
@@ -106,15 +170,19 @@ async function init() {
   showGlobalLoader(true);
 
   try {
-    const [catsRes, prodsRes] = await Promise.all([
+    const [catsRes, prodsRes, popularRes, offersRes] = await Promise.all([
       apiFetch("/menu/categories"),
       apiFetch("/menu/products"),
+      apiFetch("/menu/products/popular?limit=8", { hideLoader: true }).catch(() => null),
+      apiFetch("/offers/", { hideLoader: true }).catch(() => null),
     ]);
 
     if (!catsRes.ok || !prodsRes.ok) throw new Error("API error loading menu");
 
     categories = await catsRes.json();
     products = await prodsRes.json();
+    popularProducts = popularRes && popularRes.ok ? await popularRes.json() : [];
+    activeOffers = offersRes && offersRes.ok ? await offersRes.json() : [];
 
     categories = Array.isArray(categories)
       ? categories.filter((c) => c.is_active)
@@ -125,7 +193,9 @@ async function init() {
     }
 
     renderTabs();
+    renderPopularProducts();
     renderItems();
+    renderCashierOffersBoard();
     initWebOrdersToggle();
 
     // Initial badge refresh
@@ -166,8 +236,9 @@ function renderItems() {
   const grid = document.getElementById("items_grid");
   grid.innerHTML = "";
 
+  const searchTerm = String(window.localProductSearchTerm || "").trim().toLowerCase();
   const catProducts = products.filter(
-    (p) => p.cat_id === activeCatId && p.is_available,
+    (p) => p.cat_id === activeCatId && p.is_available && (!searchTerm || String(p.product_name || "").toLowerCase().includes(searchTerm) || String(p.description || p.desc || "").toLowerCase().includes(searchTerm)),
   );
 
   if (catProducts.length === 0) {
@@ -198,7 +269,15 @@ function renderItems() {
 
     const card = document.createElement("div");
     card.className = "item_card";
+    const productOffers = getActiveOffersForProduct(product.id);
+    const offerBadge = productOffers.length
+      ? `<div class="product_offer_badge" title="${productOffers.map((offer) => offer.display_name || offer.code).join("، ")}">
+          <span>${formatProductOffer(productOffers[0])}</span>
+          ${productOffers.length > 1 ? `<small>+${productOffers.length - 1}</small>` : ""}
+        </div>`
+      : "";
     card.innerHTML = `
+      ${offerBadge}
       <h1>${product.product_name}</h1>
       ${descriptionHtml}
       <h2>${priceLabel}</h2>
@@ -319,9 +398,9 @@ function renderCart() {
 
   const itemsTotal = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
   let fee = 0;
-  if (orderType === "delivery" && selectedDeliveryFee !== null)
+  if (orderType === "delivery" && hasFeeValue(selectedDeliveryFee))
     fee = selectedDeliveryFee;
-  else if (orderType === "dine_in" && selectedDineInFee !== null)
+  else if (orderType === "dine_in" && hasFeeValue(selectedDineInFee))
     fee = selectedDineInFee;
 
   const grandTotal = itemsTotal + fee;
@@ -384,7 +463,234 @@ function renderCart() {
   });
 }
 
-function confirmOrder() {
+let selectedPaymentMethod = "cash";
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".payment_method_btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedPaymentMethod = button.dataset.paymentMethod || "cash";
+      document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item === button));
+    });
+  });
+});
+
+async function openShiftCashModal() {
+  document.getElementById("shift_cash_modal")?.remove();
+  let saved = { opening_cash: 0, actual_closing_cash: null, closing_note: "", expenses_total: 0 };
+  try {
+    const savedResponse = await apiFetch("/shifts/current/cash", { hideLoader: true });
+    if (savedResponse.ok) saved = { ...saved, ...(await savedResponse.json()) };
+  } catch (error) {
+    console.warn("Could not load saved shift cash data", error);
+  }
+  const modal = document.createElement("div");
+  modal.id = "shift_cash_modal";
+  modal.className = "shift_cash_modal";
+  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديلها ثم الحفظ مرة أخرى.</p><div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>رصيد بداية الشيفت<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00"></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
+  document.body.appendChild(modal);
+  modal.querySelector(".shift_cash_cancel").onclick = () => modal.remove();
+  modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
+  modal.querySelector("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const payload = {};
+    ["opening_cash", "actual_closing_cash"].forEach((key) => {
+      const value = form.get(key);
+      if (value !== "") payload[key] = Number(value);
+    });
+    const note = String(form.get("closing_note") || "").trim();
+    if (note) payload.closing_note = note;
+    const response = await apiFetch("/shifts/current/cash", { method: "PATCH", body: JSON.stringify(payload) });
+    if (!response.ok) return showToast("تعذر حفظ تسوية الشيفت", "error");
+    modal.remove();
+    showToast("تم حفظ تسوية الشيفت", "success");
+  });
+}
+
+function escapeOrderText(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]);
+}
+
+function appliedOfferCardHtml(order) {
+  const offer = order.applied_offer;
+  if (!offer) return "";
+  const name = escapeOrderText(offer.display_name || offer.code);
+  const code = escapeOrderText(offer.code);
+  const discount = Number(offer.discount_amount || order.discount_amount || 0).toFixed(2);
+  return `<div class="detail_row" style="color:#f1c75b;font-weight:800;border:1px solid rgba(241,199,91,.25);border-radius:7px;padding:7px 9px;">
+    <span>عرض: ${name} (${code}) • خصم ${discount} ج.م</span>
+  </div>`;
+}
+
+function getActiveOffersForProduct(productId) {
+  const now = Date.now();
+  const product = products.find((item) => Number(item.id) === Number(productId));
+  return activeOffers.filter((offer) => {
+    if (!offer || !offer.is_active) return false;
+    const starts = offer.valid_from ? new Date(offer.valid_from).getTime() : 0;
+    const ends = offer.valid_to ? new Date(offer.valid_to).getTime() : Infinity;
+    if (now < starts || now > ends) return false;
+    if (offer.usage_limit && Number(offer.current_usage || 0) >= Number(offer.usage_limit)) return false;
+    const rules = offer.rules || {};
+    if (offer.discount_type === "free_delivery") return false;
+    if (offer.discount_type === "category_discount") {
+      return (rules.category_ids || []).map(Number).includes(Number(product?.cat_id));
+    }
+    if (offer.discount_type === "happy_hour" && rules.start_time && rules.end_time) {
+      const current = new Date().toLocaleTimeString("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit" });
+      const start = String(rules.start_time).slice(0, 5), end = String(rules.end_time).slice(0, 5);
+      if (!(start <= end ? current >= start && current <= end : current >= start || current <= end)) return false;
+    }
+    const ids = Array.isArray(offer.product_ids) ? offer.product_ids.map(Number) : [];
+    return ids.length === 0 || ids.includes(Number(productId));
+  });
+}
+
+function formatProductOffer(offer) {
+  if (["percentage", "quantity_discount", "happy_hour"].includes(offer.discount_type)) return `خصم ${Number(offer.discount_value)}%`;
+  if (offer.discount_type === "fixed") return `خصم ${Number(offer.discount_value)} ج.م`;
+  if (offer.discount_type === "buy_one_get_one") return "عرض 1 + 1";
+  if (offer.discount_type === "combo") return `كومبو ${Number(offer.rules?.combo_price || 0)} ج.م`;
+  if (offer.discount_type === "buy_x_get_y") return `عرض ${offer.rules?.buy_quantity || 1} + ${offer.rules?.get_quantity || 1}`;
+  if (offer.discount_type === "category_discount") return offer.rules?.discount_mode === "fixed" ? `خصم ${Number(offer.discount_value)} ج.م` : `خصم ${Number(offer.discount_value)}%`;
+  return "عليه عرض";
+}
+
+function currentlyAvailableOffers() {
+  const now = Date.now();
+  return activeOffers.filter((offer) => {
+    if (!offer?.is_active) return false;
+    if (offer.valid_from && now < new Date(offer.valid_from).getTime()) return false;
+    if (offer.valid_to && now > new Date(offer.valid_to).getTime()) return false;
+    if (offer.usage_limit && Number(offer.current_usage || 0) >= Number(offer.usage_limit)) return false;
+    if (offer.discount_type === "happy_hour") {
+      const rules = offer.rules || {}, start = String(rules.start_time || "").slice(0, 5), end = String(rules.end_time || "").slice(0, 5);
+      if (start && end) {
+        const current = new Date().toLocaleTimeString("en-GB", {timeZone:"Africa/Cairo", hour:"2-digit", minute:"2-digit"});
+        if (!(start <= end ? current >= start && current <= end : current >= start || current <= end)) return false;
+      }
+    }
+    return true;
+  });
+}
+
+function offerDetailsText(offer) {
+  const rules = offer.rules || {}, parts = [];
+  if (offer.discount_type === "combo") parts.push(`الكومبو بسعر ${Number(rules.combo_price || 0)} ج.م`);
+  else if (offer.discount_type === "buy_x_get_y") parts.push(`اشترِ ${rules.buy_quantity || 1} وخذ ${rules.get_quantity || 1} بخصم ${rules.reward_percent || 100}%`);
+  else if (offer.discount_type === "quantity_discount") parts.push(`اشترِ ${rules.quantity_required || 1} وحدات وخذ خصم ${Number(offer.discount_value)}%`);
+  else if (offer.discount_type === "free_delivery") parts.push("رسوم التوصيل مجانًا");
+  else if (offer.discount_type === "category_discount") parts.push(rules.discount_mode === "fixed" ? `خصم ${Number(offer.discount_value)} ج.م على التصنيف` : `خصم ${Number(offer.discount_value)}% على التصنيف`);
+  else parts.push(formatProductOffer(offer));
+  if (offer.min_order_amount) parts.push(`حد أدنى ${Number(offer.min_order_amount)} ج.م`);
+  if (offer.usage_per_user) parts.push(`${offer.usage_per_user} استخدام لكل عميل`);
+  return parts.join(" • ");
+}
+
+function renderCashierOffersBoard() {
+  const board = document.getElementById("cashier_offers_board"), list = document.getElementById("cashier_offers_list"), count = document.getElementById("cashier_offers_count");
+  if (!board || !list || !count) return;
+  const available = currentlyAvailableOffers();
+  if (selectedOfferCode && !available.some((offer) => offer.code === selectedOfferCode)) selectedOfferCode = null;
+  board.hidden = available.length === 0;
+  count.textContent = `${available.length.toLocaleString("ar-EG")} عرض`;
+  list.innerHTML = available.map((offer) => `<article class="cashier_offer_ad ${selectedOfferCode === offer.code ? "selected" : ""}"><div><span>${offer.display_name || offer.code}</span><strong>${offerDetailsText(offer)}</strong><small>الكود: ${offer.code}</small></div><button type="button" data-apply-offer="${offer.code}">${selectedOfferCode === offer.code ? "إلغاء التطبيق" : "تطبيق العرض"}</button></article>`).join("");
+  ["discount_type", "discount_value", "discount_reason"].forEach((id) => { const input=document.getElementById(id); if(input) input.disabled=Boolean(selectedOfferCode); });
+}
+
+async function refreshActiveOffers() {
+  try {
+    const response = await apiFetch("/offers/", { hideLoader: true });
+    if (!response.ok) return;
+    const freshOffers = await response.json();
+    activeOffers = Array.isArray(freshOffers) ? freshOffers : [];
+    renderItems();
+    renderPopularProducts();
+    renderCashierOffersBoard();
+  } catch (error) {
+    console.warn("Could not refresh active offers", error);
+  }
+}
+
+function scheduleOffersRefresh(delay = 120) {
+  clearTimeout(offersRefreshTimer);
+  offersRefreshTimer = setTimeout(refreshActiveOffers, delay);
+}
+
+document.getElementById("cashier_offers_list")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-apply-offer]");
+  if (!button) return;
+  const code = button.dataset.applyOffer, offer = activeOffers.find((item) => item.code === code);
+  if (!offer) return;
+  if (selectedOfferCode === code) selectedOfferCode = null;
+  else {
+    if (offer.usage_per_user && !isValidEgyptianPhone(deliveryCustomerInfo.phone)) {
+      showToast("أدخل بيانات العميل ورقم هاتفه أولًا لتطبيق هذا العرض", "error");
+      return;
+    }
+    selectedOfferCode = code;
+    const typeInput = document.getElementById("discount_type"), valueInput = document.getElementById("discount_value"), reasonInput = document.getElementById("discount_reason");
+    if (typeInput) typeInput.value = "";
+    if (valueInput) valueInput.value = "";
+    if (reasonInput) reasonInput.value = "";
+  }
+  renderCashierOffersBoard();
+  updatePricingPreview();
+});
+document.getElementById("cashier_offers_toggle")?.addEventListener("click", (event) => {
+  const board = document.getElementById("cashier_offers_board"), collapsed = board.classList.toggle("collapsed");
+  event.currentTarget.textContent = collapsed ? "عرض" : "إخفاء";
+});
+
+function getProductStartingPrice(product) {
+  const prices = (product?.variants || [])
+    .map((variant) => Number.parseFloat(variant.price))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  return prices.length ? Math.min(...prices) : 0;
+}
+
+function renderPopularProducts() {
+  const section = document.getElementById("popular_products_section");
+  const list = document.getElementById("popular_products_list");
+  if (!section || !list) return;
+
+  const ranked = (Array.isArray(popularProducts) ? popularProducts : [])
+    .map((entry) => ({
+      product: products.find((product) => Number(product.id) === Number(entry.product_id)),
+    }))
+    .filter(({ product }) => product && product.is_available)
+    .slice(0, 8);
+
+  section.hidden = ranked.length === 0;
+  list.innerHTML = "";
+  ranked.forEach(({ product }, index) => {
+    const price = getProductStartingPrice(product);
+    const productOffers = getActiveOffersForProduct(product.id);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "popular_product_btn";
+    button.innerHTML = `
+      <b>${index + 1}</b>
+      <span class="popular_product_details">
+        <strong>${product.product_name}</strong>
+        <small>${(product.variants || []).length > 1 ? "يبدأ من " : ""}${price ? `${price} ج.م` : "اختر السعر"}</small>
+        ${productOffers.length ? `<em class="popular_offer_badge">${formatProductOffer(productOffers[0])}</em>` : ""}
+      </span>
+      <i aria-hidden="true">+</i>
+    `;
+    button.onclick = () => handleProductClick(product, price);
+    list.appendChild(button);
+  });
+}
+
+function filterLocalProducts(term) {
+  window.localProductSearchTerm = term || "";
+  renderItems();
+}
+
+async function confirmOrder() {
   if (cart.length === 0) return;
 
   if (!orderType) {
@@ -408,19 +714,56 @@ function confirmOrder() {
 
   const itemsTotal = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
   let fee = 0;
-  if (orderType === "delivery" && selectedDeliveryFee !== null)
+  if (orderType === "delivery" && hasFeeValue(selectedDeliveryFee))
     fee = selectedDeliveryFee;
-  else if (orderType === "dine_in" && selectedDineInFee !== null)
+  else if (orderType === "dine_in" && hasFeeValue(selectedDineInFee))
     fee = selectedDineInFee;
 
-  const grandTotal = itemsTotal + fee;
+  const pricingItems = cart.map((entry) => {
+    const rawId = String(entry.item.id);
+    return {
+      product_id: parseInt(rawId.includes("_") ? rawId.split("_")[0] : rawId, 10),
+      quantity: entry.qty,
+      unit_price: entry.item.price,
+    };
+  });
+  const mappedOrderType = orderType === "delivery" ? "delivery" : orderType === "takeaway" ? "takeaway" : "hall";
+  const discountType = document.getElementById("discount_type")?.value || null;
+  const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
+  let pricing;
+  try {
+    const pricingResponse = await apiFetch("/pricing/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        items: pricingItems,
+        order_type: mappedOrderType,
+        source: "cashier",
+        delivery_fee: fee,
+        offer_code: selectedOfferCode,
+        customer_phone: deliveryCustomerInfo.phone || null,
+        cashier_id: parseInt(localStorage.getItem("user_id"), 10) || null,
+        manual_discount_type: selectedOfferCode ? null : discountType,
+        manual_discount_value: selectedOfferCode ? null : discountValue,
+      }),
+    });
+    if (!pricingResponse.ok) {
+      const detail = await pricingResponse.json().catch(() => ({}));
+      throw new Error(typeof detail.detail === "string" ? detail.detail : "تعذر حساب إجمالي الطلب");
+    }
+    pricing = await pricingResponse.json();
+  } catch (error) {
+    showToast(error.message || "تعذر حساب إجمالي الطلب", "error");
+    return;
+  }
+
+  const grandTotal = Number(pricing.total_amount || 0);
 
   const orderData = {
     cart,
     orderType,
     selectedDelivery,
     selectedDeliveryFee,
-    itemsTotal,
+    itemsTotal: Number(pricing.subtotal || itemsTotal),
     grandTotal,
     customerPhone: deliveryCustomerInfo.phone || null,
     customerName: deliveryCustomerInfo.name || null,
@@ -570,12 +913,17 @@ function showConfirmModal(orderData) {
           ? deliveryCustomerInfo.newAddress
           : null;
 
+      const discountType = document.getElementById("discount_type")?.value || null;
+      const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
+      const discountReason = document.getElementById("discount_reason")?.value || null;
+
       const payload = {
         customer_id: resolvedCustomerId || null,
         customer_phone: deliveryCustomerInfo.phone || null,
         customer_name: deliveryCustomerInfo.name || null,
         order_type: mappedOrderType,
         source: "cashier",
+        payment_method: selectedPaymentMethod,
         customer_notes: customerNotes,
         internal_notes: null,
         items: items,
@@ -588,7 +936,10 @@ function showConfirmModal(orderData) {
           (orderType === "delivery"
             ? selectedDeliveryFee
             : selectedDineInFee) || 0,
-        offer_code: null,
+        offer_code: selectedOfferCode,
+        manual_discount_type: selectedOfferCode ? null : discountType,
+        manual_discount_value: selectedOfferCode ? null : discountValue,
+        discount_reason: discountReason,
       };
 
       const res = await apiFetch("/orders/", {
@@ -614,6 +965,8 @@ function showConfirmModal(orderData) {
       }
 
       const createdOrder = await res.json();
+      selectedPaymentMethod = "cash";
+      document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item.dataset.paymentMethod === "cash"));
 
       overlay.remove();
 
@@ -662,12 +1015,13 @@ function showConfirmModal(orderData) {
         printReceipt(printData);
       } else {
         console.error(
-          "Function printReceipt not found. ensure print.js is loaded.",
+          "Print Agent bridge is unavailable.",
         );
       }
 
       // تصفية السلة وعودة الحالة للصفر
       cart = [];
+      selectedOfferCode = null;
       orderType = null;
       selectedDelivery = null;
       selectedDeliveryFee = null;
@@ -678,9 +1032,17 @@ function showConfirmModal(orderData) {
         dcFormOk.style.display = "none";
         dcFormOk.innerHTML = "";
       }
+      
+      const discType = document.getElementById("discount_type");
+      const discValue = document.getElementById("discount_value");
+      const discReason = document.getElementById("discount_reason");
+      if (discType) discType.value = "";
+      if (discValue) discValue.value = "";
+      if (discReason) discReason.value = "";
       renderCart();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
+      renderCashierOffersBoard();
 
       showToast("تم تأكيد الطلب بنجاح", "success");
 
@@ -777,6 +1139,7 @@ function showCancelModal() {
   document.getElementById("btn_cancel_yes").onclick = () => {
     overlay.remove();
     cart = [];
+    selectedOfferCode = null;
     orderType = null;
     selectedDelivery = null;
     selectedDeliveryFee = null;
@@ -790,6 +1153,7 @@ function showCancelModal() {
     renderCart();
     renderOrderTypeBadge();
     renderOrderTypeButtons();
+    renderCashierOffersBoard();
     showToast("تم إلغاء الطلب", "error");
   };
 
@@ -813,7 +1177,8 @@ function showToast(message, type) {
 
   const toast = document.createElement("div");
   toast.className = "toast_msg toast_" + type;
-  toast.textContent = message;
+  const toastMessage = String(message || "حدث خطأ غير متوقع");
+  toast.textContent = toastMessage;
 
   toast.style.cssText = `
     position: absolute;
@@ -821,16 +1186,25 @@ function showToast(message, type) {
     left: 50%;
     transform: translate(-50%, -50%);
     color: #fff;
-    padding: 12px 30px;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: calc(100% - 24px);
+    padding: 14px 22px;
     border-radius: 16px;
     font-family: Cairo, sans-serif;
     font-size: 16px;
     font-weight: 700;
+    line-height: 1.75;
     text-align: center;
     z-index: 100;
-    white-space: nowrap;
-    animation: fadeInOutToast 2.5s ease-in-out forwards;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    animation: fadeInOutToast var(--toast-duration) ease-in-out forwards;
   `;
+
+  const toastDuration = Math.min(6500, Math.max(2800, toastMessage.length * 55));
+  toast.style.setProperty("--toast-duration", `${toastDuration}ms`);
 
   if (type === "success") {
     toast.style.backgroundColor = "#1d5c2b";
@@ -857,7 +1231,7 @@ function showToast(message, type) {
 
   setTimeout(() => {
     if (toast.parentElement) toast.remove();
-  }, 2500);
+  }, toastDuration);
 }
 
 // ===================================================
@@ -899,12 +1273,12 @@ function renderOrderTypeBadge() {
   if (
     orderType === "delivery" &&
     selectedDelivery &&
-    selectedDeliveryFee !== null
+    hasFeeValue(selectedDeliveryFee)
   ) {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">${selectedDelivery.name}</span>
-      <span class="badge_fee">رسوم توصيل: ${selectedDeliveryFee} ج.م</span>
+      <span class="badge_fee">رسوم توصيل: ${formatFeeValue(selectedDeliveryFee)}</span>
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   } else if (orderType === "takeaway") {
@@ -917,7 +1291,7 @@ function renderOrderTypeBadge() {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">صالة</span>
-      ${selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${selectedDineInFee} ج.م</span>` : ""}
+      ${hasFeeValue(selectedDineInFee) ? `<span class="badge_fee">رسوم خدمة: ${formatFeeValue(selectedDineInFee)}</span>` : ""}
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
   } else if (orderType === "delivery") {
@@ -997,15 +1371,19 @@ async function updatePricingPreview() {
         (orderType === "delivery" ? selectedDeliveryFee : selectedDineInFee) ||
         0;
 
+      const discountType = document.getElementById("discount_type")?.value || null;
+      const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
+
       const payload = {
         items: items,
         order_type: mappedOrderType,
         source: "cashier",
         delivery_fee: currentFee,
-        offer_code: null,
-        customer_phone:
-          orderType === "delivery" ? deliveryCustomerInfo.phone : null,
+        offer_code: selectedOfferCode,
+        customer_phone: deliveryCustomerInfo.phone || null,
         cashier_id: parseInt(localStorage.getItem("user_id"), 10) || null,
+        manual_discount_type: selectedOfferCode ? null : discountType,
+        manual_discount_value: selectedOfferCode ? null : discountValue,
       };
 
       const res = await apiFetch("/pricing/preview", {
@@ -1017,11 +1395,15 @@ async function updatePricingPreview() {
       if (res.ok) {
         const data = await res.json();
         const totalEl = document.getElementById("total_price");
-        if (totalEl && data.total_amount) {
+        if (totalEl && data.total_amount != null) {
           totalEl.textContent =
             parseFloat(data.total_amount).toFixed(2) + " ج.م";
           // يمكننا مستقبلاً عرض الخصم والـ subtotal هنا
         }
+      } else if (selectedOfferCode) {
+        const payload = await res.json().catch(() => ({}));
+        const message = typeof payload.detail === "string" ? payload.detail : "شروط العرض غير مكتملة في الطلب الحالي";
+        showToast(message, "error");
       }
     } catch (err) {
       console.warn("Pricing preview failed:", err);
@@ -1066,7 +1448,7 @@ function showDineInFeeSelector() {
 }
 
 function selectDineInFee(fee) {
-  selectedDineInFee = fee;
+  selectedDineInFee = Number(fee);
   selectedDeliveryFee = null;
   selectedDelivery = null;
   orderType = "dine_in";
@@ -1144,7 +1526,7 @@ function showDeliveryFeeSelector(rider) {
   if (!list) return;
 
   const fees = [
-    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
     100,
   ];
 
@@ -1168,7 +1550,7 @@ function showDeliveryFeeSelector(rider) {
     btn.textContent = `${fee} ج.م`;
     btn.onclick = () => {
       selectedDelivery = { id: rider.id, name: rider.name };
-      selectedDeliveryFee = fee;
+      selectedDeliveryFee = Number(fee);
       orderType = "delivery";
       resetDeliveryCustomerInfo();
       closeDeliveryModal();
@@ -1338,7 +1720,7 @@ function renderDeliveryCustomerForm() {
         <span class="dcf_label">📞 رقم التليفون</span>
         <div class="dcf_phone_row">
           <input type="tel" id="dcf_phone" class="dcf_input"
-            placeholder="01xxxxxxxxx" maxlength="11"
+            placeholder="01xxxxxxxxx" maxlength="11" inputmode="numeric"
             value="${deliveryCustomerInfo.phone}"
             oninput="this.value = normalizePhoneDigits(this.value); handlePhoneInput(this.value)" />
           <span class="dcf_status" id="dcf_phone_status"></span>
@@ -1487,7 +1869,7 @@ async function lookupCustomerByPhone(phone) {
     if (r2.ok) {
       const list = await r2.json();
       const found = Array.isArray(list)
-        ? list.find((c) => c.phone_number === phone)
+        ? list.find((c) => normalizePhoneDigits(c.phone_number) === normalizePhoneDigits(phone))
         : null;
       if (found) {
         applyFound(found);
@@ -1549,9 +1931,54 @@ renderOrderTypeBadge();
 // ===================================================
 //  Delivery Riders Tab Logic
 // ===================================================
-function renderRidersTab() {
+async function renderRidersTab() {
   const body = document.getElementById("riders_table_body");
   if (!body) return;
+
+  body.innerHTML = `<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
+  try {
+    const response = await apiFetch("/orders/riders/stats", { suppress401: true });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const riders = Array.isArray(data.stats) ? data.stats : [];
+    const summary = data.summary || {};
+    const setRiderText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    setRiderText("cashierRidersTotal", Number(summary.total_delivery_orders || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersAssigned", Number(summary.assigned_orders || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersUnassigned", Number(summary.unassigned_orders || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersOnRoad", Number(summary.out_for_delivery || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersDelivered", Number(summary.delivered_orders || 0).toLocaleString("ar-EG"));
+    setRiderText("cashierRidersValue", `${Number(summary.orders_value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`);
+
+    if (!riders.length) {
+      body.innerHTML = `<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
+      return;
+    }
+
+    riders.sort((a, b) => b.total_orders - a.total_orders);
+    body.innerHTML = riders.map((r) => `
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
+        <td style="padding:15px; font-weight:700; color:#fff;">${r.name}</td>
+        <td style="padding:15px;"><span class="cashier_rider_state ${r.availability}">${r.availability === "busy" ? "مشغول" : "متاح"}</span></td>
+        <td style="padding:15px; font-weight:800;">${r.active_orders || 0}</td>
+        <td style="padding:15px; color:var(--color-accent); font-weight:800;">${r.delivered_orders || 0}</td>
+        <td style="padding:15px; font-weight:800;">${Number(r.cash_amount || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px; font-weight:800;">${Number(r.digital_amount || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px; font-weight:900; color:var(--color-primary);">${Number(r.delivery_fees || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px; font-weight:900; color:#fff0d0;">${Number(r.order_value || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px;">
+          <button onclick='showRiderOrdersPopup("${String(r.name).replace(/"/g, "&quot;")}", ${JSON.stringify(r.order_numbers || [])})'
+            style="background:rgba(61,158,107,.15); color:#3d9e6b; border:1px solid rgba(61,158,107,.3); padding:4px 12px; border-radius:6px; cursor:pointer; font-family:Cairo,sans-serif; font-weight:700;">
+            ${r.total_orders} طلب
+          </button>
+        </td>
+      </tr>`).join("");
+    return;
+  } catch (error) {
+    console.error("Could not load rider statistics:", error);
+    body.innerHTML = `<tr><td colspan="3" style="padding:40px; text-align:center; color:var(--color-subtext);">تعذر تحميل بيانات الدليفري</td></tr>`;
+    return;
+  }
 
   if (
     allOrdersList.length === 0 &&
@@ -1598,7 +2025,7 @@ function renderRidersTab() {
 
     riderStats[rid].count++;
     riderStats[rid].total += parseFloat(order.total_amount || 0);
-    riderStats[rid].orderNumbers.push(order.order_number || order.id);
+    riderStats[rid].orderNumbers.push(displayOrderNumber(order.order_number, order.id));
   });
 
   const ridersArr = Object.values(riderStats);
@@ -1678,10 +2105,12 @@ function switchMainTab(tab) {
   const tabOnline = document.getElementById("tab_online");
   const tabAllOrders = document.getElementById("tab_all_orders");
   const tabRiders = document.getElementById("tab_riders");
+  const tabExpenses = document.getElementById("tab_expenses");
   const layoutLocal = document.getElementById("local_orders_layout");
   const layoutOnline = document.getElementById("online_orders_layout");
   const layoutAllOrders = document.getElementById("all_orders_layout");
   const layoutRiders = document.getElementById("riders_layout");
+  const layoutExpenses = document.getElementById("expenses_layout");
 
   if (!tabLocal || !tabOnline) return;
 
@@ -1690,12 +2119,14 @@ function switchMainTab(tab) {
   tabOnline.classList.remove("active");
   if (tabAllOrders) tabAllOrders.classList.remove("active");
   if (tabRiders) tabRiders.classList.remove("active");
+  if (tabExpenses) tabExpenses.classList.remove("active");
 
   // Reset layouts
   if (layoutLocal) layoutLocal.style.display = "none";
   if (layoutOnline) layoutOnline.style.display = "none";
   if (layoutAllOrders) layoutAllOrders.style.display = "none";
   if (layoutRiders) layoutRiders.style.display = "none";
+  if (layoutExpenses) layoutExpenses.style.display = "none";
 
   if (tab === "local") {
     tabLocal.classList.add("active");
@@ -1715,8 +2146,142 @@ function switchMainTab(tab) {
     if (tabRiders) tabRiders.classList.add("active");
     if (layoutRiders) layoutRiders.style.display = "block";
     renderRidersTab();
+  } else if (tab === "expenses") {
+    if (tabExpenses) tabExpenses.classList.add("active");
+    if (layoutExpenses) layoutExpenses.style.display = "block";
+    loadShiftExpenses();
+  }
+
+  if (orderType === "delivery" && !selectedDelivery) {
+    showToast("لا يمكن إنشاء طلب دليفري بدون اختيار مندوب", "error");
+    renderDeliveryCustomerForm();
+    return;
   }
 }
+
+function expenseMoney(value) {
+  return `${Number(value || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+}
+
+function escapeExpenseText(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+}
+
+let expensesLoadController = null;
+let expensesRequestSequence = 0;
+let currentShiftExpenses = [];
+let currentShiftExpensesTotal = 0;
+
+function renderShiftExpenses() {
+  const list = document.getElementById("expenses_list");
+  if (!list) return;
+  const total = document.getElementById("expenses_total_value");
+  const count = document.getElementById("expenses_count");
+  if (total) {
+    total.textContent = expenseMoney(currentShiftExpensesTotal);
+    total.classList.remove("is_updating");
+    void total.offsetWidth;
+    total.classList.add("is_updating");
+  }
+  if (count) count.textContent = `${currentShiftExpenses.length.toLocaleString("ar-EG")} عملية`;
+  list.innerHTML = currentShiftExpenses.length ? currentShiftExpenses.map((item) => `
+    <article class="expense_row${item._pending ? " is_pending" : ""}">
+      <div><strong>${escapeExpenseText(item.title)}</strong><span>${escapeExpenseText(item.note || "بدون ملاحظة")}</span></div>
+      <div><b>${expenseMoney(item.amount)}</b><small>${item._pending ? "جاري الحفظ..." : new Date(item.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</small></div>
+      <button type="button" ${item._pending ? "disabled" : `onclick="deleteShiftExpense(${item.id})"`} title="${item._pending ? "جاري الحفظ" : "حذف المصروف"}">${item._pending ? "…" : "×"}</button>
+    </article>`).join("") : '<div class="expenses_empty">لا توجد مصروفات مسجلة في الشيفت الحالي</div>';
+}
+
+async function loadShiftExpenses() {
+  const list = document.getElementById("expenses_list");
+  if (!list) return;
+  const requestSequence = ++expensesRequestSequence;
+  expensesLoadController?.abort();
+  expensesLoadController = new AbortController();
+  list.innerHTML = '<div class="expenses_empty">جاري تحميل المصروفات...</div>';
+  try {
+    const response = await apiFetch("/shifts/current/expenses", { hideLoader: true, signal: expensesLoadController.signal });
+    if (!response.ok) throw new Error(`expenses ${response.status}`);
+    const data = await response.json();
+    if (requestSequence !== expensesRequestSequence) return;
+    currentShiftExpenses = data.items || [];
+    currentShiftExpensesTotal = Number(data.total || 0);
+    renderShiftExpenses();
+  } catch (error) {
+    if (error?.name === "AbortError" || requestSequence !== expensesRequestSequence) return;
+    console.error(error);
+    list.innerHTML = '<div class="expenses_empty is_error">تعذر تحميل المصروفات</div>';
+  }
+}
+
+async function deleteShiftExpense(expenseId) {
+  expensesLoadController?.abort();
+  expensesRequestSequence += 1;
+  const itemIndex = currentShiftExpenses.findIndex((item) => Number(item.id) === Number(expenseId));
+  if (itemIndex < 0) return;
+  const removedItem = currentShiftExpenses[itemIndex];
+  currentShiftExpenses.splice(itemIndex, 1);
+  currentShiftExpensesTotal = Math.max(0, currentShiftExpensesTotal - Number(removedItem.amount || 0));
+  renderShiftExpenses();
+  try {
+    const response = await apiFetch(`/shifts/current/expenses/${expenseId}`, { method: "DELETE" });
+    if (!response.ok) throw new Error("تعذر حذف المصروف");
+    const result = await response.json();
+    if (Number.isFinite(Number(result.shift_total))) {
+      currentShiftExpensesTotal = Number(result.shift_total);
+      renderShiftExpenses();
+    }
+    showToast("تم حذف المصروف", "success");
+  } catch (error) {
+    console.error(error);
+    currentShiftExpenses.splice(itemIndex, 0, removedItem);
+    currentShiftExpensesTotal += Number(removedItem.amount || 0);
+    renderShiftExpenses();
+    showToast("تعذر الاتصال أثناء حذف المصروف", "error");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("expense_form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const expenseForm = event.currentTarget;
+    const submitButton = expenseForm.querySelector('button[type="submit"]');
+    if (submitButton?.disabled) return;
+    const form = new FormData(expenseForm);
+    const payload = { title: String(form.get("title") || "").trim(), amount: Number(form.get("amount")), note: String(form.get("note") || "").trim() || null };
+    if (payload.title.length < 2 || !Number.isFinite(payload.amount) || payload.amount <= 0) {
+      return showToast("راجع بند المصروف والمبلغ", "error");
+    }
+    const originalText = submitButton?.textContent;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "جاري الحفظ...";
+    }
+    expensesLoadController?.abort();
+    expensesRequestSequence += 1;
+    try {
+      const response = await apiFetch("/shifts/current/expenses", { method: "POST", body: JSON.stringify(payload) });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || "تعذر حفظ المصروف");
+      }
+      const savedExpense = await response.json();
+      currentShiftExpenses.unshift(savedExpense);
+      if (Number.isFinite(Number(savedExpense.shift_total))) currentShiftExpensesTotal = Number(savedExpense.shift_total);
+      expenseForm.reset();
+      renderShiftExpenses();
+      showToast("تم تسجيل المصروف", "success");
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || "تعذر الاتصال أثناء حفظ المصروف", "error");
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
+      }
+    }
+  });
+});
 
 // ===================================================
 //  Online Orders (Website Orders)
@@ -1733,10 +2298,7 @@ async function fetchOnlineOrdersServer(page = 1, silent = false) {
   onlineOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=online`;
-    if (onlineOrdersFilter !== "all") {
-      url += `&status=${onlineOrdersFilter}`;
-    }
+    const url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=online`;
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch online orders");
     const data = await res.json();
@@ -1762,10 +2324,7 @@ async function fetchAllOrdersServer(page = 1, silent = false) {
   allOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
-    if (allOrdersFilter !== "all") {
-      url += `&order_type=${allOrdersFilter}`;
-    }
+    const url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch all orders");
     const data = await res.json();
@@ -1790,18 +2349,6 @@ async function fetchAllOrdersServer(page = 1, silent = false) {
 async function fetchAllOrders(skipSync = false) {
   showGlobalLoader(true);
   try {
-    if (IS_DESKTOP_RUNTIME && !skipSync) {
-      try {
-        await apiFetch("/desktop-updates/trigger-pull", {
-          method: "POST",
-          suppress401: true,
-        });
-        await new Promise((resolve) => setTimeout(resolve, 800));
-      } catch (e) {
-        console.warn("Could not trigger background sync:", e);
-      }
-    }
-
     // Fetch first page of both and the badge count
     await Promise.all([
       fetchOnlineOrdersServer(1),
@@ -1833,21 +2380,18 @@ function updateOnlineStats() {
   const newCount = onlineOrdersList.filter(
     (o) => o.order_status === "new",
   ).length;
-  //جاهز = confirmed, مكتمل = completed. For stats, let's show confirmed as ready in progress?
-  // User asked: "Ready" (جاهزة) stat box. Let's use confirmed + completed for now or just confirmed.
-  const readyCount = onlineOrdersList.filter(
-    (o) => o.order_status === "confirmed" || o.order_status === "completed",
+  const activeCount = onlineOrdersList.filter(
+    (o) => o.order_status === "confirmed",
+  ).length;
+  const onRoadCount = onlineOrdersList.filter(
+    (o) => o.order_status === "out_for_delivery",
   ).length;
   const cancelledCount = onlineOrdersList.filter(
     (o) => o.order_status === "cancelled",
   ).length;
 
-  const statBoxes = document.querySelectorAll(".stat_box h2");
-  if (statBoxes.length >= 3) {
-    statBoxes[0].textContent = newCount;
-    statBoxes[1].textContent = cancelledCount;
-    statBoxes[2].textContent = readyCount;
-  }
+  const values = { onlineNewCount: newCount, onlineActiveCount: activeCount, onlineOnRoadCount: onRoadCount, onlineCancelledCount: cancelledCount };
+  Object.entries(values).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.textContent = value.toLocaleString("ar-EG"); });
 }
 
 async function refreshNewOrdersBadge() {
@@ -1870,7 +2414,7 @@ async function refreshNewOrdersBadge() {
 setInterval(
   () => {
     if (totalNewOrdersGlobalCount > 0 && isNotificationSoundEnabled) {
-      console.log(
+      console.debug(
         "Sound reminder: Still have",
         totalNewOrdersGlobalCount,
         "new orders.",
@@ -1905,7 +2449,20 @@ function renderOnlineOrders() {
     return;
   }
 
-  if (onlineOrdersList.length === 0) {
+  const term = (onlineOrdersSearchTerm || "").toLowerCase();
+  const filteredList = onlineOrdersList.filter(o => {
+    const matchesStatus = onlineOrdersFilter === "all" ||
+      (onlineOrdersFilter === "active" && ["confirmed", "out_for_delivery"].includes(o.order_status)) ||
+      o.order_status === onlineOrdersFilter;
+    if (!matchesStatus) return false;
+    if (!term) return true;
+    const oNum = String(o.order_number || o.id || "").toLowerCase();
+    const phone = String(o.customer_phone || "").toLowerCase();
+    const name = String(o.customer_name || "").toLowerCase();
+    return oNum.includes(term) || phone.includes(term) || name.includes(term);
+  });
+
+  if (filteredList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات أون لاين</p>`;
     return;
   }
@@ -1915,12 +2472,13 @@ function renderOnlineOrders() {
   const statusMap = {
     new: { label: "جديد", cls: "badge_new" },
     confirmed: { label: "مؤكد", cls: "badge_ready" },
+    out_for_delivery: { label: "خرج للتوصيل", cls: "badge_ready" },
     completed: { label: "مكتمل", cls: "badge_ready" },
     cancelled: { label: "ملغي", cls: "badge_canceled" },
     delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
 
-  onlineOrdersList.forEach((order) => {
+  window.createOnlineOrderCardElement = function(order) {
     let statusObj = statusMap[order.order_status] || {
       label: order.order_status,
       cls: "",
@@ -1944,15 +2502,25 @@ function renderOnlineOrders() {
       }
     }
 
+    let updatedTimeStr = "";
+    if (order.updated_at && order.created_at && Math.abs(new Date(order.updated_at).getTime() - new Date(order.created_at).getTime()) > 2000) {
+        let du = new Date(order.updated_at);
+        if (!isNaN(du)) {
+            updatedTimeStr = `<span style="font-size:10px; color:#f39c12; margin-top:2px;">عدل في: ${du.toLocaleTimeString("ar-EG", {hour: "2-digit", minute: "2-digit"})} - ${du.toLocaleDateString("ar-EG")}</span>`;
+        }
+    }
+
     const card = document.createElement("div");
     card.className = "online_order_card";
+    card.id = `online_order_card_${order.id}`;
     card.onclick = () => openOrderDetails(order.id, "online");
     card.innerHTML = `
       <div class="card_header">
         <span class="order_status ${statusObj.cls}">${statusObj.label}</span>
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
-          <span class="order_id" style="margin-bottom:2px;">طلب #${order.order_number || order.id}</span>
+          <span class="order_id" style="margin-bottom:2px;">طلب #${displayOrderNumber(order.order_number, order.id)}</span>
           <span style="font-size:11px; opacity:0.7;">${timeStr}</span>
+          ${updatedTimeStr}
         </div>
       </div>
       <div class="card_details">
@@ -1971,7 +2539,6 @@ function renderOnlineOrders() {
                 ? order.address.address
                 : order.customer_address ||
                   order.address ||
-                  order.customer_notes ||
                   "لا يوجد عنوان"
             }
           </span>
@@ -1996,6 +2563,7 @@ function renderOnlineOrders() {
         </div>`
             : ""
         }
+        ${appliedOfferCardHtml(order)}
         </div>
       </div>
       
@@ -2008,12 +2576,12 @@ function renderOnlineOrders() {
             : ""
         }
         ${
-          order.order_status === "confirmed"
+          order.order_status === "confirmed" || order.order_status === "out_for_delivery"
             ? `
           ${
             order.order_type === "delivery"
               ? `
-            <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'delivered')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التوصيل</button>
+            <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, '${order.order_status === "confirmed" ? "out_for_delivery" : "delivered"}')" style="background:${order.order_status === "confirmed" ? "#b58d31" : "#1d5c2b"}; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">${order.order_status === "confirmed" ? "خرج للتوصيل" : "تم التوصيل"}</button>
           `
               : `
             <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'completed')" style="background:#1d5c2b; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تم التجهيز</button>
@@ -2023,7 +2591,7 @@ function renderOnlineOrders() {
             : ""
         }
         ${
-          order.order_status === "new" || order.order_status === "confirmed"
+          order.order_status === "new" || order.order_status === "confirmed" || order.order_status === "out_for_delivery"
             ? `
           <button onclick="event.stopPropagation(); updateOnlineStatus(${order.id}, 'cancelled')" style="background:#e40411; color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">إلغاء</button>
           <button onclick="event.stopPropagation(); openEditOrderModal(${order.id}, 'online')" style="background:var(--color-secondary, #2980b9); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">تعديل</button>
@@ -2039,7 +2607,36 @@ function renderOnlineOrders() {
         }
       </div>
     `;
-    grid.appendChild(card);
+    return card;
+  };
+
+  window.updateOrAddOnlineOrderDOM = function(order) {
+    const grid = document.getElementById("online_orders_grid");
+    if (!grid) return;
+
+    // Check if empty message is present and remove it
+    if (grid.innerHTML.includes("لا توجد طلبات أون لاين") || grid.innerHTML.includes("جاري الاتصال")) {
+        grid.innerHTML = "";
+    }
+
+    const newCard = createOnlineOrderCardElement(order);
+    const existingCard = document.getElementById(`online_order_card_${order.id}`);
+
+    if (existingCard) {
+      existingCard.replaceWith(newCard);
+    } else {
+      // Prepend before pagination if exists
+      const firstCard = grid.querySelector('.online_order_card');
+      if (firstCard) {
+        grid.insertBefore(newCard, firstCard);
+      } else {
+        grid.prepend(newCard);
+      }
+    }
+  };
+
+  filteredList.forEach((order) => {
+    grid.appendChild(createOnlineOrderCardElement(order));
   });
 
   const pagination = renderPagination(
@@ -2081,8 +2678,18 @@ async function updateOnlineStatus(orderId, newStatus) {
 
       updateOnlineStats();
       refreshNewOrdersBadge();
-      renderOnlineOrders();
-      renderAllOrders();
+      
+      const oIdx = onlineOrdersList.findIndex((o) => o.id === orderId);
+      if (oIdx !== -1) {
+        window.updateOrAddOnlineOrderDOM(onlineOrdersList[oIdx]);
+      }
+      
+      if (typeof allOrdersList !== "undefined") {
+        const aIdx = allOrdersList.findIndex((o) => o.id === orderId);
+        if (aIdx !== -1) {
+          window.updateOrAddAllOrderDOM(allOrdersList[aIdx]);
+        }
+      }
 
       showToast("تم تحديث الحالة بنجاح", "success");
     } else {
@@ -2184,97 +2791,40 @@ function updateWebOrdersToggleUI() {
 //  WebSocket - Real-time updates
 // ===================================================
 
-function updateConnectionStatus(status) {
-  console.log("🔄 UI Connection Status Change:", status);
-  const dot = document.getElementById("ws_status_dot");
-  const text = document.getElementById("ws_status_text");
-  if (!dot || !text) {
-    console.warn("⚠️ Connection status elements not found in DOM");
-    return;
+function getCashierLiveSocket() {
+  if (!cashierLiveSocket) {
+    cashierLiveSocket = window.createCashierLiveSocket({
+      path: "/orders/ws/cashier",
+      onMessage: (payload) => handleSocketEvent(payload),
+      onOpen: (ws) => {
+        setTimeout(() => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          Promise.all([
+            fetchOnlineOrdersServer(1, true),
+            fetchAllOrdersServer(1, true),
+            refreshNewOrdersBadge(),
+          ]).then(() => {
+            ordersSnapshotLoaded = true;
+            updateOnlineStats();
+            const onlineLayout = document.getElementById("online_orders_layout");
+            const allLayout = document.getElementById("all_orders_layout");
+            if (onlineLayout && onlineLayout.style.display !== "none") renderOnlineOrders();
+            if (allLayout && allLayout.style.display !== "none") renderAllOrders();
+          }).catch((error) => console.warn("Post-reconnect order sync failed:", error));
+        }, 700);
+      },
+      onVisible: () => scheduleOffersRefresh(0),
+    });
   }
-
-  if (status === "connected") {
-    dot.style.background = "#2ecc71"; // Green
-    text.textContent = "متصل مباشر";
-  } else if (status === "disconnected") {
-    dot.style.background = "#e74c3c"; // Red
-    text.textContent = "غير متصل (إعادة محاولة)";
-  } else {
-    dot.style.background = "#f1c40f"; // Yellow
-    text.textContent = "جاري الاتصال...";
-  }
+  return cashierLiveSocket;
 }
+
 function setupWebSocket() {
-  if (reconnectTimerId) {
-    clearTimeout(reconnectTimerId);
-    reconnectTimerId = null;
-  }
+  getCashierLiveSocket().connect();
+}
 
-  updateConnectionStatus("connecting");
-
-  if (
-    socket &&
-    [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)
-  ) {
-    return;
-  }
-
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/orders/ws/cashier`;
-
-  console.log("📡 Attempting WebSocket connection:", wsUrl);
-  const ws = new WebSocket(wsUrl);
-  socket = ws;
-
-  // Safety Timeout: if it doesn't open in 5s, close and retry
-  const connectTimeoutId = setTimeout(() => {
-    if (ws.readyState === WebSocket.CONNECTING) {
-      console.warn("⚠️ WebSocket connection timed out (5s). Retrying...");
-      ws.close();
-    }
-  }, 5000);
-
-  ws.onopen = () => {
-    clearTimeout(connectTimeoutId);
-    console.log("✅ WebSocket connected successfully (Cashier)");
-    updateConnectionStatus("connected");
-  };
-
-  ws.onmessage = (event) => {
-    try {
-      const payload = JSON.parse(event.data);
-      if (payload.type !== "HEARTBEAT" && payload.type !== "HEARTBEAT_ACK") {
-        console.debug("📥 Received WS message:", payload.type);
-      }
-      handleSocketEvent(payload);
-    } catch (err) {
-      console.error("❌ Error parsing WebSocket message:", err);
-    }
-  };
-
-  ws.onclose = (e) => {
-    clearTimeout(connectTimeoutId);
-    if (socket !== ws) return;
-    console.warn(
-      `🔴 WebSocket disconnected. Code: ${e.code}, Reason: ${e.reason || "None"}`,
-    );
-    socket = null;
-    updateConnectionStatus("disconnected");
-
-    // Exponential backoff or simple delay
-    if (!reconnectTimerId) {
-      reconnectTimerId = setTimeout(() => {
-        reconnectTimerId = null;
-        setupWebSocket();
-      }, 3000);
-    }
-  };
-
-  ws.onerror = (err) => {
-    clearTimeout(connectTimeoutId);
-    console.error("❌ WebSocket error details:", err);
-    updateConnectionStatus("disconnected");
-  };
+function updateConnectionStatus(status) {
+  getCashierLiveSocket().updateStatus(status);
 }
 
 function handleSocketEvent(payload) {
@@ -2301,15 +2851,31 @@ function handleSocketEvent(payload) {
     return;
   }
 
+  if (payload.type === "OFFER_UPDATED") {
+    scheduleOffersRefresh(250);
+    return;
+  }
+
+  if (normalizeOrderEventName(payload.type || payload.event) === "NEW_ORDER") {
+    // A newly committed order may consume the final global offer use.
+    scheduleOffersRefresh(450);
+  }
+
   if (payload.type === "ORDER_SNAPSHOT") {
     const orders = Array.isArray(payload.data?.orders)
       ? payload.data.orders
       : [];
     ordersSnapshotLoaded = true;
-    // Local (cashier) orders from snapshot are authoritative on desktop
-    allOrdersList = orders.filter((o) => !isOnlineOrder(o));
-    // For online orders: use snapshot initially, then immediately overwrite from cloud
-    onlineOrdersList = orders.filter(isOnlineOrder);
+    // Split the live snapshot into cashier and online orders.
+    const allFromSnapshot = orders.filter((o) => !isOnlineOrder(o));
+    const onlineFromSnapshot = orders.filter(isOnlineOrder);
+    // Respect pagination: only keep first page and set totals
+    allOrdersTotal = allFromSnapshot.length;
+    onlineOrdersTotal = onlineFromSnapshot.length;
+    allOrdersList = allFromSnapshot.slice(0, ordersPageSize);
+    onlineOrdersList = onlineFromSnapshot.slice(0, ordersPageSize);
+    allOrdersCurrentPage = 1;
+    onlineOrdersCurrentPage = 1;
     lastSocketOrderUpdate = Date.now();
     updateOnlineStats();
     renderOnlineOrders();
@@ -2317,22 +2883,16 @@ function handleSocketEvent(payload) {
     refreshNewOrdersBadge();
     updateConnectionStatus("connected");
 
-    // On desktop, ORDER_SNAPSHOT reads from local SQLite which may have STALE
-    // online order statuses. Immediately fetch from cloud to get the truth.
-    if (IS_DESKTOP_RUNTIME) {
-      console.log(
-        "🔄 Desktop: Fetching online orders from cloud for accurate statuses...",
-      );
-      setTimeout(() => {
-        fetchOnlineOrdersServer(1, true);
-        fetchAllOrdersServer(1, true);
-      }, 300);
-    }
+    // Always fetch from server for accurate pagination and data
+    setTimeout(() => {
+      fetchOnlineOrdersServer(1, true);
+      fetchAllOrdersServer(1, true);
+    }, 300);
     return;
   }
 
   if (payload.type === "SYNC_COMPLETE") {
-    console.log("Desktop master data sync complete, refreshing data safely...");
+    console.debug("Desktop master data sync complete, refreshing data safely...");
     // Safe targeted refresh: reload menu and orders without resetting UI state (cart, modals, etc.)
     _safeSyncRefresh();
     return;
@@ -2343,7 +2903,7 @@ function handleSocketEvent(payload) {
     payload.type === "CUSTOMER_CREATED" ||
     payload.type === "ADDRESS_CREATED"
   ) {
-    console.log("Customer data synced:", payload.type, payload.data);
+    console.debug("Customer data synced:", payload.type);
     // No UI action needed - customer data will be fetched fresh when next order is placed
     // But if delivery customer form is open with same phone, we could refresh it
     if (
@@ -2365,7 +2925,7 @@ function handleSocketEvent(payload) {
 
   ordersSnapshotLoaded = true;
   const eventName = normalizeOrderEventName(payload.type || event);
-  console.log("Real-time event:", eventName, data.id);
+  console.debug("Real-time event:", eventName, data.id);
 
   // 1. Update internal state
   let hasChanged = false;
@@ -2385,10 +2945,15 @@ function handleSocketEvent(payload) {
     if (isOnlineOrder(data)) {
       if (!isDuplicateNumber(onlineOrdersList, data)) {
         onlineOrdersList.unshift(data);
+        // Trim to page size to keep pagination consistent
+        if (onlineOrdersList.length > ordersPageSize) {
+          onlineOrdersList = onlineOrdersList.slice(0, ordersPageSize);
+        }
+        onlineOrdersTotal++;
         hasChanged = true;
         playNotificationSound();
         showToast(
-          "طلب أونلاين جديد! #" + (data.order_number || data.id),
+          "طلب أونلاين جديد! #" + displayOrderNumber(data.order_number, data.id),
           "success",
         );
       }
@@ -2398,6 +2963,11 @@ function handleSocketEvent(payload) {
       if (!isDuplicateNumber(allOrdersList, data)) {
         if (!isOnlineOrder(data)) {
           allOrdersList.unshift(data);
+          // Trim to page size to keep pagination consistent
+          if (allOrdersList.length > ordersPageSize) {
+            allOrdersList = allOrdersList.slice(0, ordersPageSize);
+          }
+          allOrdersTotal++;
           hasChanged = true;
         }
       }
@@ -2405,7 +2975,7 @@ function handleSocketEvent(payload) {
   }
   // Handle Order Updated / Status Changed
   else if (eventName === "ORDER_UPDATED") {
-    console.log(
+    console.debug(
       "Processing update for order:",
       data.order_number,
       "Status:",
@@ -2430,7 +3000,7 @@ function handleSocketEvent(payload) {
         id: localId,
       };
       hasChanged = true;
-      console.log("Updated onlineOrdersList at index", oIdx);
+      console.debug("Updated online orders state");
     }
 
     if (typeof allOrdersList !== "undefined") {
@@ -2439,13 +3009,13 @@ function handleSocketEvent(payload) {
         const localId = allOrdersList[aIdx].id;
         allOrdersList[aIdx] = { ...allOrdersList[aIdx], ...data, id: localId };
         hasChanged = true;
-        console.log("Updated allOrdersList at index", aIdx);
+        console.debug("Updated all orders state");
       }
     }
 
     if (hasChanged) {
       showToast(
-        `تحديث طلب #${data.order_number || data.id}: ${data.order_status}`,
+        `تحديث طلب #${displayOrderNumber(data.order_number, data.id)}: ${data.order_status}`,
         "success",
       );
     } else {
@@ -2482,10 +3052,20 @@ function handleSocketEvent(payload) {
 
     if (onlineLayout && onlineLayout.style.display !== "none") {
       updateOnlineStats();
-      renderOnlineOrders();
+      const oIdx = onlineOrdersList.findIndex(o => String(o.id) === String(data.id) || (o.order_number === data.order_number && o.order_date === data.order_date));
+      if (oIdx !== -1) {
+        window.updateOrAddOnlineOrderDOM(onlineOrdersList[oIdx]);
+      } else {
+        renderOnlineOrders();
+      }
     }
     if (allLayout && allLayout.style.display !== "none") {
-      renderAllOrders();
+      const aIdx = allOrdersList.findIndex(o => String(o.id) === String(data.id) || (o.order_number === data.order_number && o.order_date === data.order_date));
+      if (aIdx !== -1) {
+        window.updateOrAddAllOrderDOM(allOrdersList[aIdx]);
+      } else {
+        renderAllOrders();
+      }
     }
     if (ridersLayout && ridersLayout.style.display !== "none") {
       renderRidersTab();
@@ -2494,6 +3074,14 @@ function handleSocketEvent(payload) {
     // Update count badge from server
     refreshNewOrdersBadge();
     lastNewOrdersCount = totalNewOrdersGlobalCount; // for legacy sync if any
+    
+    // Refresh order details modal if it's open for the updated order
+    const detailOverlay = document.getElementById("order_detail_overlay");
+    if (detailOverlay && detailOverlay.dataset.orderId === String(data.id)) {
+      const source = detailOverlay.dataset.source;
+      detailOverlay.remove();
+      openOrderDetails(data.id, source);
+    }
   }
 }
 
@@ -2554,7 +3142,7 @@ async function _safeSyncRefresh() {
       if (ridersLayout && ridersLayout.style.display !== "none")
         renderRidersTab();
 
-      console.log("✅ Safe sync refresh completed");
+      console.debug("Safe sync refresh completed");
     } catch (err) {
       console.warn("Safe sync refresh failed (non-critical):", err);
     }
@@ -2584,7 +3172,7 @@ async function _refreshCustomerAddresses(phone) {
         if (addrField && typeof renderAddressFieldHTML === "function") {
           addrField.innerHTML = renderAddressFieldHTML();
         }
-        console.log(
+        console.debug(
           "✅ Customer addresses refreshed from sync:",
           data.addresses.length,
           "addresses",
@@ -2732,7 +3320,27 @@ function renderAllOrders() {
     return;
   }
 
-  if (allOrdersList.length === 0) {
+  const term = (allOrdersSearchTerm || "").toLowerCase();
+  const filteredList = allOrdersList.filter(o => {
+    if (allOrdersFilter !== "all" && o.order_type !== allOrdersFilter) return false;
+    if (!term) return true;
+    const oNum = String(o.order_number || o.id || "").toLowerCase();
+    const phone = String(o.customer_phone || "").toLowerCase();
+    const name = String(o.customer_name || "").toLowerCase();
+    return oNum.includes(term) || phone.includes(term) || name.includes(term);
+  });
+
+  const completedOrders = allOrdersList.filter((order) => ["completed", "delivered"].includes(order.order_status));
+  const kpis = {
+    allOrdersTotalKpi: allOrdersList.length.toLocaleString("ar-EG"),
+    allOrdersDeliveryKpi: allOrdersList.filter((order) => order.order_type === "delivery").length.toLocaleString("ar-EG"),
+    allOrdersCompletedKpi: completedOrders.length.toLocaleString("ar-EG"),
+  };
+  Object.entries(kpis).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.textContent = value; });
+  const resultCount = document.getElementById("allOrdersResultCount");
+  if (resultCount) resultCount.textContent = `${filteredList.length.toLocaleString("ar-EG")} طلب`;
+
+  if (filteredList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات</p>`;
     return;
   }
@@ -2744,10 +3352,11 @@ function renderAllOrders() {
     completed: { label: "مكتمل", cls: "badge_ready" },
     cancelled: { label: "ملغي", cls: "badge_canceled" },
     confirmed: { label: "مؤكد", cls: "badge_ready" },
+    out_for_delivery: { label: "خرج للتوصيل", cls: "badge_ready" },
     delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
 
-  allOrdersList.forEach((order) => {
+  window.createAllOrderCardElement = function(order) {
     const typeLabel =
       order.order_type === "delivery"
         ? "دليفري"
@@ -2782,10 +3391,10 @@ function renderAllOrders() {
 
     let actionsHtml = "";
 
-    if (order.order_status === "confirmed") {
+    if (order.order_status === "confirmed" || order.order_status === "out_for_delivery") {
       const isDelivery = order.order_type === "delivery";
-      const completeLabel = isDelivery ? "تم التوصيل" : "مكتمل";
-      const completeStatus = isDelivery ? "delivered" : "completed";
+      const completeLabel = isDelivery ? (order.order_status === "confirmed" ? "خرج للتوصيل" : "تم التوصيل") : "مكتمل";
+      const completeStatus = isDelivery ? (order.order_status === "confirmed" ? "out_for_delivery" : "delivered") : "completed";
 
       actionsHtml = `
           <button onclick="event.stopPropagation(); printOrderFromList(${order.id})" style="background:#5c5c5c; color:#fff; border:none; padding:5px 12px; border-radius:6px; font-family:Cairo,sans-serif; font-size:11px; font-weight:700; cursor:pointer; margin-left:6px;">طباعة</button>
@@ -2838,19 +3447,31 @@ function renderAllOrders() {
         `;
     }
 
+    let updatedTimeStr = "";
+    if (order.updated_at && order.created_at && Math.abs(new Date(order.updated_at).getTime() - new Date(order.created_at).getTime()) > 2000) {
+        let du = new Date(order.updated_at);
+        if (!isNaN(du)) {
+            updatedTimeStr = `<span style="display:block; color:#f39c12; font-size:10px; margin-top:2px;">عدل في: ${du.toLocaleTimeString("ar-EG", {hour: "2-digit", minute: "2-digit"})} - ${du.toLocaleDateString("ar-EG")}</span>`;
+        }
+    }
+
     const card = document.createElement("div");
     card.className = "online_order_card";
+    card.id = `all_order_card_${order.id}`;
     card.onclick = () => openOrderDetails(order.id, "all");
     card.style.cssText =
       "padding:12px; gap:8px; min-height:0; display:flex; flex-direction:column;";
     card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="display:flex; align-items:center; gap:8px;">
             ${badgeHtml}
-            <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${order.order_number || order.id}</span>
+            <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${displayOrderNumber(order.order_number, order.id)}</span>
             <span style="font-size:11px; padding:2px 6px; background:rgba(255,255,255,0.05); border-radius:4px; color:var(--color-subtext);">${typeLabel}</span>
           </div>
-          <span style="font-size:11px; color:var(--color-subtext);">${timeStr}</span>
+          <div style="display:flex; flex-direction:column; align-items:flex-end;">
+            <span style="font-size:11px; color:var(--color-subtext);">${timeStr}</span>
+            ${updatedTimeStr}
+          </div>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px dashed rgba(201,168,76,0.3); padding-top:8px; margin-top:2px;">
           <span style="font-size:15px; font-weight:800; color:var(--color-primary);">${totalAmount} ج.م</span>
@@ -2863,13 +3484,13 @@ function renderAllOrders() {
                   ? order.address.address
                   : order.customer_address ||
                     order.address ||
-                    order.customer_notes ||
                     "---"
               }
             </span>
           </div>
         </div>
         ${itemsHtml}
+        ${appliedOfferCardHtml(order)}
         ${
           actionsHtml
             ? `
@@ -2880,7 +3501,35 @@ function renderAllOrders() {
             : ""
         }
       `;
-    grid.appendChild(card);
+    return card;
+  };
+
+  window.updateOrAddAllOrderDOM = function(order) {
+    const grid = document.getElementById("all_orders_grid");
+    if (!grid) return;
+
+    if (grid.innerHTML.includes("لا توجد طلبات") || grid.innerHTML.includes("جاري الاتصال")) {
+        grid.innerHTML = "";
+    }
+
+    const newCard = createAllOrderCardElement(order);
+    const existingCard = document.getElementById(`all_order_card_${order.id}`);
+
+    if (existingCard) {
+      existingCard.replaceWith(newCard);
+    } else {
+      // Prepend before pagination if exists
+      const firstCard = grid.querySelector('.online_order_card'); // note: both use online_order_card class
+      if (firstCard) {
+        grid.insertBefore(newCard, firstCard);
+      } else {
+        grid.prepend(newCard);
+      }
+    }
+  };
+
+  filteredList.forEach((order) => {
+    grid.appendChild(createAllOrderCardElement(order));
   });
 
   const pagination = renderPagination(
@@ -2893,8 +3542,7 @@ function renderAllOrders() {
 }
 
 function renderPagination(totalItems, currentPage, pageSize, onPageChangeName) {
-  const totalPages = Math.ceil(totalItems / pageSize);
-  if (totalPages <= 1) return null;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   const container = document.createElement("div");
   container.className = "pagination-container";
@@ -3003,6 +3651,7 @@ async function changeOrderStatus(orderId, status) {
     delivered: "تم التوصيل",
     cancelled: "ملغي",
     confirmed: "مؤكد",
+    out_for_delivery: "خرج للتوصيل",
   };
   const confirmed = await showCustomActionConfirm(
     `هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`,
@@ -3032,8 +3681,15 @@ async function changeOrderStatus(orderId, status) {
         updateInList(onlineOrdersList);
 
       showToast("تم تحديث حالة الطلب", "success");
-      renderAllOrders();
-      renderOnlineOrders();
+      const oIdx = typeof onlineOrdersList !== "undefined" ? onlineOrdersList.findIndex((o) => String(o.id) === String(orderId)) : -1;
+      if (oIdx !== -1) {
+        window.updateOrAddOnlineOrderDOM(onlineOrdersList[oIdx]);
+      }
+
+      const aIdx = allOrdersList.findIndex((o) => String(o.id) === String(orderId));
+      if (aIdx !== -1) {
+        window.updateOrAddAllOrderDOM(allOrdersList[aIdx]);
+      }
       updateOnlineStats();
       refreshNewOrdersBadge();
     } else {
@@ -3071,7 +3727,7 @@ function showErrorModal(message) {
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
       <h3 style="color:#e40411; margin-bottom:12px; font-weight:bold; font-family:'Cairo',sans-serif;">تنبيه</h3>
-      <p style="color:var(--color-text, #fff); font-size:14px; margin-bottom:24px; font-family:'Cairo',sans-serif;">${message}</p>
+      <p style="color:var(--color-text, #fff); font-size:14px; line-height:1.8; margin-bottom:24px; font-family:'Cairo',sans-serif; white-space:normal; overflow-wrap:anywhere; word-break:break-word;">${message}</p>
       <button style="background:#e40411; color:#fff; border:none; padding:8px 32px; border-radius:6px; font-weight:bold; font-family:'Cairo',sans-serif; cursor:pointer; font-size:14px;" onclick="this.parentElement.parentElement.remove()">حسناً</button>
     </div>
   `;
@@ -3125,28 +3781,28 @@ async function logout() {
   const headers = token ? { Authorization: "Bearer " + token } : {};
 
   try {
-    // محاوله إبلاغ السيرفر بتسجيل الخروج لإبطال التوكن
-    await fetch(`${API_BASE}/auth/logout`, {
+    // تسجيل الخروج هو الذي يقفل الشيفت على السيرفر؛ لا نمسح الجلسة محليًا إذا فشل.
+    const response = await fetch(`${API_BASE}/auth/logout`, {
       method: "POST",
       headers: {
         ...headers,
         "Content-Type": "application/json",
       },
     });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (err) {
     console.warn("Logout API error:", err);
-  } finally {
-    // في كل الأحوال، مسح البيانات المحلية والتحويل لصفحة الدخول
-    localStorage.removeItem("token");
-    localStorage.removeItem("token_type");
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("username");
-    localStorage.removeItem("role");
-    localStorage.removeItem("user");
-
-    // التحويل لصفحة الدخول الرئيسية
-    window.location.replace("../index.html");
+    showToast("تعذر إغلاق الشيفت. تأكد من الاتصال وحاول تسجيل الخروج مرة أخرى", "error");
+    return;
   }
+
+  localStorage.removeItem("token");
+  localStorage.removeItem("token_type");
+  localStorage.removeItem("user_id");
+  localStorage.removeItem("username");
+  localStorage.removeItem("role");
+  localStorage.removeItem("user");
+  window.location.replace("../index.html");
 }
 
 // ===================================================
@@ -3169,6 +3825,7 @@ function openOrderDetails(orderId, source) {
     completed: { label: "مكتمل", cls: "badge_ready" },
     cancelled: { label: "ملغي", cls: "badge_canceled" },
     confirmed: { label: "مؤكد", cls: "badge_ready" },
+    out_for_delivery: { label: "خرج للتوصيل", cls: "badge_ready" },
     delivered: { label: "تم التوصيل", cls: "badge_ready" },
   };
   const statusObj = statusMap[order.order_status] || {
@@ -3178,6 +3835,8 @@ function openOrderDetails(orderId, source) {
 
   const overlay = document.createElement("div");
   overlay.id = "order_detail_overlay";
+  overlay.dataset.orderId = orderId;
+  overlay.dataset.source = source;
   overlay.style.position = "fixed";
   overlay.style.inset = "0";
   overlay.style.background = "rgba(0,0,0,0.85)";
@@ -3215,7 +3874,21 @@ function openOrderDetails(orderId, source) {
     .join("");
 
   const deliveryFee = parseFloat(order.delivery_fee || 0);
-  const itemsTotal = parseFloat(order.total_amount || 0) - deliveryFee;
+  const itemsTotal = parseFloat(order.subtotal || order.total_amount || 0);
+
+  // Compute modification date display
+  let modificationHtml = "";
+  if (order.updated_at && order.created_at) {
+    const createdMs = new Date(order.created_at).getTime();
+    const updatedMs = new Date(order.updated_at).getTime();
+    if (Math.abs(updatedMs - createdMs) > 2000) {
+      modificationHtml = `<div style="color:#f39c12;">
+        <span style="opacity:0.8;">آخر تعديل:</span>
+        <span style="font-weight:700; margin-right:4px;">${new Date(order.updated_at).toLocaleString("ar-EG")}</span>
+      </div>`;
+    }
+  }
+  const createdAtStr = order.created_at ? new Date(order.created_at).toLocaleString("ar-EG") : "---";
 
   // قسم تخصيص الدليفري — يظهر فقط لطلبات الأونلاين نوع delivery
   const isOnlineDelivery =
@@ -3242,13 +3915,20 @@ function openOrderDetails(orderId, source) {
     : "";
 
   overlay.innerHTML = `
-    <div style="background:var(--color-bg); border:1px solid var(--color-primary); border-radius:16px; width:680px; max-width:95vw; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.5); position:relative; overflow:hidden;">
-      <button onclick="document.getElementById('order_detail_overlay').remove()" style="position:absolute; left:20px; top:20px; background:none; border:none; color:var(--color-subtext); font-size:24px; cursor:pointer; z-index:10;">&times;</button>
+    <div class="order_detail_modal" style="background:var(--color-bg); border:1px solid var(--color-primary); border-radius:16px; width:680px; max-width:95vw; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.5); position:relative; overflow:hidden;">
+      <button class="order_detail_close" onclick="document.getElementById('order_detail_overlay').remove()" style="position:absolute; left:20px; top:20px; background:none; border:none; color:var(--color-subtext); font-size:24px; cursor:pointer; z-index:10;">&times;</button>
       
-      <div style="padding:32px; overflow-y:auto; scrollbar-gutter:stable;">
-        <div style="text-align:center; margin-bottom:24px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:16px;">
-          <h2 style="color:var(--color-primary); margin-bottom:8px;">تفاصيل الطلب #${order.order_number || order.id}</h2>
+      <div class="order_detail_scroll" style="padding:32px; overflow-y:auto; scrollbar-gutter:stable;">
+        <div class="order_detail_heading" style="text-align:center; margin-bottom:24px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:16px;">
+          <h2 style="color:var(--color-primary); margin-bottom:8px;">تفاصيل الطلب #${displayOrderNumber(order.order_number, order.id)}</h2>
           <span class="order_status ${statusObj.cls}">${statusObj.label}</span>
+          <div class="order_detail_timeline" style="display:flex; justify-content:center; gap:20px; margin-top:12px; font-size:12px;">
+            <div style="color:var(--color-subtext);">
+              <span style="opacity:0.7;">تاريخ الإنشاء:</span>
+              <span style="font-weight:700; margin-right:4px;">${createdAtStr}</span>
+            </div>
+            ${modificationHtml}
+          </div>
         </div>
 
         <div class="order_detail_info_grid">
@@ -3271,7 +3951,6 @@ function openOrderDetails(orderId, source) {
                 ? order.address.address
                 : order.customer_address ||
                   order.address ||
-                  order.customer_notes ||
                   "---"
             }</p>
           </div>
@@ -3320,15 +3999,54 @@ function openOrderDetails(orderId, source) {
             <span>خدمة التوصيل:</span>
             <span id="od_delivery_fee">${deliveryFee.toFixed(2)} ج.م</span>
           </div>
+          ${order.applied_offer ? `
+          <div class="summary_row" style="color:#f1c75b;">
+            <span>العرض: ${escapeOrderText(order.applied_offer.display_name || order.applied_offer.code)} (${escapeOrderText(order.applied_offer.code)})</span>
+            <span>قيمة الخصم: ${Number(order.applied_offer.discount_amount || order.discount_amount || 0).toFixed(2)} ج.م</span>
+          </div>` : ""}
+          ${
+            order.discount_amount && parseFloat(order.discount_amount) > 0
+              ? `
+          <div class="summary_row" style="color: #e74c3c;">
+            <span>الخصم${order.discount_reason ? ` (${order.discount_reason})` : ""}:</span>
+            <span>- ${parseFloat(order.discount_amount).toFixed(2)} ج.م</span>
+          </div>
+              `
+              : ""
+          }
           <div class="summary_row total">
             <span>الإجمالي الكلي:</span>
             <span id="od_grand_total">${parseFloat(order.total_amount).toFixed(2)} ج.م</span>
           </div>
         </div>
+        
+        ${
+          order.modifications && order.modifications.length > 0
+            ? `
+        <div style="margin-top: 24px; padding: 16px; background: rgba(243, 156, 18, 0.05); border: 1px solid rgba(243, 156, 18, 0.2); border-radius: 8px;">
+          <h4 style="color: #f39c12; margin-bottom: 12px; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-clock-rotate-left"></i> سجل التعديلات
+          </h4>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            ${order.modifications.map(mod => `
+              <div style="font-size: 12px; border-right: 2px solid #f39c12; padding-right: 12px;">
+                <div style="color: var(--color-subtext); margin-bottom: 4px;">
+                  <span style="font-weight: 700; color: var(--color-text);">${new Date(mod.changed_at).toLocaleString("ar-EG")}</span>
+                </div>
+                <ul style="margin: 0; padding-right: 16px; color: var(--color-text);">
+                  ${mod.changes.map(c => `<li>${c}</li>`).join("")}
+                </ul>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+            `
+            : ""
+        }
 
 
 
-        <div style="margin-top:24px; display:flex; flex-direction:column; gap:12px;">
+        <div class="order_detail_actions" style="margin-top:24px; display:flex; flex-direction:column; gap:12px;">
           <div style="display:flex; justify-content:center; gap:12px;">
             ${
               order.order_status === "new"
@@ -3389,7 +4107,10 @@ async function acceptOrderFromModal(orderId, source) {
       body: JSON.stringify({ order_status: "confirmed" }),
     });
 
-    if (!res.ok) throw new Error("فشل تحديث الحالة");
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || "فشل تحديث الحالة");
+    }
 
     // ✅ تحديث الـ badge داخل المودال
     const statusBadge = document.querySelector(
@@ -3445,7 +4166,7 @@ async function acceptOrderFromModal(orderId, source) {
       </svg>
       قبول الطلب
     `;
-    showToast("حدث خطأ أثناء قبول الطلب", "error");
+    showToast(err.message || "حدث خطأ أثناء قبول الطلب", "error");
   }
 }
 
@@ -3534,9 +4255,9 @@ function showFeeSelectorInModal(riderId, riderName, orderId) {
   if (!body) return;
 
   const fees = [
-    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
     100,
-  ]; // أمثلة لرسوم التوصيل، يمكن تعديلها حسب الحاجة
+  ];
 
   body.innerHTML = `
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
@@ -3571,16 +4292,22 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
     body.innerHTML = `<p style="color:var(--color-subtext);font-size:13px;text-align:center;">جاري الحفظ...</p>`;
 
   try {
-    const res = await apiFetch(`/orders/${orderId}`, {
+    const resFull = await apiFetch(`/orders/${orderId}`, {
       method: "PATCH",
       body: JSON.stringify({
-        order_status: "confirmed",
         delivery_person_id: riderId,
         delivery_fee: parseFloat(fee),
       }),
     });
+    if (!resFull.ok) throw new Error("فشل تحديث بيانات التوصيل");
 
-    if (!res.ok) throw new Error("فشل التحديث");
+    const resStatus = await apiFetch(`/orders/${orderId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        order_status: "confirmed",
+      }),
+    });
+    if (!resStatus.ok) throw new Error("فشل تحديث الحالة");
 
     // تحديث الأرقام في السامري داخل المودال
     const feeEl = document.getElementById("od_delivery_fee");
@@ -3634,7 +4361,16 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
     `;
 
     updateOnlineStats();
-    renderOnlineOrders();
+    const oIdx = onlineOrdersList.findIndex((o) => String(o.id) === String(orderId));
+    if (oIdx !== -1) {
+      window.updateOrAddOnlineOrderDOM(onlineOrdersList[oIdx]);
+    }
+    if (typeof allOrdersList !== "undefined") {
+      const aIdx = allOrdersList.findIndex((o) => String(o.id) === String(orderId));
+      if (aIdx !== -1) {
+        window.updateOrAddAllOrderDOM(allOrdersList[aIdx]);
+      }
+    }
     showToast(`تم تخصيص ${riderName} برسوم ${fee} ج.م`, "success");
   } catch (err) {
     console.error(err);
@@ -3706,6 +4442,10 @@ function openEditOrderModal(orderId, sourceList) {
       ? order.address.address
       : getOrderAddressText(order);
 
+  editModalState.discountType = order.discount_type || "";
+  editModalState.discountValue = parseFloat(order.discount_value) || 0;
+  editModalState.discountReason = order.discount_reason || "";
+
   editModalState.cart = (order.items || []).map((item) => {
     let prod = products.find((p) => p.id === item.product_id);
     let name = prod ? prod.product_name : `صنف #${item.product_id}`;
@@ -3753,7 +4493,7 @@ function renderEditOrderModal() {
       <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 32px; background:linear-gradient(180deg, #c79a4a 0%, #7a4f1a 100%); direction:rtl;">
         <div style="display:flex; align-items:center; gap:12px;">
           <img src="/assets/توب شيف 1@2x.png" style="width:40px; height:40px; object-fit:contain;" />
-          <h2 style="color:var(--color-bg); margin:0; font-size:18px; font-weight:900;">تعديل الطلب #${editModalState.originalOrder.order_number || editModalState.originalOrder.id}</h2>
+          <h2 style="color:var(--color-bg); margin:0; font-size:18px; font-weight:900;">تعديل الطلب #${displayOrderNumber(editModalState.originalOrder.order_number, editModalState.originalOrder.id)}</h2>
         </div>
         <button onclick="document.getElementById('edit_order_modal_overlay').remove()" style="background:var(--color-bg); border:none; color:var(--color-primary); width:32px; height:32px; border-radius:50%; font-size:20px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center;display:flex; align-items:center; justify-content:center">&times;</button>
       </div>
@@ -3808,6 +4548,25 @@ function renderEditOrderModal() {
             </div>
             
             <div class="total_cards" id="edit_modal_cart_list" style="padding:0 16px;"></div>
+
+            <!-- Edit Discount Section -->
+            <div id="edit_modal_discount_form" style="border-top: 1px solid rgba(201, 168, 76, 0.3); padding: 12px 14px; flex-shrink: 0; margin-bottom: 8px;">
+              <div class="dcf_title" style="margin-bottom: 8px;">
+                <i class="fa-solid fa-tags"></i>
+                <span>تعديل الخصم</span>
+              </div>
+              <div class="delivery_customer_card">
+                <div style="display:flex; gap:8px;">
+                  <select id="edit_modal_discount_type" class="dcf_select" style="flex:1;" onchange="editModalState.discountType = this.value; updateEditModalGrandTotal()">
+                    <option value="" ${!editModalState.discountType ? "selected" : ""}>بدون خصم</option>
+                    <option value="fixed" ${editModalState.discountType === "fixed" ? "selected" : ""}>مبلغ ثابت</option>
+                    <option value="percentage" ${editModalState.discountType === "percentage" ? "selected" : ""}>نسبة مئوية (%)</option>
+                  </select>
+                  <input type="number" id="edit_modal_discount_value" class="dcf_input" style="flex:1;" placeholder="القيمة" min="0" step="0.01" value="${editModalState.discountValue || ""}" oninput="editModalState.discountValue = parseFloat(this.value) || 0; updateEditModalGrandTotal()">
+                </div>
+                <input type="text" id="edit_modal_discount_reason" class="dcf_input" placeholder="سبب الخصم (اختياري)" value="${editModalState.discountReason || ""}" oninput="editModalState.discountReason = this.value">
+              </div>
+            </div>
           </div>
 
           <div class="total_footer" style="flex-shrink:0;">
@@ -3875,12 +4634,12 @@ function renderEditModalOrderTypeBadge() {
   if (
     editModalState.orderType === "delivery" &&
     editModalState.selectedDelivery &&
-    editModalState.selectedDeliveryFee !== null
+    hasFeeValue(editModalState.selectedDeliveryFee)
   ) {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">${editModalState.selectedDelivery.name}</span>
-      <span class="badge_fee">رسوم توصيل: ${editModalState.selectedDeliveryFee} ج.م</span>
+      <span class="badge_fee">رسوم توصيل: ${formatFeeValue(editModalState.selectedDeliveryFee)}</span>
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   } else if (editModalState.orderType === "takeaway") {
@@ -3893,7 +4652,7 @@ function renderEditModalOrderTypeBadge() {
     badge.innerHTML = `
       <span class="badge_icon"></span>
       <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">صالة</span>
-      ${editModalState.selectedDineInFee !== null ? `<span class="badge_fee">رسوم خدمة: ${editModalState.selectedDineInFee} ج.م</span>` : ""}
+      ${hasFeeValue(editModalState.selectedDineInFee) ? `<span class="badge_fee">رسوم خدمة: ${formatFeeValue(editModalState.selectedDineInFee)}</span>` : ""}
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
   } else if (editModalState.orderType === "delivery") {
@@ -4017,7 +4776,7 @@ function showDeliveryFeeSelectorInEditModal(rider) {
   if (!list) return;
 
   const fees = [
-    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
     100,
   ];
 
@@ -4041,7 +4800,7 @@ function showDeliveryFeeSelectorInEditModal(rider) {
     btn.textContent = `${fee} ج.م`;
     btn.onclick = () => {
       editModalState.selectedDelivery = { id: rider.id, name: rider.name };
-      editModalState.selectedDeliveryFee = fee;
+      editModalState.selectedDeliveryFee = Number(fee);
       editModalState.orderType = "delivery";
       closeEditModalSub();
       renderEditModalOrderTypeBadge();
@@ -4059,7 +4818,7 @@ function showDineInFeeSelectorInEditModal() {
   if (!container) return;
 
   const fees = [
-    5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
     100,
   ];
 
@@ -4088,7 +4847,7 @@ function showDineInFeeSelectorInEditModal() {
 }
 
 function selectDineInFeeInEditModal(fee) {
-  editModalState.selectedDineInFee = fee;
+  editModalState.selectedDineInFee = Number(fee);
   editModalState.selectedDeliveryFee = null;
   editModalState.selectedDelivery = null;
   editModalState.orderType = "dine_in";
@@ -4267,17 +5026,24 @@ function updateEditModalGrandTotal() {
   let fee = 0;
   if (
     editModalState.orderType === "delivery" &&
-    editModalState.selectedDeliveryFee !== null
+    hasFeeValue(editModalState.selectedDeliveryFee)
   ) {
     fee = editModalState.selectedDeliveryFee;
   } else if (
     editModalState.orderType === "dine_in" &&
-    editModalState.selectedDineInFee !== null
+    hasFeeValue(editModalState.selectedDineInFee)
   ) {
     fee = editModalState.selectedDineInFee;
   }
 
-  const grandTotal = itemsTotal + fee;
+  let discount = 0;
+  if (editModalState.discountType === "fixed") {
+    discount = editModalState.discountValue;
+  } else if (editModalState.discountType === "percentage") {
+    discount = itemsTotal * (editModalState.discountValue / 100);
+  }
+
+  const grandTotal = Math.max(0, itemsTotal + fee - discount);
   totalEl.textContent = grandTotal.toFixed(2) + " ج.م";
 }
 
@@ -4321,8 +5087,8 @@ function handleEditModalProductClick(product, defaultPrice) {
     btn.onclick = () => {
       addEditModalCartItem({
         originalProductId: product.id,
-        id:
-          `${product.id}_${v.id}, name: ${v.name}` - `${product.product_name}`,
+        id: `${product.id}_${v.id}`,
+        name: `${product.product_name} - ${v.name}`,
         price: parseFloat(v.price),
       });
       overlay.remove();
@@ -4388,13 +5154,19 @@ async function updateEditOrderConfirm() {
         ? "hall"
         : editModalState.orderType;
 
+    if (!mappedOrderType) {
+      alert("يجب اختيار نوع الطلب أولاً");
+      btn.innerHTML = originalBtnHTML;
+      btn.disabled = false;
+      return;
+    }
+
     // تجهيز حمولة البيانات (Payload) للـ PATCH
     const payload = {
       customer_id: orig.customer_id,
       customer_name: editModalState.customerName,
       customer_phone: editModalState.customerPhone,
       order_type: mappedOrderType,
-      source: orig.source,
       customer_notes: orig.customer_notes,
       internal_notes: orig.internal_notes,
       items: newItems,
@@ -4409,7 +5181,9 @@ async function updateEditOrderConfirm() {
           : editModalState.orderType === "dine_in"
             ? editModalState.selectedDineInFee
             : 0,
-      offer_code: orig.offer_code || null,
+      manual_discount_type: editModalState.discountType || null,
+      manual_discount_value: editModalState.discountValue || null,
+      discount_reason: editModalState.discountReason || null,
     };
 
     // إرسال طلب التحديث (PATCH)
@@ -4446,20 +5220,7 @@ async function updateEditOrderConfirm() {
 
     const updatedLocalOrder = {
       ...orig,
-      ...updatedOrder,
-      items: newItems,
-      order_type: mappedOrderType,
-      delivery_fee: deliveryFee,
-      customer_name: editModalState.customerName,
-      customer_phone: editModalState.customerPhone,
-      customer_address: editModalState.customerAddress,
-      delivery_person_id: editModalState.selectedDelivery
-        ? editModalState.selectedDelivery.id
-        : null,
-      delivery_person_name: editModalState.selectedDelivery
-        ? editModalState.selectedDelivery.name
-        : null,
-      total_amount: itemsTotal + deliveryFee,
+      ...updatedOrder
     };
 
     // تحديث القائمة المحلية فوراً لضمان ظهور التعديلات في الكارد (Card)
@@ -4467,13 +5228,13 @@ async function updateEditOrderConfirm() {
       const idx = onlineOrdersList.findIndex((o) => o.id === orig.id);
       if (idx !== -1) {
         onlineOrdersList[idx] = updatedLocalOrder;
-        renderOnlineOrders();
+        window.updateOrAddOnlineOrderDOM(onlineOrdersList[idx]);
       }
     } else {
       const idx = allOrdersList.findIndex((o) => o.id === orig.id);
       if (idx !== -1) {
         allOrdersList[idx] = updatedLocalOrder;
-        renderAllOrders();
+        window.updateOrAddAllOrderDOM(allOrdersList[idx]);
       }
     }
 
@@ -4504,6 +5265,9 @@ async function updateEditOrderConfirm() {
         ...updatedLocalOrder,
         cart: cartMapped,
         itemsTotal: itemsTotal,
+        // The native print agent checks the camelCase field first. Override any
+        // stale value retained from the pre-edit local order.
+        customerAddress: getOrderAddressText(updatedLocalOrder),
       };
 
       printReceipt(printData);

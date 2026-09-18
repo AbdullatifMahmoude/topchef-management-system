@@ -54,16 +54,16 @@ const VALIDATION_RULES = {
     message: "الاسم: 3-30 حرف، حروف عربية أو إنجليزية وأرقام فقط",
   },
   productName: {
-    regex: /^[\u0600-\u06FF a-zA-Z0-9\-_().،,]{2,50}$/,
-    message: "اسم الصنف: 2-50 حرف، حروف وأرقام فقط",
+    regex: /^[\p{L}\p{M}\p{N}\p{Extended_Pictographic}\u200D\uFE0F _\-().،,]{2,255}$/u,
+    message: "اسم الصنف: 2-255 حرف، ويمكن إضافة إيموجي",
   },
   categoryName: {
-    regex: /^[\u0600-\u06FF a-zA-Z0-9\-_]{2,30}$/,
-    message: "اسم التصنيف: 2-30 حرف، حروف وأرقام فقط",
+    regex: /^[\p{L}\p{M}\p{N}\p{Extended_Pictographic}\u200D\uFE0F _\-().،,]{2,255}$/u,
+    message: "اسم التصنيف: 2-255 حرف، ويمكن إضافة إيموجي",
   },
   sizeName: {
-    regex: /^[\u0600-\u06FF a-zA-Z0-9\-_/.()]{1,20}$/,
-    message: "اسم الحجم: 1-20 حرف (أرقام وحروف)",
+    regex: /^[\p{L}\p{M}\p{N}\p{Extended_Pictographic}\u200D\uFE0F _\-/.()،,]{1,255}$/u,
+    message: "اسم الحجم: 1-255 حرف، ويمكن إضافة إيموجي",
   },
   price: {
     regex: /^\d+(\.\d{1,2})?$/,
@@ -76,7 +76,7 @@ const VALIDATION_RULES = {
   },
   password: {
     regex: /^[a-zA-Z0-9]{6,}$/,
-    message: "6 أحرف على الأقل، أرقام أو أرقام وحروف",
+    message: "كلمة المرور يجب أن تكون 6 خانات على الأقل، حروف إنجليزية أو أرقام فقط",
   },
   offerCode: {
     regex: /^[a-zA-Z0-9]{3,20}$/,
@@ -141,11 +141,8 @@ function setFieldState(input, state, message) {
     }
   } else if (state === "success") {
     input.classList.add("input_success");
-    const hint = document.createElement("span");
-    hint.className = "field_hint hint_success";
-    hint.dataset.for = input.placeholder || "";
-    hint.textContent = "✓";
-    input.insertAdjacentElement("afterend", hint);
+    // The green border is the success indicator. Keeping the checkmark out of
+    // the layout prevents fields in horizontal rows from being pushed aside.
   }
 }
 

@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin - توب شيف</title>
+  <title>Admin -- توب شيف</title>
   <link rel="icon" href="/assets/توب شيف 1.png" />
-  <link rel="stylesheet" href="css/admin.css?v=20260615-tablet-mobile-sidebar" />
+  <link rel="stylesheet" href="css/admin.css?v=20260912-payment-settings" />
 </head>
 
 <body>
@@ -22,86 +22,90 @@
     <!-- ===== السايد منيو الثابت ===== -->
     <div class="sidemenu">
       <div class="logo_title">
-        <h1><span style="color: white">مطعم </span> توب شيف</h1>
+        <div class="sidebar_brand_copy"><small>لوحة الإدارة</small><h1><span>مطعم</span> توب شيف</h1></div>
         <img src="/assets/توب شيف 1.png" alt="" />
       </div>
       <div class="menu_btn">
-        <button class="side_btn" data-page="home">الرئيسية</button>
-        <button class="side_btn" data-page="items">إدارة الأصناف</button>
-        <button class="side_btn" data-page="categories">التصنيفات</button>
-        <button class="side_btn" data-page="delivery">المستخدمين</button>
-        <button class="side_btn" data-page="reports">التقارير</button>
-        <button class="side_btn" data-page="offers">العروض</button>
-        <button class="side_btn" id="goeventspage">الاحداث</button>
+        <button class="side_btn" data-page="home"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg><span>الرئيسية</span></button>
+        <button class="side_btn" data-page="items"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="18" cy="18" r="2"/></svg><span>إدارة الأصناف</span></button>
+        <button class="side_btn" data-page="categories"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>التصنيفات</span></button>
+        <button class="side_btn" data-page="delivery"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg><span>المستخدمين</span></button>
+        <button class="side_btn" data-page="delivery-ops"><svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>إدارة التوصيل</span></button>
+        <button class="side_btn" data-page="shifts"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>الشيفتات</span></button>
+        <button class="side_btn" data-page="offers"><svg viewBox="0 0 24 24"><path d="M20 13 13 20 4 11V4h7z"/><circle cx="8" cy="8" r="1"/></svg><span>العروض</span></button>
+        <button class="side_btn" data-page="reports"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>التقارير</span></button>
+        <button class="side_btn" data-page="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/></svg><span>الإعدادات</span></button>
       </div>
-      <div class="logo_bottom">
-        <h1>
-          مرحبا: <span style="color: #ffe701" id="admin_username">...</span>
-        </h1>
-        <button id="logout_btn" style="
-            margin-top: 12px;
-            width: 100%;
-            padding: 10px;
-            background: rgba(231,76,60,0.15);
-            color: #e74c3c;
-            border: 1px solid rgba(231,76,60,0.4);
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-family: inherit;
-            transition: background 0.2s;
-          " onmouseover="this.style.background='rgba(231,76,60,0.3)'"
-          onmouseout="this.style.background='rgba(231,76,60,0.15)'">
-          ⏻ تسجيل الخروج
+      <div class="logo_bottom sidebar_account">
+        <div class="sidebar_user_avatar" aria-hidden="true">م</div>
+        <h1 class="sidebar_greeting"><small>مدير النظام</small><span id="admin_username">...</span></h1>
+        <button id="logout_btn" class="sidebar_logout_btn">
+          <svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/></svg><span>تسجيل الخروج</span>
         </button>
       </div>
     </div>
 
     <div class="page-content" id="page-home" style="display: none">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <div class="title">
-          <h1 style="margin:0;">الرئيسية</h1>
-          <p style="margin:0; font-size:12px; opacity:0.6;">إحصائيات وطلبات اليوم مباشرة</p>
+      <section class="ops_dashboard" aria-labelledby="ops_dashboard_title">
+        <header class="ops_header">
+          <div><p>غرفة العمليات</p><h1 id="ops_dashboard_title">متابعة تشغيل اليوم</h1><span id="ops_business_date">نظرة مباشرة على أداء المطعم</span></div>
+          <div class="ops_live_area">
+            <strong id="ops_current_time">--:--</strong>
+            <div id="ws_status_badge"><i id="ws_status_dot"></i><span id="ws_status_text">جاري الاتصال...</span></div>
+          </div>
+        </header>
+
+        <div class="ops_kpis">
+          <article class="ops_kpi ops_kpi_primary"><span>صافي مبيعات اليوم</span><strong id="stat_total_sales">0 ج.م</strong><small id="ops_sales_vs_yesterday" class="ops_sales_compare">مقارنة بنفس التوقيت أمس</small></article>
+          <article class="ops_kpi ops_kpi_profit"><span>صافي المبيعات بعد المصروفات</span><strong id="ops_net_profit">0 ج.م</strong><small>لا يشمل تكلفة الخامات</small></article>
+          <article class="ops_kpi ops_kpi_expense"><span>مصروفات اليوم</span><strong id="ops_total_expenses">0 ج.م</strong><small>مسجلة من الكاشير</small></article>
+          <article class="ops_kpi"><span>إجمالي الطلبات</span><strong id="stat_total_orders">0</strong><small id="ops_orders_mix">لا توجد طلبات بعد</small></article>
+          <article class="ops_kpi"><span>متوسط قيمة الطلب</span><strong id="ops_average_order">0 ج.م</strong><small>للطلب غير الملغي</small></article>
+          <article class="ops_kpi"><span>معدل نجاح الطلبات</span><strong id="ops_success_rate" class="percentage_value"><b class="percentage_symbol">%</b><b class="percentage_number">0</b></strong><small id="ops_cancel_summary">0 طلب ملغي</small></article>
         </div>
-        <div id="ws_status_badge" style="display:flex; align-items:center; gap:8px; background: rgba(255,255,255,0.05); padding: 6px 12px; border-radius: 20px; font-size: 11px;">
-           <div id="ws_status_dot" style="width:8px; height:8px; border-radius:50%; background: #999;"></div>
-           <span id="ws_status_text">جاري الاتصال...</span>
+
+        <div class="ops_grid">
+          <article class="ops_panel ops_now_panel">
+            <div class="ops_panel_header"><div><h2>التشغيل الآن</h2><p>ما يحتاج انتباهك في اللحظة الحالية</p></div><span class="ops_pulse">مباشر</span></div>
+            <div class="ops_now_stats">
+              <div><strong id="stat_active_orders">0</strong><span>طلبات نشطة</span></div>
+              <div><strong id="ops_new_orders">0</strong><span>جديدة</span></div>
+              <div><strong id="ops_confirmed_orders">0</strong><span>قيد التجهيز</span></div>
+            </div>
+            <div id="ops_attention" class="ops_attention is_clear"><strong>التشغيل مستقر</strong><span>لا توجد طلبات متأخرة حاليًا</span></div>
+          </article>
+
+          <article class="ops_panel">
+            <div class="ops_panel_header"><div><h2>قنوات البيع</h2><p>توزيع طلبات اليوم حسب النوع</p></div></div>
+            <div id="ops_channels" class="ops_channels"></div>
+          </article>
+
+          <article class="ops_panel ops_actions_panel">
+            <div class="ops_panel_header"><div><h2>تحكم سريع</h2><p>اختصارات إدارة اليوم</p></div></div>
+            <div class="ops_quick_actions">
+              <button type="button" data-ops-page="shifts"><span>الشيفتات</span><small>متابعة الوردية</small></button>
+              <button type="button" data-ops-page="items"><span>الأصناف</span><small>التوفر والأسعار</small></button>
+              <button type="button" data-ops-page="offers"><span>العروض</span><small>إدارة العروض</small></button>
+              <button type="button" data-ops-page="reports"><span>التقارير</span><small>تحليل الأداء</small></button>
+            </div>
+          </article>
+
+          <article class="ops_panel ops_alerts_panel">
+            <div class="ops_panel_header"><div><h2>تنبيهات اليوم</h2><p>أحداث تستحق المراجعة</p></div><strong id="ops_alerts_count">0</strong></div>
+            <div id="ops_alerts" class="ops_alerts"><div class="ops_empty_state">لا توجد تنبيهات</div></div>
+          </article>
         </div>
-      </div>
-      
-      <div class="container1">
-        <div class="card">
-          <h1>عدد الطلبات</h1>
-          <h2 id="stat_total_orders">0</h2>
-          <span id="stat_total_orders_trend">--</span>
+
+        <div class="ops_orders_header">
+          <div><h2>حركة الطلبات</h2><p id="ops_orders_caption">آخر طلبات يوم العمل</p></div>
+          <div class="ops_order_filters" role="group" aria-label="فلترة الطلبات">
+            <button class="active" type="button" data-order-filter="all">الكل</button>
+            <button type="button" data-order-filter="active">النشطة</button>
+            <button type="button" data-order-filter="completed">المكتملة</button>
+            <button type="button" data-order-filter="cancelled">الملغية</button>
+          </div>
         </div>
-        <div class="card">
-          <h1>إجمالي المبيعات اليوم</h1>
-          <h2 id="stat_total_sales">0 ج.م</h2>
-          <span id="stat_total_sales_trend">--</span>
-        </div>
-        <div class="card">
-          <h1>أكتر صنف مبيعا</h1>
-          <h2 id="stat_top_product">---</h2>
-          <span id="stat_top_product_count">0 طلب</span>
-        </div>
-      </div>
-      <div class="container2">
-        <div class="card">
-          <h1>الطلبات المكتمله</h1>
-          <h2 id="stat_completed_orders">0</h2>
-        </div>
-        <div class="card">
-          <h1>الطلبات الملغية</h1>
-          <h2 id="stat_cancelled_orders">0</h2>
-          <span id="stat_cancelled_trend">--</span>
-        </div>
-        <div class="card">
-          <h1>الطلبات الجاريه</h1>
-          <h2 id="stat_active_orders">0</h2>
-        </div>
-      </div>
-      <div class="table_structure_unified">
+        <div class="table_structure_unified ops_orders_table_wrap">
         <div class="table_scroll_unified">
           <table class="orders_table" id="home_orders_table">
             <thead>
@@ -122,28 +126,44 @@
           </table>
         </div>
       </div>
+      </section>
     </div>
 
     <!-- ===== صفحة إدارة الأصناف ===== -->
     <div class="page-content" id="page-items" style="display: none">
-      <div class="title_btn">
-        <div class="title">
-          <h1>قائمة الاصناف</h1>
-          <h2>إدارة جميع أصناف المطعم</h2>
-        </div>
-        <button class="add_btn">+ إضافه صنف</button>
+      <section class="items_workspace" aria-labelledby="items_page_title">
+      <header class="items_header">
+        <div><p>إدارة المنيو</p><h1 id="items_page_title">مركز تشغيل الأصناف</h1><span>تحكم سريع في الإتاحة والأسعار ونسخ البيع أثناء التشغيل</span></div>
+        <button class="add_btn">+ إضافة صنف جديد</button>
+      </header>
+      <div class="items_kpis">
+        <article><span>إجمالي الأصناف</span><strong id="itemsTotalCount">0</strong><small id="itemsCategoryCount">0 تصنيف</small></article>
+        <article class="is_available"><span>متاح للبيع</span><strong id="itemsAvailableCount">0</strong><small id="itemsAvailabilityRate">0% من المنيو</small></article>
+        <article class="is_paused"><span>موقوف مؤقتًا</span><strong id="itemsPausedCount">0</strong><small>لا يظهر للكاشير أو العميل</small></article>
+        <article><span>نسخ ومتغيرات البيع</span><strong id="itemsVariantsCount">0</strong><small id="itemsMultiSizeCount">0 صنف متعدد الأحجام</small></article>
       </div>
-      <div class="table_structure_unified">
-        <div class="search_unified_wrapper">
-          <input class="search-bar" type="text" placeholder="🔍 بحث عن صنف" />
-        </div>
+      <div class="items_insights_grid">
+        <article class="items_insight_panel"><div class="items_insight_heading"><div><h2>الأكثر طلبًا</h2><p>آخر 30 يوم</p></div><span>حسب الوحدات</span></div><div id="itemsTopSelling" class="items_top_selling"><div class="items_empty_cell">جاري تحميل الأداء...</div></div></article>
+        <article class="items_insight_panel"><div class="items_insight_heading"><div><h2>آخر تغييرات المنيو</h2><p>السعر والإتاحة والمسؤول</p></div><span>سجل رقابي</span></div><div id="itemsChangeLog" class="items_change_log"><div class="items_empty_cell">جاري تحميل السجل...</div></div></article>
+      </div>
+      <div class="items_control_bar">
+        <label class="items_search"><span>بحث</span><input class="search-bar" type="search" placeholder="ابحث باسم الصنف أو الوصف" /></label>
+        <label><span>التصنيف</span><select id="itemsCategoryFilter"><option value="all">كل التصنيفات</option></select></label>
+        <label><span>الحالة</span><select id="itemsStatusFilter"><option value="all">الكل</option><option value="available">متاح للبيع</option><option value="paused">موقوف</option></select></label>
+        <label><span>نسخة البيع</span><select id="itemsTypeFilter"><option value="all">كل النسخ</option><option value="simple">حجم واحد</option><option value="variant">متعدد الأحجام</option></select></label>
+        <label><span>الترتيب</span><select id="itemsSortFilter"><option value="name">الاسم</option><option value="category">التصنيف</option><option value="price_asc">السعر: الأقل</option><option value="price_desc">السعر: الأعلى</option></select></label>
+        <button id="itemsResetFilters" type="button">مسح الفلاتر</button>
+      </div>
+      <div class="items_table_heading"><div><h2>قائمة المنيو</h2><p id="itemsTableCaption">جاري تحميل الأصناف...</p></div><div class="items_legend"><span><i></i>متاح</span><span><i></i>موقوف</span></div></div>
+      <div class="table_structure_unified items_table_card">
         <div class="table_scroll_unified">
           <table class="orders_table_items">
             <thead>
               <tr class="no_borer_bottom">
                 <th>الصنف</th>
                 <th>التصنيف</th>
-                <th>السعر</th>
+                <th>نسخة البيع</th>
+                <th>الأسعار</th>
                 <th>الحالة</th>
                 <th>الإجراءات</th>
               </tr>
@@ -152,6 +172,7 @@
           </table>
         </div>
       </div>
+      </section>
       <div class="modal">
         <div class="modal_container">
           <div class="exit"><img src="/assets/Export.png" alt="" /></div>
@@ -161,19 +182,21 @@
           </div>
           <div class="form_modal">
             <form id="productForm">
-              <div class="name_desc">
-                <input class="inp" type="text" placeholder="اسم الصنف" />
-
-              </div>
-              <input class="inp" type="text" id="desc_input" placeholder="وصف الصنف" />
-
-              <select id="cat_select"></select>
-              <select id="size_type">
+              <div class="product_form_intro"><strong>بيانات الصنف</strong><span>أدخل البيانات الأساسية التي ستظهر في المنيو</span></div>
+              <label class="product_field"><span>اسم الصنف</span>
+                <input class="inp" type="text" placeholder="اسم الصنف" maxlength="255" />
+              </label>
+              <label class="product_field"><span>وصف مختصر <small>اختياري</small></span><input class="inp" type="text" id="desc_input" placeholder="مثال: برجر لحم مع صوص خاص" /></label>
+              <div class="product_form_grid">
+              <label class="product_field"><span>التصنيف</span><select id="cat_select"></select></label>
+              <label class="product_field"><span>نسخة البيع</span><select id="size_type">
                 <option value="">نسخه البيع</option>
                 <option value="one">حجم واحد</option>
                 <option value="many">اكثر من حجم</option>
-              </select>
-              <input class="inp" type="text" placeholder="السعر" id="single_price" />
+              </select></label>
+              </div>
+              <label class="product_field product_single_price"><span>السعر</span><input class="inp" type="text" placeholder="السعر" id="single_price" /></label>
+              <div id="sizes_section_heading" class="sizes_section_heading"><strong>الأحجام والأسعار</strong><span>أضف نسخة بيع واحدة أو أكثر</span></div>
               <div id="multi_sizes_container"></div>
               <div class="bttns-form">
                 <button type="button" id="add_size_btn" style="display: none">
@@ -201,20 +224,20 @@
 
     <!-- ===== صفحة التصنيفات ===== -->
     <div class="page-content" id="page-categories" style="display: none">
-      <div class="title_btn">
-        <div class="title">
-          <h1>قائمة التصنيفات</h1>
-          <h2>إدارة جميع تصنيفات المطعم</h2>
-        </div>
-        <button class="add_category_btn">+ إضافه تصنيف</button>
-      </div>
-      <div class="table_structure_unified">
+      <section class="categories_workspace">
+      <header class="categories_header"><div><p>هيكلة المنيو</p><h1>مركز إدارة التصنيفات</h1><span>نظّم ظهور المنيو وتحكم في إتاحة مجموعات الأصناف</span></div><button class="add_category_btn">+ إضافة تصنيف</button></header>
+      <div class="categories_kpis"><article><span>إجمالي التصنيفات</span><strong id="categoriesTotalCount">0</strong><small id="categoriesProductsCount">0 صنف</small></article><article class="is_active"><span>نشط في المنيو</span><strong id="categoriesActiveCount">0</strong><small>ظاهر في نقاط البيع</small></article><article class="is_paused"><span>موقوف مؤقتًا</span><strong id="categoriesPausedCount">0</strong><small>أصنافه مخفية</small></article><article><span>تصنيفات فارغة</span><strong id="categoriesEmptyCount">0</strong><small>تحتاج إضافة أصناف</small></article></div>
+      <div class="categories_controls"><label class="categories_search"><span>بحث</span><input id="categoriesSearch" type="search" placeholder="ابحث باسم التصنيف"></label><label><span>الحالة</span><select id="categoriesStatusFilter"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="paused">موقوف</option></select></label><label><span>الترتيب</span><select id="categoriesSort"><option value="name">الاسم</option><option value="items_desc">الأكثر أصنافًا</option><option value="items_asc">الأقل أصنافًا</option></select></label><button id="categoriesResetFilters" type="button">مسح الفلاتر</button></div>
+      <div class="categories_table_heading"><div><h2>قائمة التصنيفات</h2><p id="categoriesTableCaption">جاري التحميل...</p></div><span>إيقاف التصنيف يخفي أصنافه من البيع دون حذفها</span></div>
+      <div class="table_structure_unified categories_table_card">
         <div class="table_scroll_unified">
-          <table class="orders_table">
+          <table class="orders_table categories_table">
             <thead>
               <tr class="no_borer_bottom">
                 <th>التصنيف</th>
-                <th>عدد الاصناف</th>
+                <th>إجمالي الأصناف</th>
+                <th>متاح</th>
+                <th>موقوف</th>
                 <th>الحالة</th>
                 <th>الإجراءات</th>
               </tr>
@@ -223,6 +246,8 @@
           </table>
         </div>
       </div>
+      </section>
+      <div id="categoryProductsDrawer" class="category_drawer" aria-hidden="true"><button class="category_drawer_backdrop" type="button" aria-label="إغلاق"></button><aside><div class="category_drawer_header"><div><p>أصناف التصنيف</p><h2 id="categoryDrawerTitle">—</h2></div><button id="closeCategoryDrawer" type="button">×</button></div><div id="categoryDrawerSummary"></div><div id="categoryDrawerProducts" class="category_drawer_products"></div></aside></div>
       <div class="category_modal">
         <div class="modal_container">
           <div class="category_exit">
@@ -233,7 +258,7 @@
             <h1>أضف تصنيف جديد</h1>
           </div>
           <div class="form_category_modal">
-            <input type="text" placeholder=" اسم التصنيف" />
+            <input type="text" placeholder=" اسم التصنيف" maxlength="255" />
             <!-- <div class="status">
               <p>الحالة</p>
               <div class="switch" id="switch_cat"><div class="circle"></div></div>
@@ -261,14 +286,12 @@
 
     <!-- ===== صفحة المستخدمين ===== -->
     <div class="page-content" id="page-delivery" style="display: none">
-      <div class="title_btn">
-        <div class="title">
-          <h1>قائمة الدليفري</h1>
-          <h2>إدارة جميع المستخدمين</h2>
-        </div>
-        <button class="add_btn_delivery">+ إضافه مستخدم</button>
-      </div>
-      <div class="table_structure_unified">
+      <section class="users_workspace">
+      <header class="users_header"><div><p>إدارة فريق العمل</p><h1>مركز المستخدمين والصلاحيات</h1><span>إدارة الإدارة والكاشير وفريق التوصيل من مكان واحد</span></div><button class="add_btn_delivery">+ إضافة مستخدم</button></header>
+      <div class="users_kpis"><article><span>إجمالي الفريق</span><strong id="usersTotalCount">0</strong><small id="usersActiveSummary">0 نشط</small></article><article class="is_admin"><span>الإدارة</span><strong id="usersAdminCount">0</strong><small>حسابات بصلاحية كاملة</small></article><article><span>الكاشير</span><strong id="usersCashierCount">0</strong><small>تشغيل واستلام الطلبات</small></article><article><span>فريق التوصيل</span><strong id="usersDeliveryCount">0</strong><small>السائقون المسجلون</small></article><article class="is_paused"><span>حسابات موقوفة</span><strong id="usersPausedCount">0</strong><small>لا يمكنها تسجيل الدخول</small></article></div>
+      <div class="users_controls"><label class="users_search"><span>بحث</span><input id="usersSearch" type="search" placeholder="الاسم، المستخدم أو الهاتف"></label><label><span>الدور</span><select id="usersRoleFilter"><option value="all">كل الأدوار</option><option value="admin">الإدارة</option><option value="cashier">الكاشير</option><option value="delivery">التوصيل</option></select></label><label><span>الحالة</span><select id="usersStatusFilter"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="paused">موقوف</option></select></label><button id="usersResetFilters" type="button">مسح الفلاتر</button></div>
+      <div class="users_table_heading"><div><h2>فريق العمل</h2><p id="usersTableCaption">جاري التحميل...</p></div><span>حسابك الحالي محمي من الإيقاف أو الحذف</span></div>
+      <div class="table_structure_unified users_table_card">
         <div class="table_scroll_unified">
           <table class="orders_table_delivery">
             <thead>
@@ -321,7 +344,7 @@
               </div>
               <div class="bttns">
                 <button type="submit" class="save_delivery_btn">حفظ</button>
-                <button class="cancel_category_btn">إلغاء</button>
+                <button type="button" class="cancel_category_btn">إلغاء</button>
               </div>
             </form>
           </div>
@@ -341,190 +364,262 @@
       </div>
     </div>
 
+    <!-- ===== صفحة تشغيل التوصيل ===== -->
+    <div class="page-content" id="page-delivery-ops" style="display: none">
+      <section class="delivery_ops_workspace" aria-labelledby="delivery_ops_title">
+        <header class="delivery_ops_header">
+          <div><p>متابعة التشغيل المباشر</p><h1 id="delivery_ops_title">إدارة التوصيل</h1><span>إسناد الطلبات ومتابعة المناديب والتحصيل خلال يوم العمل</span></div>
+          <button id="deliveryOpsRefresh" type="button">تحديث البيانات</button>
+        </header>
+
+        <div class="delivery_ops_kpis">
+          <article class="is_alert"><span>بدون مندوب</span><strong id="deliveryUnassignedCount">0</strong><small>تحتاج إسنادًا الآن</small></article>
+          <article class="is_route"><span>خرجت للتوصيل</span><strong id="deliveryOnRoadCount">0</strong><small>طلبات مع المناديب</small></article>
+          <article class="is_success"><span>تم تسليمها</span><strong id="deliveryDeliveredCount">0</strong><small>خلال يوم العمل</small></article>
+          <article><span>المناديب المتاحة</span><strong id="deliveryAvailableRiders">0</strong><small id="deliveryBusyRiders">0 مشغول</small></article>
+          <article><span>النقدي المتوقع</span><strong id="deliveryCashExpected">0 ج.م</strong><small>طلبات الدليفري اليوم</small></article>
+        </div>
+
+        <div class="delivery_ops_grid">
+          <article class="delivery_ops_panel delivery_orders_panel">
+            <div class="delivery_panel_heading"><div><h2>حركة الطلبات</h2><p>الأولوية للطلبات غير المسندة والمتأخرة</p></div><select id="deliveryOrdersFilter"><option value="active">الطلبات النشطة</option><option value="unassigned">بدون مندوب</option><option value="out_for_delivery">خرجت للتوصيل</option></select></div>
+            <div id="deliveryOrdersList" class="delivery_orders_list"><div class="delivery_empty">جاري تحميل الطلبات...</div></div>
+          </article>
+          <article class="delivery_ops_panel delivery_riders_panel">
+            <div class="delivery_panel_heading"><div><h2>حالة المناديب</h2><p>الحمل الحالي والتحصيل لكل مندوب</p></div></div>
+            <div id="deliveryRidersList" class="delivery_riders_list"><div class="delivery_empty">جاري تحميل المناديب...</div></div>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== صفحة الشيفتات ===== -->
+    <div class="page-content" id="page-shifts" style="display: none">
+      <section class="shifts_workspace" aria-labelledby="shifts_page_title">
+        <header class="shifts_header">
+          <div><p>الرقابة التشغيلية</p><h1 id="shifts_page_title">إدارة وتسليم الشيفتات</h1><span>متابعة أداء الكاشير وحركة يوم العمل</span></div>
+          <div class="shifts_date_filter">
+            <span class="stable_date_input"><input type="date" id="shiftsDateFilter" /><span class="stable_date_value" aria-hidden="true"></span></span>
+            <button id="shiftsDateBtn" type="button">عرض اليوم</button>
+          </div>
+        </header>
+
+        <div class="shifts_kpis">
+          <article><span>إجمالي الشيفتات</span><strong id="shiftsTotalCount">0</strong><small id="shiftsClosedCount">0 شيفت مغلق</small></article>
+          <article class="is_active"><span>الشيفتات النشطة</span><strong id="shiftsActiveCount">0</strong><small id="shiftsActiveCashiers">لا يوجد كاشير نشط</small></article>
+          <article><span>مبيعات الشيفتات</span><strong id="shiftsTotalSales">0 ج.م</strong><small>بدون رسوم الدليفري فقط</small></article>
+          <article><span>إجمالي الطلبات</span><strong id="shiftsTotalOrders">0</strong><small id="shiftsAverageOrder">متوسط الطلب 0 ج.م</small></article>
+        </div>
+
+        <div class="shifts_grid">
+          <article class="shift_focus_panel">
+            <div class="shift_panel_heading"><div><h2>الشيفت النشط الآن</h2><p>ملخص الوردية الحالية</p></div><span id="activeShiftBadge">غير نشط</span></div>
+            <div id="activeShiftContent" class="active_shift_empty">لا يوجد شيفت مفتوح حاليًا</div>
+          </article>
+          <article class="shift_focus_panel">
+            <div class="shift_panel_heading"><div><h2>مقارنة الأداء</h2><p>ترتيب الكاشير حسب المبيعات</p></div></div>
+            <div id="shiftPerformanceList" class="shift_performance_list"><div class="active_shift_empty">لا توجد بيانات</div></div>
+          </article>
+        </div>
+
+        <div class="shifts_table_heading">
+          <div><h2>سجل الشيفتات</h2><p id="shiftsTableCaption">كل شيفتات يوم العمل المحدد</p></div>
+          <div class="shifts_filters">
+            <select id="shiftsStatusFilter"><option value="all">كل الحالات</option><option value="active">نشط</option><option value="closed">مغلق</option></select>
+            <select id="shiftsCashierFilter"><option value="all">كل الكاشيرين</option></select>
+          </div>
+        </div>
+        <div class="table_structure_unified shifts_table_wrap">
+          <div class="table_scroll_unified">
+            <table class="orders_table" id="shifts_table">
+              <thead><tr><th>الحالة</th><th>الكاشير</th><th>المدة</th><th>البداية / النهاية</th><th>الطلبات</th><th>متوسط الطلب</th><th>المبيعات</th><th>التفاصيل</th></tr></thead>
+              <tbody><tr><td colspan="8" class="shift_empty_cell">جاري التحميل...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <div id="shiftDetailsDrawer" class="shift_drawer" aria-hidden="true">
+        <button id="closeShiftDrawer" class="shift_drawer_backdrop" type="button" aria-label="إغلاق"></button>
+        <aside><div class="shift_drawer_header"><div><p>تفاصيل الوردية</p><h2 id="drawerCashierName">—</h2></div><button id="closeShiftDrawerBtn" type="button">×</button></div><div id="shiftDrawerContent"></div><button id="printShiftBtn" class="print_shift_btn" type="button">طباعة تسليم الشيفت</button></aside>
+      </div>
+      </section>
+    </div>
+
     <!-- ===== صفحة التقارير ===== -->
     <div class="page-content" id="page-reports" style="display: none">
-      <div class="reports_btn">
-        <button id="monthlyBtn" class="filter-btn" data-period="month">
-          شهري
-        </button>
-        <button id="weeklyBtn" class="filter-btn" data-period="week">
-          أسبوعي
-        </button>
-        <button id="dailyBtn" class="filter-btn" data-period="day">
-          يومي
-        </button>
-      </div>
-      <div class="container1_reports">
-        <div class="card_reports">
-          <h1>إجمالي المبيعات</h1>
-          <h2>3000 ج.م</h2>
-          <span>25% من امس</span>
+      <section class="reports_workspace" aria-labelledby="reports_heading">
+        <header class="reports_header">
+          <div class="reports_header_copy">
+            <p class="reports_eyebrow">لوحة التحليلات</p>
+            <h1 id="reports_heading">تقارير المبيعات</h1>
+            <p class="title_report">ملخص أداء يوم العمل الحالي</p>
+          </div>
+          <button id="printBtn" class="reports_print_btn" type="button">طباعة التقرير</button>
+        </header>
+
+        <div class="reports_filters">
+          <div class="reports_periods" aria-label="الفترة الزمنية">
+            <button id="dailyBtn" class="filter-btn active_report" data-period="day">يومي</button>
+            <button id="weeklyBtn" class="filter-btn" data-period="week">أسبوعي</button>
+            <button id="monthlyBtn" class="filter-btn" data-period="month">شهري</button>
+            <button id="yearlyBtn" class="filter-btn" data-period="year">سنوي</button>
+          </div>
+          <div class="custom-date-filter">
+            <label>من <span class="stable_date_input"><input type="date" id="customStartDate" /><span class="stable_date_value" aria-hidden="true"></span></span></label>
+            <label>إلى <span class="stable_date_input"><input type="date" id="customEndDate" /><span class="stable_date_value" aria-hidden="true"></span></span></label>
+            <button id="customDateBtn" type="button">تطبيق</button>
+          </div>
         </div>
-        <div class="card_reports">
-          <h1>عدد طلبات الصالة</h1>
-          <h2>25 طلب</h2>
-          <span>25% من امس</span>
+
+        <div id="reportsLoading" class="reports_loading" role="status" hidden>جاري تحميل بيانات التقرير...</div>
+        <div id="reportsError" class="reports_error" role="alert" hidden></div>
+
+        <div class="reports_kpis">
+          <div class="report_kpi report_kpi_primary"><span>صافي المبيعات</span><strong id="total_revenue_value">0 ج.م</strong></div>
+          <div class="report_kpi report_kpi_profit"><span>صافي المبيعات بعد المصروفات</span><strong id="net_profit_value">0 ج.م</strong></div>
+          <div class="report_kpi report_kpi_expense"><span>المصروفات</span><strong id="total_expenses_value">0 ج.م</strong></div>
+          <div class="report_kpi"><span>إجمالي الطلبات</span><strong id="total_orders_value">0</strong></div>
+          <div class="report_kpi"><span>متوسط الطلب</span><strong id="average_order_value">0 ج.م</strong></div>
+          <div class="report_kpi"><span>نسبة الإتمام</span><strong id="completion_rate_value" class="percentage_value"><b class="percentage_symbol">%</b><b class="percentage_number">0</b></strong></div>
         </div>
-        <div class="card_reports">
-          <h1>أكتر صنف مبيعا</h1>
-          <h2>كبده مقلية</h2>
-          <span>50 طلب</span>
+
+        <div class="reports_charts_grid">
+          <article class="report_chart report_chart_wide">
+            <div class="report_chart_heading"><div><span>اتجاه المبيعات</span><small>صافي قيمة الطلبات عبر الفترة</small></div><strong id="chart_revenue_total">0 ج.م</strong></div>
+            <div id="revenueTrendChart" class="report_chart_canvas" aria-label="رسم اتجاه المبيعات"></div>
+          </article>
+          <article class="report_chart">
+            <div class="report_chart_heading"><div><span>حالة الطلبات</span><small>مكتمل مقابل ملغي</small></div></div>
+            <div class="report_donut_layout">
+              <div id="ordersStatusChart" class="report_donut"><span id="donut_rate">0%</span><small>مكتمل</small></div>
+              <div class="report_legend">
+                <p><i class="legend_success"></i> مكتملة <strong id="successful_orders_value">0</strong></p>
+                <p><i class="legend_cancelled"></i> ملغية <strong id="cancelled_orders_value">0</strong></p>
+              </div>
+            </div>
+          </article>
+          <article class="report_chart">
+            <div class="report_chart_heading"><div><span>أنواع الطلبات</span><small>توزيع قنوات البيع</small></div></div>
+            <div id="orderTypesChart" class="report_bars" aria-label="رسم أنواع الطلبات"></div>
+          </article>
+          <article class="report_chart">
+            <div class="report_chart_heading"><div><span>تفاصيل الإيراد</span><small>المبيعات والمصروفات والصافي التشغيلي قبل تكلفة الخامات</small></div></div>
+            <div id="financialBreakdownChart" class="report_bars report_bars_financial" aria-label="رسم تفاصيل الإيراد"></div>
+          </article>
+          <article class="report_chart">
+            <div class="report_chart_heading"><div><span>ساعات الذروة</span><small>أكثر أوقات اليوم استقبالًا للطلبات</small></div><strong id="peakHourLabel">—</strong></div>
+            <div id="peakHoursChart" class="report_bars" aria-label="رسم ساعات الذروة"></div>
+          </article>
+          <article class="report_chart report_chart_wide report_top_items">
+            <div class="report_chart_heading"><div><span>الأصناف الأكثر طلبًا</span><small>أعلى 5 أصناف بالكمية خلال الفترة</small></div></div>
+            <div id="topItemsChart" class="report_bars" aria-label="رسم الأصناف الأكثر طلبًا"></div>
+          </article>
         </div>
-      </div>
-      <div class="container2_reports">
-        <div class="card_reports">
-          <h1>عدد الطلبات الملغية</h1>
-          <h2>طلب اليوم 10</h2>
-        </div>
-        <div class="card_reports">
-          <h1>عدد الطلبات المكتملة</h1>
-          <h2>150 طلبات</h2>
-          <span>5% من امس</span>
-        </div>
-        <div class="card_reports">
-          <h1>أكتر تصنف مبيعا</h1>
-          <h2>السندوتشات</h2>
-          <span>50 طلب</span>
-        </div>
-      </div>
-      <div class="container3_reports">
-        <div class="card_reports">
-          <h1>عدد طلبات الدليفري</h1>
-          <h2>50 طلب</h2>
-          <span>15% من امس</span>
-        </div>
-        <div class="card_reports">
-          <h1>عدد اقل الاصناف مبيعا</h1>
-          <h2>5 صنف</h2>
-        </div>
-        <div class="card_reports">
-          <h1>اقل التصنيفات مبيعا</h1>
-          <h2>1 تصنيف</h2>
-        </div>
-      </div>
-      <div class="reports_modal">
-        <div class="exit_reports_modal">
-          <img src="/assets/Export.png" alt="" />
-        </div>
-        <div class="title_report"></div>
-        <div class="logo_report">
-          <img src="/assets/توب شيف 1@2x.png" alt="" />
-        </div>
-        <!-- <div class="reports_modal_container">
-            <canvas id="itemsChart"></canvas>
-            <canvas id="categoriesChart"></canvas>
-          </div> -->
-        <div class="table_structure_reports">
-          <table class="orders_table_reports">
+
+        <section class="reports_expenses_section">
+          <div class="reports_orders_header reports_expenses_header">
+            <div><h2>سجل المصروفات</h2><p id="reports_expenses_count">0 مصروف في الفترة المحددة</p></div>
+            <strong id="reports_expenses_sum">0 ج.م</strong>
+          </div>
+          <div class="table_structure_reports reports_expenses_card">
+            <div class="reports_table_scroll reports_expenses_scroll">
+              <table class="orders_table_reports reports_expenses_table">
+                <thead><tr><th>البند</th><th>المبلغ</th><th>الكاشير</th><th>الملاحظة</th><th>التاريخ</th><th>الوقت</th></tr></thead>
+                <tbody><tr><td colspan="6" class="reports_empty">اختر فترة لعرض المصروفات</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="reports_orders_section">
+          <div class="reports_orders_header">
+            <div><h2>تفاصيل الطلبات</h2><p id="reports_orders_count">0 طلب في الفترة المحددة</p></div>
+          </div>
+          <div class="table_structure_reports">
+            <div class="reports_table_scroll">
+              <table class="orders_table_reports">
             <thead>
               <tr>
                 <th>رقم الطلب</th>
                 <th>نوع الطلب</th>
-                <th>الاصناف</th>
-                <th>المجموع</th>
+                <th>الحالة</th>
+                <th>الإجمالي</th>
+                <th>التاريخ</th>
                 <th>الوقت</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td>#5</td>
-                <td>صالة</td>
-                <td>2 كبدة , 3 كفته</td>
-                <td>200ج</td>
-                <td>10:30م</td>
-              </tr>
-              <tr>
-                <td>#5</td>
-                <td>دليفري</td>
-                <td>2 كبدة , 3 كفته</td>
-                <td>200ج</td>
-                <td>10:30م</td>
-              </tr>
-              <tr>
-                <td>#5</td>
-                <td>اون لاين</td>
-                <td>2 كبدة , 3 كفته</td>
-                <td>200ج</td>
-                <td>10:30م</td>
-              </tr>
-              <tr class="final_row">
-                <td>#4</td>
-                <td>دليفري</td>
-                <td>1 كبدة , 2 كفته</td>
-                <td>150ج</td>
-                <td>9:45م</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="printBtn">
-          <button id="printBtn">طباعة التقرير</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== صفحة الأحداث والمزامنة ===== -->
-    <div class="page-content" id="page-events" style="display: none">
-      <div class="title_btn">
-        <div class="title">
-          <h1>حالة المزامنة والربط</h1>
-          <h2>مراقبة تدفق البيانات بين الجهاز والسحابة</h2>
-        </div>
-        <button class="add_btn" style="background: var(--color-primary); color: #000;"
-          onclick="refreshSyncStatus()">تحديث الحالة</button>
-      </div>
-
-      <div class="container1" id="sync_stats_container" style="margin-bottom: 20px;">
-        <!-- سيتم تحميل الكروت هنا -->
-      </div>
-
-      <div id="failed_events_section" style="display:none">
-        <div class="table_structure_unified">
-          <div
-            style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <h3 style="color: #e74c3c; margin: 0; font-size: 16px;">أحداث فشلت مزامنتها (DLQ)</h3>
-              <p style="font-size: 11px; opacity: 0.6; margin: 5px 0 0 0;">هذه الأحداث توقفت بعد محاولات فاشلة متكررة.
-                تتطلب مراجعة إدارية.</p>
+            <tbody><tr><td colspan="6" class="reports_empty">اختر فترة لعرض الطلبات</td></tr></tbody>
+              </table>
             </div>
           </div>
-          <div class="table_scroll_unified">
-            <table class="orders_table" id="failed_events_table">
-              <thead>
-                <tr>
-                  <th>المعرف</th>
-                  <th>النوع</th>
-                  <th>الموضوع</th>
-                  <th>الخطأ</th>
-                  <th>المحاولات</th>
-                  <th>التوقيت</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+          <div class="reports_pagination" aria-label="صفحات الطلبات">
+            <button id="reportsPrevPage" type="button" disabled>السابق</button>
+            <span id="reportsPageInfo">صفحة 1 من 1</span>
+            <button id="reportsNextPage" type="button" disabled>التالي</button>
           </div>
-        </div>
-      </div>
+        </section>
+      </section>
+    </div>
 
-      <div id="cloud_device_stats" style="display:none">
-        <div class="table_structure_unified">
-          <div style="padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-            <h3 style="margin: 0; font-size: 16px;">إحصائيات الأجهزة المتصلة (السحابة)</h3>
+    <!-- ===== صفحة الإعدادات ===== -->
+    <div class="page-content" id="page-settings" style="display: none">
+      <section class="settings_workspace" aria-labelledby="settings_page_title">
+        <header class="settings_header">
+          <div><p>إعدادات النظام</p><h1 id="settings_page_title">تكامل واتساب</h1><span>احفظ بيانات الربط والرسالة الافتراضية للحملات الجماعية</span></div>
+        </header>
+        <form id="whatsappSettingsForm" class="settings_card">
+          <div class="settings_card_title">
+            <span class="whatsapp_mark">W</span>
+            <div><h2>إعدادات WhatsApp API</h2><p>المفتاح لا يظهر مرة أخرى بعد حفظه حفاظًا على سريته.</p></div>
           </div>
-          <div class="table_scroll_unified">
-            <table class="orders_table" id="device_stats_table">
-              <thead>
-                <tr>
-                  <th>معرف الجهاز</th>
-                  <th>إجمالي الأحداث المستلمة</th>
-                  <th>الحالة</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+          <label class="settings_field">
+            <span>API Key</span>
+            <div class="settings_secret_row">
+              <input id="whatsappApiKey" type="password" autocomplete="new-password" placeholder="أدخل مفتاح الربط" maxlength="2000">
+              <button id="toggleWhatsAppApiKey" type="button">إظهار</button>
+            </div>
+            <small id="whatsappApiKeyStatus">لم يتم تحميل حالة المفتاح بعد</small>
+          </label>
+          <div class="settings_grid">
+            <label class="settings_field"><span>Phone Number ID</span><input id="whatsappPhoneNumberId" type="text" inputmode="numeric" placeholder="مثال: 123456789012345"></label>
+            <label class="settings_field"><span>رقم واتساب النظام الآلي</span><input id="whatsappBusinessPhone" type="text" inputmode="tel" dir="ltr" placeholder="201129820007"></label>
+            <label class="settings_field"><span>رقم واتساب خدمة العملاء</span><input id="whatsappCustomerServicePhone" type="text" inputmode="tel" dir="ltr" placeholder="201012345678"></label>
+            <label class="settings_field"><span>رابط المنيو</span><input id="whatsappMenuUrl" type="url" dir="ltr" placeholder="https://topchefeg.com/"></label>
+            <label class="settings_field"><span>Graph API Version</span><input id="whatsappGraphVersion" type="text" dir="ltr" placeholder="v23.0"></label>
+            <label class="settings_field"><span>كود لغة القالب</span><input id="whatsappLanguageCode" type="text" dir="ltr" placeholder="ar"></label>
+            <label class="settings_field"><span>قالب الرسالة الجماعية</span><input id="whatsappBulkTemplateName" type="text" dir="ltr" placeholder="topchef_bulk_message"></label>
+            <label class="settings_field"><span>Webhook Verify Token</span><input id="whatsappWebhookToken" type="password" autocomplete="new-password" placeholder="يُحفظ مشفرًا"></label>
+            <label class="settings_field"><span>Meta App Secret</span><input id="whatsappAppSecret" type="password" autocomplete="new-password" placeholder="يُحفظ مشفرًا"></label>
+            <label class="settings_field"><span>الحد الأقصى للإرسال الجماعي</span><input id="whatsappBulkLimit" type="number" min="1" max="5000" value="500"></label>
           </div>
-        </div>
-      </div>
+          <label class="settings_toggle"><input id="whatsappEnabled" type="checkbox"><span>تفعيل واتساب والردود داخل نافذة خدمة العميل</span></label>
+          <div class="settings_template_help">إشعارات الطلب لا تبدأ من المطعم ولا تستخدم قوالب: العميل يرسل أولًا، والنظام يرد ويحدّث الطلب خلال 24 ساعة فقط. اضبط Webhook على <code>/whatsapp/webhook</code>. الإرسال الجماعي بالقالب منفصل وقد يخضع لرسوم Meta.</div>
+          <label class="settings_field">
+            <span>نص الرسالة الجماعية</span>
+            <textarea id="whatsappBulkMessage" rows="7" maxlength="5000" placeholder="اكتب الرسالة الافتراضية هنا..."></textarea>
+            <small><b id="whatsappMessageCount">0</b> / 5000 حرف</small>
+          </label>
+          <div id="whatsappSettingsNotice" class="settings_notice" role="status" hidden></div>
+          <div class="settings_actions">
+            <button id="saveWhatsAppSettings" type="submit">حفظ الإعدادات</button>
+            <button id="sendWhatsAppBulk" class="settings_secondary_btn" type="button">إرسال الرسالة الجماعية</button>
+          </div>
+        </form>
+        <form id="paymentSettingsForm" class="settings_card payment_settings_card">
+          <div class="settings_card_title">
+            <span class="payment_mark">ج.م</span>
+            <div><h2>الدفع من المنيو</h2><p>الوسيلة غير المفعلة تظهر للعميل باهتة ولا يمكن اختيارها.</p></div>
+          </div>
+          <label class="settings_field"><span>اسم صاحب الحساب</span><input id="paymentAccountName" type="text" dir="rtl" placeholder="الاسم الذي سيظهر للعميل"></label>
+          <div class="settings_grid">
+            <div><label class="settings_toggle"><input id="instapayEnabled" type="checkbox"><span>تفعيل InstaPay</span></label><label class="settings_field"><span>رقم أو عنوان InstaPay</span><input id="instapayAccount" type="text" dir="ltr" placeholder="01xxxxxxxxx أو username@instapay"></label></div>
+            <div><label class="settings_toggle"><input id="walletEnabled" type="checkbox"><span>تفعيل المحفظة</span></label><label class="settings_field"><span>رقم المحفظة</span><input id="walletNumber" type="tel" dir="ltr" placeholder="01xxxxxxxxx"></label></div>
+          </div>
+          <div id="paymentSettingsNotice" class="settings_notice" role="status" hidden></div>
+          <div class="settings_actions"><button id="savePaymentSettings" type="submit">حفظ بيانات الدفع</button></div>
+        </form>
+      </section>
     </div>
 
     <!-- ===== صفحة العروض ===== -->
@@ -536,6 +631,13 @@
         </div>
         <button class="add_btn_offers">+ إضافه عرض</button>
       </div>
+      <section class="offers_kpis" aria-label="ملخص أداء العروض">
+        <article><span>نشطة الآن</span><strong id="offersKpiActive">0</strong><small>متاحة للعملاء</small></article>
+        <article><span>مجدولة</span><strong id="offersKpiScheduled">0</strong><small>تبدأ لاحقًا</small></article>
+        <article><span>متوقفة أو منتهية</span><strong id="offersKpiStopped">0</strong><small>تحتاج مراجعة</small></article>
+        <article><span>استخدامات اليوم</span><strong id="offersKpiUses">0</strong><small>قسيمة مطبقة</small></article>
+        <article><span>خصومات اليوم</span><strong id="offersKpiDiscount">0 ج.م</strong><small>إجمالي قيمة الخصم</small></article>
+      </section>
       <div class="table_structure_offers">
         <div class="search_offers_wrapper">
           <input class="search-bar-offers" type="text" placeholder="🔍 بحث عن عرض" />
@@ -547,8 +649,8 @@
                 <th>كود العرض</th>
                 <th>النوع</th>
                 <th>قيمة الخصم</th>
+                <th>نطاق العرض</th>
                 <th>أقل طلب</th>
-                <th>أقصى خصم</th>
                 <th>مرات الاستخدام</th>
                 <th>لكل عميل</th>
                 <th>صالح من</th>
@@ -561,6 +663,10 @@
           </table>
         </div>
       </div>
+      <section class="offers_activity_section">
+        <div class="offers_activity_heading"><div><h2>حركة العروض</h2><p>آخر استخدامات القسائم المسجلة</p></div><span>تحديث لحظي</span></div>
+        <div class="offers_activity_scroll"><table><thead><tr><th>العرض</th><th>الطلب</th><th>العميل</th><th>الكاشير</th><th>قيمة الخصم</th><th>الوقت</th></tr></thead><tbody id="offersActivityBody"><tr><td colspan="6">لا توجد حركة مسجلة</td></tr></tbody></table></div>
+      </section>
       <div class="offers_modal">
         <div class="offers_modal_container">
           <div class="offers_exit">
@@ -571,87 +677,53 @@
             <h1>أضف عرض جديد</h1>
           </div>
           <div class="form_modal_offers">
-            <form class="offer-form">
-              <div class="form-grid">
-                <div class="form-group-3inputs">
-                  <!-- كود العرض -->
-                  <div class="form-group">
-                    <label>كود العرض</label>
-                    <input type="text" placeholder="مثال: SAVE20" />
-                  </div>
-
-                  <!-- نوع العرض -->
-                  <div class="form-group">
-                    <label>نوع العرض</label>
-                    <select class="form-group-select">
-                      <option disabled selected>نوع العرض</option>
-                      <option>نسبة مئوية</option>
-                      <option>خصم ثابت</option>
-                      <option>اشترِ واحد وخذ واحد</option>
-                      <option>خصم موسمي</option>
-                      <option>كود ترويجي</option>
-                      <option>خصم كميات</option>
-                    </select>
-                  </div>
-
-                  <!-- قيمة الخصم -->
-                  <div class="form-group-price">
-                    <label>قيمة الخصم</label>
-                    <input type="text" />
-                  </div>
+            <form class="offer-form" autocomplete="off">
+              <section class="offer_form_section">
+                <div class="offer_section_title"><strong>بيانات العرض</strong><span>الاسم والكود ونوع الخصم</span></div>
+                <div class="offer_fields_grid offer_fields_grid_3">
+                  <label>اسم العرض<input name="display_name" type="text" maxlength="255" placeholder="مثال: عرض الوجبات"></label>
+                  <label>كود العرض<input name="code" type="text" maxlength="255" required placeholder="مثال: SAVE20"></label>
+                  <label>نوع العرض<select name="discount_type" required><option value="">اختر النوع</option><option value="percentage">خصم نسبة مئوية</option><option value="fixed">خصم مبلغ ثابت</option><option value="buy_one_get_one">اشترِ واحد وخذ واحد</option><option value="combo">كومبو بسعر ثابت</option><option value="buy_x_get_y">اشترِ X وخذ Y</option><option value="quantity_discount">خصم حسب الكمية</option><option value="free_delivery">توصيل مجاني</option><option value="category_discount">خصم على تصنيف</option><option value="happy_hour">عرض ساعات محددة</option></select></label>
                 </div>
-                <div class="form-group-amount">
-                  <!-- أقل كمية -->
-                  <div class="form-group-amoun">
-                    <label>أقل كمية</label>
-                    <input type="text" />
-                  </div>
-
-                  <!-- أقصى كمية -->
-                  <div class="form-group-amoun">
-                    <label>أقصى كمية</label>
-                    <input type="text" />
-                  </div>
+              </section>
+              <section id="offerDynamicRules" class="offer_form_section" hidden>
+                <div class="offer_section_title"><strong>شروط النوع المختار</strong><span>تظهر الحقول المطلوبة فقط</span></div>
+                <div class="offer_fields_grid offer_fields_grid_3">
+                  <label id="offerDiscountValueField">قيمة الخصم<input name="discount_value" type="number" min="0.01" step="0.01" placeholder="0"></label>
+                  <label id="offerMinOrderField">الحد الأدنى لقيمة الطلب<input name="min_order_amount" type="number" min="0" step="0.01" placeholder="اختياري"></label>
+                  <label data-rule="combo_price">سعر الكومبو<input name="combo_price" type="number" min="0.01" step="0.01"></label>
+                  <label data-rule="quantity_required">الكمية المطلوبة<input name="quantity_required" type="number" min="1" step="1"></label>
+                  <label data-rule="buy_quantity">كمية الشراء X<input name="buy_quantity" type="number" min="1" step="1"></label>
+                  <label data-rule="get_quantity">كمية الهدية Y<input name="get_quantity" type="number" min="1" step="1"></label>
+                  <label data-rule="reward_percent">نسبة خصم الهدية<input name="reward_percent" type="number" min="1" max="100" step="1" value="100"></label>
+                  <label data-rule="discount_mode">طريقة خصم التصنيف<select name="discount_mode"><option value="percentage">نسبة مئوية</option><option value="fixed">مبلغ ثابت</option></select></label>
+                  <label data-rule="start_time">من الساعة<input name="start_time" type="time"></label>
+                  <label data-rule="end_time">إلى الساعة<input name="end_time" type="time"></label>
                 </div>
-                <div class="form-group-number">
-                  <!-- عدد مرات استخدام العرض -->
-                  <div class="form-group-num">
-                    <label>عدد مرات استخدام العرض</label>
-                    <input type="text" />
-                  </div>
-
-                  <!-- عدد مرات استخدام العميل -->
-                  <div class="form-group-num">
-                    <label>عدد مرات استخدام العميل</label>
-                    <input type="text" />
-                  </div>
+                <div data-rule="category_ids" class="offer_rule_picker"><strong>التصنيفات المشمولة</strong><div id="offerCategoriesList" class="offer_products_list"></div></div>
+                <div data-rule="buy_product_ids" class="offer_rule_picker"><strong>أصناف الشراء X</strong><div id="offerBuyProductsList" class="offer_products_list"></div></div>
+                <div data-rule="get_product_ids" class="offer_rule_picker"><strong>أصناف الهدية Y</strong><div id="offerGetProductsList" class="offer_products_list"></div></div>
+              </section>
+              <section class="offer_form_section offer_scope_section">
+                <div class="offer_section_title"><strong>الأصناف المشمولة</strong><span id="offerScopeSummary">العرض مطبق على كل الأصناف</span></div>
+                <div class="offer_scope_switch"><button type="button" data-scope="all" class="active">كل الأصناف</button><button type="button" data-scope="selected">أصناف محددة</button></div>
+                <div class="offer_product_picker" hidden>
+                  <input id="offerProductSearch" type="search" placeholder="ابحث عن صنف...">
+                  <div class="offer_product_picker_actions"><button type="button" id="offerSelectAllProducts">تحديد الظاهر</button><button type="button" id="offerClearProducts">إلغاء التحديد</button></div>
+                  <div id="offerProductsList" class="offer_products_list"></div>
                 </div>
-
-                <div class="status_offers">
-                  <p>الحالة</p>
-                  <div class="switch">
-                    <div class="circle"></div>
-                  </div>
+              </section>
+              <section class="offer_form_section">
+                <div class="offer_section_title"><strong>المدة وحدود الاستخدام</strong><span>اترك الحدود فارغة لو العرض غير محدود</span></div>
+                <div class="offer_fields_grid offer_limits_grid">
+                  <label>متاح من<span class="stable_date_input"><input name="valid_from" type="date" required><span class="stable_date_value" aria-hidden="true"></span></span></label>
+                  <label>متاح إلى<span class="stable_date_input"><input name="valid_to" type="date" required><span class="stable_date_value" aria-hidden="true"></span></span></label>
+                  <label>إجمالي مرات الاستخدام<input name="usage_limit" type="number" min="1" step="1" placeholder="غير محدود"></label>
+                  <label>مرات الاستخدام لكل عميل<input name="usage_per_user" type="number" min="1" step="1" placeholder="غير محدود"></label>
                 </div>
-
-                <div class="form-group-date">
-                  <!-- من -->
-                  <div class="form-group-from">
-                    <label>متاح من</label>
-                    <input type="date" />
-                  </div>
-
-                  <!-- إلى -->
-                  <div class="form-group-from">
-                    <label>إلى</label>
-                    <input type="date" />
-                  </div>
-                </div>
-              </div>
-
-              <button class="form-group-submit-btn" type="submit">
-                حفظ العرض
-              </button>
+                <label class="offer_active_control"><input name="is_active" type="checkbox" checked><span>العرض نشط ومتاح للاستخدام</span></label>
+              </section>
+              <div class="offer_form_actions"><button class="form-group-submit-btn" type="submit">حفظ العرض</button><button class="offer_cancel_btn" type="button">إلغاء</button></div>
             </form>
           </div>
         </div>
@@ -769,16 +841,19 @@
     </script>
 
     <!-- ===== السكريبتات ===== -->
+    <script src="js/custom-select.js?v=20260820-global-select"></script>
     <script src="js/Validation.js"></script>
-    <script src="js/product.js"></script>
-    <script src="js/category.js"></script>
-    <script src="js/delivery.js"></script>
-    <script src="js/offer.js"></script>
+    <script src="js/product.js?v=20260820-items-operations"></script>
+    <script src="js/category.js?v=20260820-categories-operations"></script>
+    <script src="js/delivery.js?v=20260820-users-operations"></script>
+    <script src="js/delivery-operations.js?v=20260820-delivery-desk"></script>
+    <script src="js/offer.js?v=20260825-shared-live"></script>
+    <script src="js/shifts.js?v=20260916-business-date-format"></script>
+    <script src="js/settings.js?v=20260912-payment-settings"></script>
 
-    <script src="js/chart.js"></script>
-    <script src="js/sync_monitoring.js?v=20260506-devices"></script>
-    <script src="js/orders_dashboard.js"></script>
-    <script src="js/admin.js?v=20260615-tablet-mobile-sidebar"></script>
+    <script src="js/chart.js?v=20260916-business-date"></script>
+    <script src="js/orders_dashboard.js?v=20260901-report-ui-fixes"></script>
+    <script src="js/admin.js?v=20260916-stable-dates"></script>
     <script>
       // ===== عرض اسم المستخدم =====
       (function () {

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Numeric,
     Enum as SQLEnum,
     UniqueConstraint
+    , Text
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base, DbEnum
@@ -24,7 +25,7 @@ class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True)
-    cat_name = Column(String(100), unique=True, nullable=False)
+    cat_name = Column(String(255), unique=True, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True,)
     is_deleted = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -42,7 +43,7 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True)
     cat_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
-    product_name = Column(String(100), nullable=False)
+    product_name = Column(String(255), nullable=False)
     product_type = Column(
         DbEnum(ProductType, name="product_type_enum"),
         nullable=False,
@@ -71,7 +72,7 @@ class Variant(Base):
 
     id = Column(Integer, primary_key=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
-    name = Column(String(50), nullable=False)
+    name = Column(String(255), nullable=False)
     price = Column(Numeric(10,2), nullable=False, default=0)
     is_deleted = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -80,3 +81,16 @@ class Variant(Base):
     product = relationship("Product", back_populates="variants")
 
 
+class ProductChangeLog(Base):
+    __tablename__ = "product_change_logs"
+
+    id = Column(Integer, primary_key=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
+    changed_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    change_type = Column(String(30), nullable=False)
+    old_value = Column(Text, nullable=True)
+    new_value = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    product = relationship("Product")
+    changed_by = relationship("User")

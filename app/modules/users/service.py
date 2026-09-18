@@ -27,25 +27,15 @@ class UserService:
         if self.redis:
             try:
                 await self.redis.delete("delivery:users:list")
-                logger.info("✓ Invalidated delivery users cache")
+                logger.debug("Invalidated delivery users cache")
             except Exception as e:
                 logger.warning(f"Redis error invalidating delivery cache: {e}")
     
     @staticmethod
     def validate_password(password: str) -> None:
-        if not re.search(r"[A-Z]", password):
+        if len(password) < 6 or not re.fullmatch(r"[A-Za-z0-9]+", password):
             raise ValidationError(
-                "Password must contain at least one uppercase letter"
-            )
-
-        if not re.search(r"[a-z]", password):
-            raise ValidationError(
-                "Password must contain at least one lowercase letter"
-            )
-
-        if not re.search(r"[0-9]", password):
-            raise ValidationError(
-                "Password must contain at least one digit"
+                "كلمة المرور يجب أن تكون 6 خانات على الأقل وتحتوي على حروف إنجليزية أو أرقام فقط"
             )
         
     async def get_by_id(self, userid: int, check_cache: bool = True):
@@ -91,7 +81,7 @@ class UserService:
             try:
                 cached = await self.redis.get(cache_key)
                 if cached:
-                    logger.info("⚡ Redis Cache Hit: Delivery Users")
+                    logger.debug("Redis cache hit: delivery users")
                     data = json.loads(cached)
                     return [schemas.UserResponse(**item) for item in data]
             except Exception as e:
@@ -130,7 +120,7 @@ class UserService:
             # Invalidate delivery cache if created user is delivery
             if data.role == UserRole.DELIVERY:
                 await self._invalidate_delivery_cache()
-            logger.info(f"User created: username='{data.username}', role={data.role}")
+            logger.info("User created id=%s role=%s", createuser.id, data.role)
         from app.core.events import order_events_manager
         await order_events_manager.emit({"type": "USER_UPDATED", "data": schemas.UserResponse.model_validate(createuser).model_dump(mode='json')})
         return schemas.UserResponse.model_validate(createuser)
@@ -186,7 +176,7 @@ class UserService:
                     if user.role == UserRole.DELIVERY:
                         await self._invalidate_delivery_cache()
                     
-                logger.info(f"User deleted: id={userid}, username='{user.username}'")
+                logger.info("User deleted id=%s", userid)
             return True
         except IntegrityError as e:
             if "foreign key" in str(e).lower() or "orders" in str(e).lower():

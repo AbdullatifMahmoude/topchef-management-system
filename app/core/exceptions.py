@@ -7,7 +7,7 @@ class AppExceptions(HTTPException):
             self,
             status_code: int,
             detail: str,
-            error_code: str = None):
+            error_code: str | None = None):
 
         super().__init__(status_code=status_code, detail=detail)
         self.error_code = error_code
@@ -55,4 +55,13 @@ class NotFoundError(AppExceptions):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"{resource} not found",
             error_code="NOT_FOUND"
+        )
+
+
+class AuthenticationServiceUnavailable(AppExceptions):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is temporarily unavailable",
+            error_code="AUTH_SERVICE_UNAVAILABLE",
         )

@@ -11,17 +11,17 @@
       href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/cashier.css" />
+    <link rel="stylesheet" href="css/cashier.css?v=20260901-checkout-layout" />
   </head>
   <body>
     <!-- ===== Navbar ===== -->
-    <nav>
+    <nav class="cashier_nav">
       <div class="nav_logo">
         <img src="/assets/توب شيف 1@2x.png" alt="logo" />
-        <div style="display: flex; flex-direction: column;">
-          <h1 style="margin-bottom: 2px;">مطعم توب شيف</h1>
-          <div id="ws_status_badge" style="display:flex; align-items:center; gap:6px; font-size: 10px; opacity: 0.8;">
-             <div id="ws_status_dot" style="width:7px; height:7px; border-radius:50%; background: #f1c40f;"></div>
+        <div class="nav_brand_copy">
+          <h1>مطعم توب شيف</h1>
+          <div id="ws_status_badge">
+             <div id="ws_status_dot"></div>
              <span id="ws_status_text">جاري الاتصال...</span>
           </div>
         </div>
@@ -34,55 +34,28 @@
         </button>
         <button id="tab_all_orders" class="nav_tab" onclick="switchMainTab('all_orders')">كل الطلبات</button>
         <button id="tab_riders" class="nav_tab" onclick="switchMainTab('riders')">الدليفرية</button>
+        <button id="tab_expenses" class="nav_tab" onclick="switchMainTab('expenses')">المصروفات</button>
       </div>
-      <div style="display: flex; align-items: center; gap: 12px">
-        <span
-          style="color: var(--color-text); font-size: 14px; font-weight: 600"
-        >
-          مرحباً:
-          <span id="cashier_username" style="color: var(--color-primary)"
-            >...</span
-          >
-        </span>
+      <div class="nav_account">
+        <button type="button" class="shift_cash_btn" onclick="openShiftCashModal()">تسوية الشيفت</button>
+        <div class="cashier_identity">
+          <span class="cashier_identity_label">الكاشير</span>
+          <span id="cashier_username">...</span>
+        </div>
         <button
           id="sound_toggle_btn"
+          class="nav_icon_btn"
           onclick="toggleSound()"
-          style="
-            background: rgba(61, 158, 107, 0.2);
-            border: 1px solid var(--color-accent, #3d9e6b);
-            border-radius: 8px;
-            padding: 7px 11px;
-            color: var(--color-accent, #3d9e6b);
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          "
           title="تفعيل/تعطيل صوت التنبيهات"
         >
           <svg id="sound_icon_on" style="display:block" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
           <svg id="sound_icon_off" style="display:none" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
         </button>
         <button
+          class="nav_logout_btn"
           onclick="logout()"
-          style="
-            background: rgba(228, 4, 17, 0.12);
-            border: 1px solid rgba(228, 4, 17, 0.4);
-            border-radius: 8px;
-            padding: 7px 14px;
-            color: #fff;
-            font-size: 13px;
-            font-family: Cairo, sans-serif;
-            font-weight: 700;
-            cursor: pointer;
-            transition: background 0.2s;
-          "
-          onmouseover="this.style.background = 'rgba(228,4,17,0.25)'"
-          onmouseout="this.style.background = 'rgba(228,4,17,0.12)'"
         >
-          ⏻ خروج
+          <span aria-hidden="true">⏻</span><span class="logout_text">خروج</span>
         </button>
       </div>
     </nav>
@@ -91,22 +64,79 @@
     <div class="main_layout" id="local_orders_layout">
       <!-- === Right Section === -->
       <div class="right_section">
+        <header class="local_menu_header">
+          <div><p>نقطة البيع</p><h1>منيو الطلب</h1><span>اختر التصنيف ثم أضف الأصناف إلى الطلب الحالي</span></div>
+          <label class="local_product_search">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input id="localProductSearch" type="search" placeholder="ابحث عن صنف..." oninput="filterLocalProducts(this.value)" />
+          </label>
+        </header>
+        <section id="cashier_offers_board" class="cashier_offers_board" hidden>
+          <div class="cashier_offers_heading"><div><span>عروض متاحة الآن</span><small id="cashier_offers_count">0 عرض</small></div><button id="cashier_offers_toggle" type="button">إخفاء</button></div>
+          <div id="cashier_offers_list" class="cashier_offers_list"></div>
+        </section>
         <!-- تابز الكاتيجوري -->
         <div class="category_tabs" id="category_tabs"></div>
 
         <!-- شبكة الأصناف -->
         <div class="items_grid" id="items_grid"></div>
+
+        <!-- اختصارات الطلب السريع في أسفل المنيو -->
+        <section id="popular_products_section" class="popular_products_section" hidden>
+          <div class="popular_products_heading">
+            <div><strong>الأكثر طلبًا</strong><span>إضافة سريعة للطلب</span></div>
+            <small>آخر 30 يوم</small>
+          </div>
+          <div id="popular_products_list" class="popular_products_list"></div>
+        </section>
       </div>
 
-      <!-- === Cart === -->
-      <div class="total_container">
-        <!-- مودال الدليفري - داخل الكارت -->
+      <!-- === Order setup screen === -->
+      <aside class="order_setup_panel" id="order_setup_panel" aria-label="إعداد الطلب">
+        <!-- اختيارات رسوم الصالة والدليفري تظهر داخل شاشة الإعداد -->
         <div
           id="delivery_modal_container"
           class="delivery_modal_container"
           style="display: none"
         ></div>
 
+        <header class="order_setup_header">
+          <div><span>الخطوة الثانية</span><h2>استكمال إعداد الطلب</h2><p>حدد طريقة الدفع وبيانات العميل وأي خصم إضافي</p></div>
+        </header>
+
+        <div class="order_setup_body">
+          <section class="order_setup_section payment_method_picker" aria-label="طريقة الدفع">
+            <div class="order_setup_section_title"><span>طريقة الدفع</span><small>اختر وسيلة التحصيل</small></div>
+            <div>
+              <button type="button" class="payment_method_btn active" data-payment-method="cash">نقدي</button>
+              <button type="button" class="payment_method_btn" data-payment-method="instapay">InstaPay</button>
+              <button type="button" class="payment_method_btn" data-payment-method="wallet">محفظة</button>
+            </div>
+          </section>
+
+          <!-- بيانات العميل تظهر هنا عند اختيار الدليفري -->
+          <div id="delivery_customer_form" style="display:none"></div>
+
+          <section id="discount_form" class="order_setup_section">
+            <div class="order_setup_section_title"><span>خصم إضافي</span><small>اختياري</small></div>
+            <div class="delivery_customer_card discount_card">
+              <div class="discount_fields">
+                <label><span>نوع الخصم</span><select id="discount_type" class="dcf_select" onchange="updatePricingPreview()">
+                  <option value="">بدون خصم</option>
+                  <option value="fixed">مبلغ ثابت</option>
+                  <option value="percentage">نسبة مئوية (%)</option>
+                </select></label>
+                <label><span>قيمة الخصم</span><input type="text" inputmode="decimal" id="discount_value" class="dcf_input" placeholder="0.00" oninput="updatePricingPreview()"></label>
+              </div>
+              <label class="discount_reason_field"><span>السبب (اختياري)</span><input type="text" id="discount_reason" class="dcf_input" placeholder="مثال: عميل دائم"></label>
+            </div>
+          </section>
+
+        </div>
+      </aside>
+
+      <!-- === Cart === -->
+      <div class="total_container">
         <div class="total_header">
           <h1>الطلب الحالي</h1>
         </div>
@@ -131,24 +161,16 @@
           </div>
         </div>
 
-        <!-- فورم بيانات عميل الديليفري -->
-        <div id="delivery_customer_form" style="display:none"></div>
-
         <div class="total_footer">
-          <!-- Badge نوع الطلب -->
-          <div
-            id="order_type_badge"
-            class="order_type_badge"
-            style="display: none"
-          ></div>
-
-          <!-- زراير نوع الطلب -->
-          <div id="order_type_btns" class="order_type_btns"></div>
-
           <div class="total_sum">
             <h1>الإجمالي</h1>
             <h2 id="total_price">0 ج.م</h2>
           </div>
+          <section class="checkout_order_type" aria-label="نوع الطلب">
+            <div class="checkout_order_type_title"><span>نوع الطلب</span><small>اختر طريقة الاستلام</small></div>
+            <div id="order_type_btns" class="order_type_btns"></div>
+            <div id="order_type_badge" class="order_type_badge" style="display:none"></div>
+          </section>
           <div class="footer_btns">
             <button class="btn_confirm" onclick="confirmOrder()">
               تأكيد الطلب
@@ -164,20 +186,28 @@
     <!-- ===== Online Orders Layout ===== -->
     <div id="online_orders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
       <div class="online_orders_container">
+        <header class="online_page_header">
+          <div><p>التشغيل المباشر</p><h1>طلبات الأونلاين</h1><span>استلام الطلبات ومتابعة التجهيز والتوصيل خلال يوم العمل</span></div>
+          <div class="online_live_badge"><i></i><span>تحديث لحظي</span></div>
+        </header>
         
         <!-- Stats Section -->
         <div class="online_stats">
           <div class="stat_box">
-            <h2>0</h2>
+            <h2 id="onlineNewCount">0</h2>
             <p>طلبات جديدة</p>
           </div>
           <div class="stat_box">
-            <h2>0</h2>
-            <p>ملغي</p>
+            <h2 id="onlineActiveCount">0</h2>
+            <p>طلبات نشطة</p>
           </div>
           <div class="stat_box">
-            <h2>0</h2>
-            <p>جاهزة</p>
+            <h2 id="onlineOnRoadCount">0</h2>
+            <p>خرجت للتوصيل</p>
+          </div>
+          <div class="stat_box">
+            <h2 id="onlineCancelledCount">0</h2>
+            <p>ملغية</p>
           </div>
         </div>
 
@@ -193,9 +223,9 @@
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               جديد
             </button>
-            <button class="filter_btn" onclick="setOnlineOrdersFilter('ready', this)">
+            <button class="filter_btn" onclick="setOnlineOrdersFilter('active', this)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              جاهز
+              نشطة
             </button>
             <button class="filter_btn" onclick="setOnlineOrdersFilter('cancelled', this)">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
@@ -234,8 +264,18 @@
     <!-- ===== All Orders Layout ===== -->
     <div id="all_orders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
       <div class="online_orders_container">
+        <header class="all_orders_page_header">
+          <div><p>سجل يوم العمل</p><h1>كل الطلبات</h1><span>متابعة طلبات الكاشير والبحث والتصفية من مكان واحد</span></div>
+          <button class="all_orders_refresh" type="button" onclick="fetchAllOrders()">تحديث البيانات</button>
+        </header>
+
+        <div class="all_orders_kpis">
+          <article><span>إجمالي الطلبات</span><strong id="allOrdersTotalKpi">0</strong><small>طلبات يوم العمل</small></article>
+          <article><span>طلبات الدليفري</span><strong id="allOrdersDeliveryKpi">0</strong><small>المسجلة من الكاشير</small></article>
+          <article><span>مكتملة</span><strong id="allOrdersCompletedKpi">0</strong><small>تم إنهاؤها بنجاح</small></article>
+        </div>
         
-        <div class="online_actions_row" style="justify-content: space-between;">
+        <div class="online_actions_row all_orders_actions" style="justify-content: space-between;">
           <div class="filters_group" id="all_orders_filters">
             <button class="filter_btn active" onclick="setAllOrdersFilter('all', this)">الكل</button>
             <button class="filter_btn" onclick="setAllOrdersFilter('delivery', this)">دليفري</button>
@@ -251,10 +291,7 @@
             <input type="text" id="all_orders_search" class="online_search_input" placeholder="بحث برقم الطلب او النوع..." oninput="handleAllOrdersSearch(this.value)" />
           </div>
 
-          <button class="filter_btn active" onclick="fetchAllOrders()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><path d="M9 21H3v-6"></path><polyline points="21 3 14 10"></polyline><polyline points="3 21 10 14"></polyline></svg>
-            تحديث
-          </button>
+          <span class="all_orders_result_count" id="allOrdersResultCount">0 طلب</span>
         </div>
 
         <!-- Orders Grid -->
@@ -268,11 +305,20 @@
     <div id="riders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
       <div class="online_orders_container">
         <div class="online_actions_row" style="justify-content: space-between; margin-bottom: 24px;">
-          <h2 style="color: var(--color-primary); margin: 0; font-size: 20px;">أداء المناديب</h2>
+          <div><h2 style="color: var(--color-primary); margin: 0; font-size: 20px;">تشغيل الدليفرية</h2><p style="margin:4px 0 0;color:var(--color-subtext);font-size:11px">متابعة سريعة للطلبات والمناديب خلال يوم العمل</p></div>
           <button class="filter_btn active" onclick="fetchAllOrders()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
             تحديث البيانات
           </button>
+        </div>
+
+        <div class="cashier_riders_kpis">
+          <article><span>إجمالي دليفري اليوم</span><strong id="cashierRidersTotal">0</strong></article>
+          <article><span>طلبات مسندة</span><strong id="cashierRidersAssigned">0</strong></article>
+          <article><span>بدون مندوب</span><strong id="cashierRidersUnassigned">0</strong></article>
+          <article><span>خرج للتوصيل</span><strong id="cashierRidersOnRoad">0</strong></article>
+          <article><span>تم التسليم</span><strong id="cashierRidersDelivered">0</strong></article>
+          <article><span>قيمة طلبات الدليفري</span><strong id="cashierRidersValue">0 ج.م</strong></article>
         </div>
 
         <div class="riders_table_wrapper" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden;">
@@ -280,14 +326,43 @@
             <thead>
               <tr style="background: rgba(201, 168, 76, 0.15); color: var(--color-primary);">
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">اسم المندوب</th>
-                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">عدد الطلبات</th>
-                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">إجمالي المبالغ</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">الحالة</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">طلبات نشطة</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">تم التسليم</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">نقدي</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">تحويل</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">رسوم التوصيل</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">قيمة الطلبات</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">الطلبات</th>
               </tr>
             </thead>
             <tbody id="riders_table_body">
               <!-- سيتم تعبئة البيانات هنا -->
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Shift Expenses Layout ===== -->
+    <div id="expenses_layout" class="expenses_layout" style="display:none">
+      <div class="expenses_workspace">
+        <header class="expenses_header">
+          <div><p>مصروفات التشغيل</p><h1>مصروفات الشيفت</h1><span>سجّل أي مبلغ خرج من الدرج ليظهر فورًا في التسوية والتقارير</span></div>
+          <div class="expenses_total"><span>إجمالي مصروفات الشيفت</span><strong id="expenses_total_value">0 ج.م</strong></div>
+        </header>
+        <div class="expenses_grid">
+          <form id="expense_form" class="expense_form">
+            <div class="expense_form_heading"><strong>إضافة مصروف</strong><span>اكتب سبب الصرف والمبلغ بدقة</span></div>
+            <label>بند المصروف<input name="title" maxlength="120" required placeholder="مثال: شراء أكياس أو مياه"></label>
+            <label>المبلغ<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label>
+            <label>ملاحظة <small>اختياري</small><textarea name="note" rows="3" maxlength="500" placeholder="تفاصيل إضافية"></textarea></label>
+            <button type="submit">حفظ المصروف</button>
+          </form>
+          <section class="expenses_history">
+            <div class="expense_form_heading"><strong>مصروفات الشيفت الحالي</strong><span id="expenses_count">0 عملية</span></div>
+            <div id="expenses_list" class="expenses_list"><div class="expenses_empty">لا توجد مصروفات مسجلة</div></div>
+          </section>
         </div>
       </div>
     </div>
@@ -307,7 +382,8 @@
           }
         })();
       </script>
-    <script src="js/print.js?v=6"></script>
-    <script src="js/cashier.js?v=3"></script>
+    <script src="../js/custom-select.js?v=20260820-global-select"></script>
+    <script src="js/cashier-live.js?v=20260825-live-socket"></script>
+    <script src="js/cashier.js?v=20260916-orders-pagination"></script>
   </body>
 </html>

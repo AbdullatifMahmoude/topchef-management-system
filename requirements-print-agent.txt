@@ -1,0 +1,9 @@
+fastapi[standard]
+uvicorn
+pydantic
+arabic_reshaper
+python-bidi
+qrcode
+Pillow>=10.0
+pywin32>=306
+pyinstaller>=6.0

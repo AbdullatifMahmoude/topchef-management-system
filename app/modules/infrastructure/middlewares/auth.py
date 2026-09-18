@@ -1,10 +1,9 @@
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.types import ASGIApp, Scope, Receive, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.core.security import decode_token
 from app.core.logging import logger
-
+from app.core.security import decode_token
 
 # Public paths that don't require authentication
 PUBLIC_PATHS = {
@@ -16,8 +15,13 @@ PUBLIC_PATHS = {
     "/openapi.json",
     "/favicon.ico",
     "/auth/login",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+    "/whatsapp/webhook",
     "/pricing/preview",
+    "/settings/menu-checkout",
     "/health",
+    "/metrics",
 }
 
 # Paths that allow prefix matching (like WebSockets)
@@ -26,6 +30,8 @@ PUBLIC_PREFIXES = {
     "/redoc",
     "/openapi.json",
     "/orders/ws",
+    "/auth/password-reset-status",
+    "/customer-auth",
 }
 
 
@@ -47,7 +53,7 @@ class AuthMiddleware:
         
         # ─── 0. WebSocket Bypass ───
         if scope["type"] == "websocket" or path.startswith("/orders/ws"):
-            logger.info(f"⚡ Auth Bypass: allowing connection for {path}")
+            logger.debug("WebSocket authentication delegated to channel handler path=%s", path)
             await self.app(scope, receive, send)
             return
 
@@ -128,8 +134,6 @@ class AuthMiddleware:
         request.state.username = payload.get("sub")
         request.state.user_role = payload.get("role")
 
-        logger.info(
-            f"👤 Authenticated: {payload.get('sub')} [{payload.get('role')}] -> {path}"
-        )
+        logger.debug("Authenticated request role=%s path=%s", payload.get("role"), path)
 
         await self.app(scope, receive, send)

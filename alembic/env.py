@@ -6,10 +6,12 @@ from app.core.config import settings
 from app.modules.menu.models import Category, Product, Variant
 from app.modules.users.models import User
 from app.modules.offer.models import Offer, OfferUsage
-from app.modules.orders.models import Order, OrderItem, OrderStatusHistory
+from app.modules.orders.models import DailyOrderCounter, Order, OrderItem, OrderStatusHistory
 from app.modules.customer.models import Customer, CustomerAddress
 from app.modules.comments.models import Comment
-from app.modules.settings.models import AppSetting
+from app.modules.settings.models import AppSetting, WhatsAppOutbox
+from app.modules.auth.models import PasswordResetCode
+from app.modules.shifts.models import CashierShift
 
 # Alembic Config object
 config = context.config
@@ -22,7 +24,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # --------------------------------------------------------
-# Offline migrations
+# URL-based migrations
 # --------------------------------------------------------
 def run_migrations_offline() -> None:
     url = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://").split("?")[0]

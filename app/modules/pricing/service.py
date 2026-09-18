@@ -2,11 +2,12 @@ from decimal import Decimal
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.pricing.schemas import PricingRequest, PricingResult
-from app.core.enums import OrderType
+from app.core.enums import OrderType, DiscountType
 from app.modules.offer.service import OfferService
 from app.modules.pricing.domain import FinancialSnapshot
 
 from app.core.protocols import OfferServiceInterface
+from app.core.exceptions import ValidationError
 
 class PricingService:
     def __init__(self, db: AsyncSession, offer_service: Optional[OfferServiceInterface] = None):
@@ -21,6 +22,7 @@ class PricingService:
         subtotal = Decimal(str(subtotal))
 
         discount_amount = Decimal("0.00")
+        waive_delivery_fee = False
         
         # 2. Apply Offer if present
         if request.offer_code:
@@ -30,9 +32,21 @@ class PricingService:
                 request.items,
                 request.customer_phone,
                 request.cashier_id,
-                commit_usage=False # This is a price calculation preview
+                commit_usage=False, # This is a price calculation preview
+                existing_order_id=request.redeemed_order_id,
             )
             discount_amount = offer_response.discount_amount
+            waive_delivery_fee = offer_response.waive_delivery_fee
+            if waive_delivery_fee and request.order_type != OrderType.DELIVERY:
+                raise ValidationError("عرض التوصيل المجاني متاح لطلبات الدليفري فقط")
+
+        # 2b. Apply manual discount if present (cashier-entered)
+        if request.manual_discount_type and request.manual_discount_value and request.manual_discount_value > 0:
+            if request.manual_discount_type == DiscountType.PERCENTAGE:
+                manual_disc = (subtotal * request.manual_discount_value) / Decimal("100")
+            else:  # fixed
+                manual_disc = request.manual_discount_value
+            discount_amount = discount_amount + min(manual_disc, subtotal - discount_amount)
 
         # 3. Handle Delivery Fee
         delivery_fee = Decimal("0.00")
@@ -40,6 +54,8 @@ class PricingService:
             delivery_fee = request.delivery_fee
             if delivery_fee < 0:
                 raise ValueError("Delivery fee cannot be negative")
+        if waive_delivery_fee and request.order_type == OrderType.DELIVERY:
+            delivery_fee = Decimal("0.00")
         
         # 4. Consolidate using FinancialSnapshot (Pure Logic)
         snapshot = FinancialSnapshot.calculate(

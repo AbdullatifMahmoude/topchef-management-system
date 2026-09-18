@@ -4,6 +4,7 @@ version = "1.0.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]",
+    "httpx",
     "uvicorn",
     "SQLAlchemy",
     "pydantic",
@@ -17,5 +18,23 @@ dependencies = [
     "redis"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "aiosqlite>=0.20",
+]
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app", "app.*"]
+
 [tool.fastapi]
 entrypoint = "app.main:app"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
