@@ -86,13 +86,15 @@ def test_whatsapp_features_require_complete_enabled_configuration():
     assert whatsapp_config_ready(complete, template_name="") is False
 
 
-def test_order_consent_defaults_to_unspecified_and_accepts_explicit_choice():
+def test_order_create_does_not_accept_legacy_whatsapp_permission():
     base = {
         "items": [{"product_id": 1, "quantity": 1, "unit_price": "10"}],
         "order_type": "takeaway", "source": "cashier",
     }
-    assert OrderCreate.model_validate(base).whatsapp_initial_contact_allowed is False
-    assert OrderCreate.model_validate({**base, "whatsapp_initial_contact_allowed": True}).whatsapp_initial_contact_allowed is True
+    clean = OrderCreate.model_validate(base)
+    legacy = OrderCreate.model_validate({**base, "whatsapp_initial_contact_allowed": True})
+    assert "whatsapp_initial_contact_allowed" not in clean.model_dump()
+    assert "whatsapp_initial_contact_allowed" not in legacy.model_dump()
 
 
 @pytest.mark.asyncio

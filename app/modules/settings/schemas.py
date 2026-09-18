@@ -26,7 +26,9 @@ class WhatsAppSettingsUpdate(BaseModel):
     reset_code_expiry_minutes: int = Field(default=10, ge=5, le=60)
     bulk_send_limit: int = Field(default=500, ge=1, le=5000)
     bulk_message: str = Field(default="", max_length=5000)
-    business_phone_number: str = Field(default="", max_length=20)
+    business_phone_number: str = Field(default="201129820007", max_length=20)
+    customer_service_phone: str = Field(default="", max_length=20)
+    menu_url: str = Field(default="https://topchefeg.com/", max_length=500)
     webhook_verify_token: Optional[str] = Field(default=None, max_length=512)
     app_secret: Optional[str] = Field(default=None, max_length=512)
 
@@ -45,6 +47,8 @@ class WhatsAppSettingsResponse(BaseModel):
     bulk_send_limit: int
     bulk_message: str
     business_phone_number: str
+    customer_service_phone: str = ""
+    menu_url: str = "https://topchefeg.com/"
     webhook_verify_token_configured: bool
     app_secret_configured: bool
 
@@ -69,3 +73,4 @@ class MenuCheckoutSettings(PaymentSettingsResponse):
     ordering_enabled: bool
     ordering_reason: str
     ordering_message: str
+    whatsapp_business_phone: str = ""

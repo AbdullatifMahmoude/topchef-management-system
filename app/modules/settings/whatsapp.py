@@ -142,7 +142,7 @@ def build_order_message(order: dict[str, Any], event_type: str) -> str:
     lines = [
         headings.get(event_type, "تحديث على طلبك"),
         f"رقم الطلب: {order.get('order_number', '-')}",
-        f"الحالة: {STATUS_NAMES.get(str(order.get('order_status', '')).lower(), order.get('order_status', '-'))}",
+        f"الحالة: {STATUS_NAMES.get(_value(order.get('order_status')), order.get('order_status', '-'))}",
     ]
     if event_type != "status_changed":
         items = order.get("items") or []
@@ -182,7 +182,6 @@ async def send_order_notification(order: dict[str, Any], event_type: str) -> boo
         logger.debug("WhatsApp skipped for order %s: integration is incomplete or disabled", order.get("order_number"))
         return False
 
-    url = f"https://graph.facebook.com/{settings.graph_api_version}/{settings.phone_number_id}/messages"
     result = await send_template_message(
         phone, order_template_parameters(order, event_type), template_name,
         config=settings, token=token, client=get_whatsapp_http_client(),
@@ -252,3 +251,58 @@ async def send_template_text(
     return await send_template_message(
         phone, [text], template_name, config=config, token=token, client=client,
     )
+
+
+async def send_session_message(
+    phone: str,
+    text: str,
+    *,
+    interactive: dict[str, Any] | None = None,
+    config=None,
+    token: str | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> WhatsAppSendResult:
+    """Send only a non-template message inside a customer-opened service window."""
+    normalized = normalize_whatsapp_phone(phone)
+    if not normalized:
+        return WhatsAppSendResult(False, error="Invalid Egyptian mobile number")
+    settings = config
+    if settings is None or token is None:
+        async with AsyncSessionLocal() as db:
+            service = SettingsService(db)
+            settings = await service.get_whatsapp_settings()
+            token = await service.get_whatsapp_access_token()
+    if not token or not inbound_verification_config_ready(settings):
+        return WhatsAppSendResult(False, error="WhatsApp integration is incomplete or disabled")
+    payload: dict[str, Any] = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": normalized,
+    }
+    if interactive:
+        payload.update({"type": "interactive", "interactive": interactive})
+    else:
+        payload.update({"type": "text", "text": {"preview_url": True, "body": text}})
+    try:
+        response = await (client or get_whatsapp_http_client()).post(
+            f"https://graph.facebook.com/{settings.graph_api_version}/{settings.phone_number_id}/messages",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json=payload,
+        )
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        if response.is_success:
+            messages = data.get("messages") or []
+            return WhatsAppSendResult(True, message_id=messages[0].get("id") if messages else None)
+        error = data.get("error") or {}
+        code = error.get("code")
+        return WhatsAppSendResult(
+            False,
+            error=error.get("message") or f"Meta API rejected the message ({response.status_code})",
+            error_code=int(code) if str(code).isdigit() else None,
+        )
+    except Exception as exc:
+        logger.warning("WhatsApp session message failed: %s", type(exc).__name__)
+        return WhatsAppSendResult(False, error="WhatsApp request failed")

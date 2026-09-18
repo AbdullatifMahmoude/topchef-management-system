@@ -21,6 +21,8 @@ class SettingsService:
     WHATSAPP_BULK_SEND_LIMIT = "whatsapp_bulk_send_limit"
     WHATSAPP_BULK_MESSAGE = "whatsapp_bulk_message"
     WHATSAPP_BUSINESS_PHONE = "whatsapp_business_phone"
+    WHATSAPP_CUSTOMER_SERVICE_PHONE = "whatsapp_customer_service_phone"
+    WHATSAPP_MENU_URL = "whatsapp_menu_url"
     WHATSAPP_WEBHOOK_VERIFY_TOKEN = "whatsapp_webhook_verify_token"
     WHATSAPP_APP_SECRET = "whatsapp_app_secret"
     INSTAPAY_ENABLED = "instapay_enabled"
@@ -152,8 +154,12 @@ class SettingsService:
                 enabled, reason, message = False, "busy", "عندنا ضغط طلبات دلوقتي. جرّب تطلب كمان ربع ساعة."
             else:
                 enabled, reason, message = True, "open", "الطلبات متاحة"
-        result = schemas.MenuCheckoutSettings(**payment.model_dump(), ordering_enabled=enabled,
-                                              ordering_reason=reason, ordering_message=message)
+        whatsapp = await self.get_whatsapp_settings()
+        result = schemas.MenuCheckoutSettings(
+            **payment.model_dump(), ordering_enabled=enabled,
+            ordering_reason=reason, ordering_message=message,
+            whatsapp_business_phone=whatsapp.business_phone_number,
+        )
         if self.redis:
             try:
                 await self.redis.setex("settings:menu_checkout", 30, result.model_dump_json())
@@ -172,7 +178,8 @@ class SettingsService:
             self.WHATSAPP_RESET_EXPIRY_MINUTES, self.WHATSAPP_BULK_SEND_LIMIT,
             self.WHATSAPP_BULK_MESSAGE,
             self.WHATSAPP_BUSINESS_PHONE, self.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
-            self.WHATSAPP_APP_SECRET,
+            self.WHATSAPP_APP_SECRET, self.WHATSAPP_CUSTOMER_SERVICE_PHONE,
+            self.WHATSAPP_MENU_URL,
         )
         values = await self.repo.get_settings(keys)
         text = lambda key, default="": (
@@ -199,7 +206,9 @@ class SettingsService:
             reset_code_expiry_minutes=int(text(self.WHATSAPP_RESET_EXPIRY_MINUTES, "10")),
             bulk_send_limit=int(text(self.WHATSAPP_BULK_SEND_LIMIT, "500")),
             bulk_message=text(self.WHATSAPP_BULK_MESSAGE),
-            business_phone_number=text(self.WHATSAPP_BUSINESS_PHONE),
+            business_phone_number=text(self.WHATSAPP_BUSINESS_PHONE, "201129820007"),
+            customer_service_phone=text(self.WHATSAPP_CUSTOMER_SERVICE_PHONE),
+            menu_url=text(self.WHATSAPP_MENU_URL, "https://topchefeg.com/"),
             webhook_verify_token_configured=bool(decrypt_secret(text(self.WHATSAPP_WEBHOOK_VERIFY_TOKEN))),
             app_secret_configured=bool(decrypt_secret(text(self.WHATSAPP_APP_SECRET))),
         )
@@ -243,6 +252,8 @@ class SettingsService:
                 self.WHATSAPP_RESET_EXPIRY_MINUTES: (str(data.reset_code_expiry_minutes), "Password reset code lifetime"),
                 self.WHATSAPP_BULK_SEND_LIMIT: (str(data.bulk_send_limit), "Maximum bulk recipients per send"),
                 self.WHATSAPP_BUSINESS_PHONE: (data.business_phone_number.strip(), "Public WhatsApp business number"),
+                self.WHATSAPP_CUSTOMER_SERVICE_PHONE: (data.customer_service_phone.strip(), "Human customer service WhatsApp number"),
+                self.WHATSAPP_MENU_URL: (data.menu_url.strip(), "Public ordering menu URL"),
             }
             for key, (value, description) in text_settings.items():
                 await self.repo.create_or_update_text_setting(key, value, description)

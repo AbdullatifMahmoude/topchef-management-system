@@ -7,13 +7,12 @@
   const messageInput = document.getElementById("whatsappBulkMessage");
   const phoneNumberIdInput = document.getElementById("whatsappPhoneNumberId");
   const graphVersionInput = document.getElementById("whatsappGraphVersion");
-  const firstOrderTemplateInput = document.getElementById("whatsappFirstOrderTemplateName");
-  const orderDetailsTemplateInput = document.getElementById("whatsappOrderDetailsTemplateName");
-  const orderStatusTemplateInput = document.getElementById("whatsappOrderStatusTemplateName");
   const languageCodeInput = document.getElementById("whatsappLanguageCode");
   const enabledInput = document.getElementById("whatsappEnabled");
   const bulkTemplateInput = document.getElementById("whatsappBulkTemplateName");
   const businessPhoneInput = document.getElementById("whatsappBusinessPhone");
+  const customerServicePhoneInput = document.getElementById("whatsappCustomerServicePhone");
+  const menuUrlInput = document.getElementById("whatsappMenuUrl");
   const webhookTokenInput = document.getElementById("whatsappWebhookToken");
   const appSecretInput = document.getElementById("whatsappAppSecret");
   const bulkLimitInput = document.getElementById("whatsappBulkLimit");
@@ -49,13 +48,12 @@
       messageInput.value = data.bulk_message || "";
       phoneNumberIdInput.value = data.phone_number_id || "";
       graphVersionInput.value = data.graph_api_version || "v23.0";
-      firstOrderTemplateInput.value = data.first_order_template_name || "topchef_first_order_details";
-      orderDetailsTemplateInput.value = data.order_details_template_name || "topchef_order_details";
-      orderStatusTemplateInput.value = data.order_status_template_name || "topchef_order_status";
       languageCodeInput.value = data.language_code || "ar";
       enabledInput.checked = Boolean(data.enabled);
       bulkTemplateInput.value = data.bulk_template_name || "topchef_bulk_message";
-      businessPhoneInput.value = data.business_phone_number || "";
+      businessPhoneInput.value = data.business_phone_number || "201129820007";
+      customerServicePhoneInput.value = data.customer_service_phone || "";
+      menuUrlInput.value = data.menu_url || "https://topchefeg.com/";
       webhookTokenInput.placeholder = data.webhook_verify_token_configured ? "محفوظ — اتركه فارغًا للاحتفاظ به" : "أدخل Verify Token";
       appSecretInput.placeholder = data.app_secret_configured ? "محفوظ — اتركه فارغًا للاحتفاظ به" : "أدخل Meta App Secret";
       bulkLimitInput.value = data.bulk_send_limit || 500;
@@ -85,9 +83,9 @@
       bulk_message: messageInput.value.trim(),
       phone_number_id: phoneNumberIdInput.value.trim(),
       graph_api_version: graphVersionInput.value.trim(),
-      first_order_template_name: firstOrderTemplateInput.value.trim(),
-      order_details_template_name: orderDetailsTemplateInput.value.trim(),
-      order_status_template_name: orderStatusTemplateInput.value.trim(),
+      first_order_template_name: currentSettings.first_order_template_name || "topchef_first_order_details",
+      order_details_template_name: currentSettings.order_details_template_name || "topchef_order_details",
+      order_status_template_name: currentSettings.order_status_template_name || "topchef_order_status",
       language_code: languageCodeInput.value.trim(),
       enabled: enabledInput.checked,
       bulk_template_name: bulkTemplateInput.value.trim(),
@@ -95,6 +93,8 @@
       reset_code_expiry_minutes: currentSettings.reset_code_expiry_minutes || 10,
       bulk_send_limit: Number(bulkLimitInput.value),
       business_phone_number: businessPhoneInput.value.trim(),
+      customer_service_phone: customerServicePhoneInput.value.trim(),
+      menu_url: menuUrlInput.value.trim(),
     };
     if (apiKeyInput.value.trim()) payload.api_key = apiKeyInput.value.trim();
     if (webhookTokenInput.value.trim()) payload.webhook_verify_token = webhookTokenInput.value.trim();

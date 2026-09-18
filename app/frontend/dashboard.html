@@ -583,19 +583,18 @@
           </label>
           <div class="settings_grid">
             <label class="settings_field"><span>Phone Number ID</span><input id="whatsappPhoneNumberId" type="text" inputmode="numeric" placeholder="مثال: 123456789012345"></label>
-            <label class="settings_field"><span>رقم واتساب العام</span><input id="whatsappBusinessPhone" type="text" inputmode="tel" dir="ltr" placeholder="201012345678"></label>
+            <label class="settings_field"><span>رقم واتساب النظام الآلي</span><input id="whatsappBusinessPhone" type="text" inputmode="tel" dir="ltr" placeholder="201129820007"></label>
+            <label class="settings_field"><span>رقم واتساب خدمة العملاء</span><input id="whatsappCustomerServicePhone" type="text" inputmode="tel" dir="ltr" placeholder="201012345678"></label>
+            <label class="settings_field"><span>رابط المنيو</span><input id="whatsappMenuUrl" type="url" dir="ltr" placeholder="https://topchefeg.com/"></label>
             <label class="settings_field"><span>Graph API Version</span><input id="whatsappGraphVersion" type="text" dir="ltr" placeholder="v23.0"></label>
-            <label class="settings_field"><span>قالب أول طلب والموافقة</span><input id="whatsappFirstOrderTemplateName" type="text" dir="ltr" placeholder="topchef_first_order_details"></label>
-            <label class="settings_field"><span>قالب إنشاء وتعديل الطلب</span><input id="whatsappOrderDetailsTemplateName" type="text" dir="ltr" placeholder="topchef_order_details"></label>
-            <label class="settings_field"><span>قالب تحديث حالة الطلب</span><input id="whatsappOrderStatusTemplateName" type="text" dir="ltr" placeholder="topchef_order_status"></label>
             <label class="settings_field"><span>كود لغة القالب</span><input id="whatsappLanguageCode" type="text" dir="ltr" placeholder="ar"></label>
             <label class="settings_field"><span>قالب الرسالة الجماعية</span><input id="whatsappBulkTemplateName" type="text" dir="ltr" placeholder="topchef_bulk_message"></label>
             <label class="settings_field"><span>Webhook Verify Token</span><input id="whatsappWebhookToken" type="password" autocomplete="new-password" placeholder="يُحفظ مشفرًا"></label>
             <label class="settings_field"><span>Meta App Secret</span><input id="whatsappAppSecret" type="password" autocomplete="new-password" placeholder="يُحفظ مشفرًا"></label>
             <label class="settings_field"><span>الحد الأقصى للإرسال الجماعي</span><input id="whatsappBulkLimit" type="number" min="1" max="5000" value="500"></label>
           </div>
-          <label class="settings_toggle"><input id="whatsappEnabled" type="checkbox"><span>تفعيل الإشعارات التلقائية للطلبات</span></label>
-          <div class="settings_template_help">القوالب الثلاثة Utility: أول طلب يحتوي 11 متغيرًا وزري موافقة، التفاصيل تحتوي 12 متغيرًا، والحالة تحتوي 3 متغيرات. استعادة الدخول وتفعيل الحساب يعتمدان على رسالة يرسلها صاحب الرقم إلى المطعم. اضبط Webhook على <code>/whatsapp/webhook</code>.</div>
+          <label class="settings_toggle"><input id="whatsappEnabled" type="checkbox"><span>تفعيل واتساب والردود داخل نافذة خدمة العميل</span></label>
+          <div class="settings_template_help">إشعارات الطلب لا تبدأ من المطعم ولا تستخدم قوالب: العميل يرسل أولًا، والنظام يرد ويحدّث الطلب خلال 24 ساعة فقط. اضبط Webhook على <code>/whatsapp/webhook</code>. الإرسال الجماعي بالقالب منفصل وقد يخضع لرسوم Meta.</div>
           <label class="settings_field">
             <span>نص الرسالة الجماعية</span>
             <textarea id="whatsappBulkMessage" rows="7" maxlength="5000" placeholder="اكتب الرسالة الافتراضية هنا..."></textarea>

@@ -30,7 +30,6 @@ class OrderBase(BaseModel):
     customer_id: Optional[int] = None
     customer_phone: Optional[str] = None
     customer_name: Optional[str] = None
-    whatsapp_initial_contact_allowed: bool = False
     order_type: OrderType
     source: OrderSource = Field(OrderSource.ONLINE, validation_alias=AliasChoices("source", "order_source"))
     customer_notes: Optional[str] = None

@@ -8,21 +8,20 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
+from app.core.enums import OrderStatus
 from app.core.logging import logger
 from app.modules.customer.models import Customer
-from app.modules.settings.models import WhatsAppOutbox
+from app.modules.orders.models import Order
+from app.modules.settings.models import WhatsAppOrderSubscription, WhatsAppOutbox
 from app.modules.settings.service import SettingsService
 from app.modules.settings.whatsapp import (
     build_order_message,
-    order_template_parameters,
-    normalize_whatsapp_phone,
-    send_template_message,
     get_whatsapp_http_client,
-    whatsapp_config_ready,
+    normalize_whatsapp_phone,
+    send_session_message,
+    send_template_message,
 )
 
-ENABLE_ORDER_UPDATES = "ENABLE_ORDER_UPDATES"
-DISABLE_ORDER_UPDATES = "DISABLE_ORDER_UPDATES"
 PERMANENT_RECIPIENT_ERROR_CODES = {131026}
 
 
@@ -36,64 +35,36 @@ def retry_delay(attempt: int) -> timedelta:
     return timedelta(seconds=min(300, 2 ** max(1, attempt)))
 
 
-def order_template_name(config, event_type: str, *, first_order: bool = False) -> str:
-    if first_order:
-        return config.first_order_template_name
-    return (
-        config.order_status_template_name
-        if event_type == "status_changed"
-        else config.order_details_template_name
-    )
-
-
-def order_message_plan(config, customer_status: str, event_type: str, initial_contact_allowed: bool):
-    first_order = event_type == "created" and customer_status == "unknown" and initial_contact_allowed
-    if first_order:
-        return config.first_order_template_name, True
-    if customer_status == "enabled":
-        return order_template_name(config, event_type), False
-    return None
-
-
 async def enqueue_order_notification(db: AsyncSession, order: dict, event_type: str) -> bool:
     phone = normalize_whatsapp_phone(order.get("customer_phone"))
     customer_id = order.get("customer_id")
     if not phone or not customer_id:
         return False
-    config = await SettingsService(db).get_whatsapp_settings()
-    customer = await db.scalar(
-        select(Customer).where(Customer.id == customer_id).with_for_update()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    subscription = await db.scalar(
+        select(WhatsAppOrderSubscription).where(
+            WhatsAppOrderSubscription.order_id == order.get("id"),
+            WhatsAppOrderSubscription.whatsapp_phone == phone,
+            WhatsAppOrderSubscription.status == "active",
+            WhatsAppOrderSubscription.service_window_expires_at > now,
+        ).with_for_update()
     )
-    if not customer:
-        return False
-    plan = order_message_plan(
-        config, customer.whatsapp_status, event_type,
-        bool(order.get("whatsapp_initial_contact_allowed")),
-    )
-    if not plan:
-        return False
-    template_name, first_order = plan
-    if not whatsapp_config_ready(config, template_name=template_name):
+    if not subscription:
         return False
     event_key = order_event_key(order, event_type)
     if await db.scalar(select(WhatsAppOutbox.id).where(WhatsAppOutbox.event_key == event_key)):
         return False
-    button_payloads = [ENABLE_ORDER_UPDATES, DISABLE_ORDER_UPDATES] if first_order else []
-    parameters = order_template_parameters(order, event_type, first_order=first_order)
     db.add(WhatsAppOutbox(
         event_key=event_key,
         order_id=order.get("id"),
-        customer_id=customer.id,
+        customer_id=customer_id,
         phone=phone,
-        template_name=template_name,
+        template_name="__session__",
         message_text=build_order_message(order, event_type),
-        template_parameters=json.dumps(parameters, ensure_ascii=False),
-        button_payloads=json.dumps(button_payloads),
+        message_type="session_text",
+        service_window_expires_at=subscription.service_window_expires_at,
+        subscription_id=subscription.id,
     ))
-    if first_order:
-        customer.whatsapp_status = "pending"
-        customer.whatsapp_checked_at = datetime.now(UTC).replace(tzinfo=None)
-        customer.whatsapp_failure_reason = None
     return True
 
 
@@ -178,12 +149,39 @@ class WhatsAppOutboxWorker:
 
             client = get_whatsapp_http_client()
             for row in rows:
+                check_now = datetime.utcnow()
+                if row.message_type in {"session_text", "interactive"}:
+                    window_open = bool(row.service_window_expires_at and row.service_window_expires_at > check_now)
+                    if row.subscription_id:
+                        async with db.begin():
+                            subscription = await db.get(WhatsAppOrderSubscription, row.subscription_id)
+                            window_open = bool(
+                                subscription
+                                and subscription.status == "active"
+                                and subscription.whatsapp_phone == row.phone
+                                and subscription.service_window_expires_at > check_now
+                            )
+                    if not window_open:
+                        async with db.begin():
+                            current = await db.get(WhatsAppOutbox, row.id, with_for_update=True)
+                            if current:
+                                current.status = "skipped"
+                                current.skip_reason = "customer_service_window_closed"
+                                current.updated_at = check_now
+                        continue
                 parameters = json.loads(row.template_parameters) if row.template_parameters else [row.message_text]
                 button_payloads = json.loads(row.button_payloads) if row.button_payloads else []
-                send_result = await send_template_message(
-                    row.phone, parameters, row.template_name, button_payloads=button_payloads,
-                    config=config, token=token, client=client,
-                )
+                if row.message_type in {"session_text", "interactive"}:
+                    interactive = json.loads(row.interactive_payload) if row.interactive_payload else None
+                    send_result = await send_session_message(
+                        row.phone, row.message_text, interactive=interactive,
+                        config=config, token=token, client=client,
+                    )
+                else:
+                    send_result = await send_template_message(
+                        row.phone, parameters, row.template_name, button_payloads=button_payloads,
+                        config=config, token=token, client=client,
+                    )
                 async with db.begin():
                     current = await db.get(WhatsAppOutbox, row.id, with_for_update=True)
                     if not current:
@@ -197,6 +195,16 @@ class WhatsAppOutboxWorker:
                         current.delivery_status = "accepted"
                         current.delivery_updated_at = datetime.utcnow()
                         current.last_error = None
+                        if current.subscription_id and current.order_id:
+                            subscription = await db.get(
+                                WhatsAppOrderSubscription, current.subscription_id, with_for_update=True
+                            )
+                            order = await db.get(Order, current.order_id)
+                            if subscription and order and order.order_status in {
+                                OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CANCELLED,
+                            }:
+                                subscription.status = "stopped"
+                                subscription.stopped_at = datetime.utcnow()
                     elif (
                         send_result.error_code in PERMANENT_RECIPIENT_ERROR_CODES
                         or current.attempts >= self.max_attempts

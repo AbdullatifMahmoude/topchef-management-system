@@ -6,8 +6,6 @@ from app.modules.settings.whatsapp_outbox import (
     WhatsAppOutboxWorker,
     enqueue_order_notification,
     order_event_key,
-    order_message_plan,
-    order_template_name,
     retry_delay,
 )
 
@@ -40,33 +38,3 @@ def test_outbox_worker_connection_failure_backoff_is_bounded():
     delays = [min(60, worker.poll_seconds * (2 ** min(attempt, 5))) for attempt in range(1, 8)]
 
     assert delays == [4, 8, 16, 32, 60, 60, 60]
-
-
-def test_order_events_use_the_approved_two_template_contract():
-    config = type("Config", (), {
-        "order_details_template_name": "topchef_order_details",
-        "order_status_template_name": "topchef_order_status",
-    })()
-    assert order_template_name(config, "created") == "topchef_order_details"
-    assert order_template_name(config, "updated") == "topchef_order_details"
-    assert order_template_name(config, "status_changed") == "topchef_order_status"
-
-
-def test_first_contact_is_prompted_once_then_follows_saved_choice():
-    config = type("Config", (), {
-        "first_order_template_name": "topchef_first_order_details",
-        "order_details_template_name": "topchef_order_details",
-        "order_status_template_name": "topchef_order_status",
-    })()
-    assert order_message_plan(config, "unknown", "created", True) == (
-        "topchef_first_order_details", True,
-    )
-    assert order_message_plan(config, "pending", "created", True) is None
-    assert order_message_plan(config, "disabled", "created", True) is None
-    assert order_message_plan(config, "unavailable", "created", True) is None
-    assert order_message_plan(config, "enabled", "created", False) == (
-        "topchef_order_details", False,
-    )
-    assert order_message_plan(config, "enabled", "status_changed", False) == (
-        "topchef_order_status", False,
-    )

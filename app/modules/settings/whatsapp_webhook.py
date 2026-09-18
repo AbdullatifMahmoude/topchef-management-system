@@ -9,15 +9,11 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.redis import get_redis
 from app.modules.customer.models import Customer
-from app.modules.customer.repository import CustomerRepository
 from app.modules.settings.service import SettingsService
 from app.modules.settings.whatsapp_verification import consume_incoming_message
+from app.modules.settings.whatsapp_conversations import process_incoming_message
 from app.modules.settings.models import WhatsAppOutbox
-from app.modules.settings.whatsapp_outbox import (
-    DISABLE_ORDER_UPDATES,
-    ENABLE_ORDER_UPDATES,
-    PERMANENT_RECIPIENT_ERROR_CODES,
-)
+from app.modules.settings.whatsapp_outbox import PERMANENT_RECIPIENT_ERROR_CODES
 
 router = APIRouter(prefix="/whatsapp/webhook", tags=["WhatsApp Webhook"])
 
@@ -61,24 +57,6 @@ async def record_delivery_status(db: AsyncSession, delivery: dict, redis=None) -
     return True
 
 
-async def record_consent_reply(db: AsyncSession, message: dict, redis=None) -> bool:
-    if message.get("type") != "button":
-        return False
-    payload = (message.get("button") or {}).get("payload")
-    if payload not in {ENABLE_ORDER_UPDATES, DISABLE_ORDER_UPDATES}:
-        return False
-    customer = await CustomerRepository(db).get_by_phone(message.get("from", ""))
-    if not customer:
-        return False
-    customer.whatsapp_status = "enabled" if payload == ENABLE_ORDER_UPDATES else "disabled"
-    customer.whatsapp_consent_at = datetime.now(UTC).replace(tzinfo=None)
-    customer.whatsapp_checked_at = customer.whatsapp_consent_at
-    customer.whatsapp_failure_reason = None
-    if redis:
-        await redis.delete(f"customer_profile:{customer.id}")
-    return True
-
-
 @router.get("")
 async def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
@@ -105,13 +83,18 @@ async def receive_webhook(
     if not secret or not x_hub_signature_256 or not hmac.compare_digest(expected, x_hub_signature_256):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid webhook signature")
     payload = await request.json()
+    config = await SettingsService(db).get_whatsapp_settings()
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
             for message in value.get("messages", []):
-                await record_consent_reply(db, message, redis)
                 text = (message.get("text") or {}).get("body", "")
-                await consume_incoming_message(redis, message.get("from", ""), text)
+                verification_consumed = await consume_incoming_message(
+                    redis, message.get("from", ""), text
+                )
+                await process_incoming_message(
+                    db, message, config, suppress_routing=verification_consumed
+                )
             for delivery in value.get("statuses", []):
                 await record_delivery_status(db, delivery, redis)
     return {"received": True}

@@ -39,6 +39,7 @@ async def test_checkout_reason_distinguishes_shift_and_manual_pause(monkeypatch,
     service = SettingsService(db)
     service.get_payment_settings = AsyncMock(return_value=_payments())
     service.get_web_orders_status = AsyncMock(return_value=manual)
+    service.get_whatsapp_settings = AsyncMock(return_value=SimpleNamespace(business_phone_number="201000000000"))
     monkeypatch.setattr("app.core.business_calendar.is_weekly_holiday", lambda: False)
     result = await service.get_menu_checkout_settings()
     assert result.ordering_reason == reason
