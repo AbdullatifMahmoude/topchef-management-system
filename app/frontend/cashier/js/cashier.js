@@ -690,7 +690,10 @@ function filterLocalProducts(term) {
   renderItems();
 }
 
+let _confirmOrderInFlight = false;
+
 async function confirmOrder() {
+  if (_confirmOrderInFlight) return;
   if (cart.length === 0) return;
 
   if (!orderType) {
@@ -731,6 +734,12 @@ async function confirmOrder() {
   const discountType = document.getElementById("discount_type")?.value || null;
   const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
   let pricing;
+  const confirmButton = document.querySelector(".btn_confirm");
+  _confirmOrderInFlight = true;
+  if (confirmButton) {
+    confirmButton.disabled = true;
+    confirmButton.setAttribute("aria-busy", "true");
+  }
   try {
     const pricingResponse = await apiFetch("/pricing/preview", {
       method: "POST",
@@ -754,6 +763,12 @@ async function confirmOrder() {
   } catch (error) {
     showToast(error.message || "تعذر حساب إجمالي الطلب", "error");
     return;
+  } finally {
+    _confirmOrderInFlight = false;
+    if (confirmButton) {
+      confirmButton.disabled = false;
+      confirmButton.removeAttribute("aria-busy");
+    }
   }
 
   const grandTotal = Number(pricing.total_amount || 0);
@@ -1340,14 +1355,25 @@ function selectOrderType(type) {
 //  Pricing Preview API
 // ===================================================
 let _pricingTimeout = null;
+let _pricingAbortController = null;
 
 async function updatePricingPreview() {
-  if (cart.length === 0) return;
+  if (cart.length === 0) {
+    if (_pricingTimeout) clearTimeout(_pricingTimeout);
+    _pricingTimeout = null;
+    if (_pricingAbortController) _pricingAbortController.abort();
+    _pricingAbortController = null;
+    return;
+  }
 
   // Debounce لمنع كثرة الطلبات أثناء تعديل الكميات
   if (_pricingTimeout) clearTimeout(_pricingTimeout);
 
   _pricingTimeout = setTimeout(async () => {
+    _pricingTimeout = null;
+    if (_pricingAbortController) _pricingAbortController.abort();
+    const controller = new AbortController();
+    _pricingAbortController = controller;
     try {
       const items = cart.map((c) => {
         let prodId = c.item.id;
@@ -1390,6 +1416,7 @@ async function updatePricingPreview() {
         method: "POST",
         body: JSON.stringify(payload),
         hideLoader: true, // لا نريد إيقاف الواجهة في المعاينة
+        signal: controller.signal,
       });
 
       if (res.ok) {
@@ -1406,7 +1433,13 @@ async function updatePricingPreview() {
         showToast(message, "error");
       }
     } catch (err) {
-      console.warn("Pricing preview failed:", err);
+      if (err.name !== "AbortError") {
+        console.warn("Pricing preview failed:", err);
+      }
+    } finally {
+      if (_pricingAbortController === controller) {
+        _pricingAbortController = null;
+      }
     }
   }, 400);
 }

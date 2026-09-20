@@ -160,6 +160,15 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('apiFetch("/pricing/preview"', confirm_source)
         self.assertIn("pricing.total_amount", confirm_source)
 
+    def test_cashier_coalesces_pricing_preview_requests(self):
+        source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+        self.assertIn("if (_confirmOrderInFlight) return;", source)
+        self.assertIn("_pricingAbortController.abort()", source)
+        self.assertIn("signal: controller.signal", source)
+        self.assertIn('err.name !== "AbortError"', source)
+        self.assertIn("if (cart.length === 0) {", source)
+        self.assertIn("_pricingTimeout = null;", source)
+
 
 if __name__ == "__main__":
     unittest.main()
