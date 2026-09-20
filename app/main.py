@@ -20,6 +20,7 @@ from app.modules.customer import register_customer
 from app.modules.infrastructure.middlewares.auth import AuthMiddleware
 from app.modules.infrastructure.middlewares.error_handler import ErrorHandlerMiddleware, register_error_handlers
 from app.modules.menu import register_menu
+from app.modules.meta_agent import register_meta_agent
 from app.modules.offer import register_offer
 from app.modules.orders import register_orders
 from app.modules.pricing import register_pricing
@@ -137,6 +138,7 @@ add_cors_middleware(app)
 
 register_auth(app)
 register_menu(app)
+register_meta_agent(app)
 register_user(app)
 register_offer(app)
 register_pricing(app)

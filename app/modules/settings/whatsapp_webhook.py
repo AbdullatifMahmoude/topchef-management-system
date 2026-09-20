@@ -2,22 +2,40 @@ import hashlib
 import hmac
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.redis import get_redis
 from app.modules.customer.models import Customer
-from app.modules.settings.service import SettingsService
-from app.modules.settings.whatsapp_verification import consume_incoming_message
-from app.modules.settings.whatsapp_conversations import process_incoming_message
 from app.modules.settings.models import WhatsAppOutbox
+from app.modules.settings.service import SettingsService
+from app.modules.settings.whatsapp_conversations import process_incoming_message
 from app.modules.settings.whatsapp_outbox import PERMANENT_RECIPIENT_ERROR_CODES
+from app.modules.settings.whatsapp_verification import consume_incoming_message
 
 router = APIRouter(prefix="/whatsapp/webhook", tags=["WhatsApp Webhook"])
 
 _DELIVERY_RANK = {"accepted": 0, "sent": 1, "delivered": 2, "read": 3, "failed": 3}
+
+
+def inbound_routing_policy(verification_consumed: bool) -> tuple[bool, str]:
+    if verification_consumed:
+        return True, "verification_consumed"
+    if settings.META_AGENT_API_KEY:
+        return True, "meta_agent_managed"
+    return False, "routing_suppressed"
 
 
 async def record_delivery_status(db: AsyncSession, delivery: dict, redis=None) -> bool:
@@ -62,7 +80,7 @@ async def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
     hub_verify_token: str = Query(alias="hub.verify_token"),
     hub_challenge: str = Query(alias="hub.challenge"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ):
     expected = await SettingsService(db).get_whatsapp_webhook_verify_token()
     if not expected or hub_mode != "subscribe" or not hmac.compare_digest(expected, hub_verify_token):
@@ -74,8 +92,8 @@ async def verify_webhook(
 async def receive_webhook(
     request: Request,
     x_hub_signature_256: str | None = Header(default=None),
-    db: AsyncSession = Depends(get_db),
-    redis=Depends(get_redis),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    redis=Depends(get_redis),  # noqa: B008
 ):
     secret = await SettingsService(db).get_whatsapp_app_secret()
     body = await request.body()
@@ -92,8 +110,15 @@ async def receive_webhook(
                 verification_consumed = await consume_incoming_message(
                     redis, message.get("from", ""), text
                 )
+                suppress_routing, suppression_result = inbound_routing_policy(
+                    verification_consumed
+                )
                 await process_incoming_message(
-                    db, message, config, suppress_routing=verification_consumed
+                    db,
+                    message,
+                    config,
+                    suppress_routing=suppress_routing,
+                    suppression_result=suppression_result,
                 )
             for delivery in value.get("statuses", []):
                 await record_delivery_status(db, delivery, redis)

@@ -29,6 +29,7 @@ PUBLIC_PREFIXES = {
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/integrations/meta-agent/v1",
     "/orders/ws",
     "/auth/password-reset-status",
     "/customer-auth",
