@@ -13,14 +13,24 @@ router = APIRouter(
 )
 
 
-@router.get("/health")
-async def meta_agent_health() -> dict[str, str]:
-    """Authenticated readiness probe for Meta connector configuration."""
+def _readiness_payload() -> dict[str, str]:
     return {
         "status": "ready",
         "integration": "meta-business-agent",
         "version": "v1",
     }
+
+
+@router.get("")
+async def meta_agent_root() -> dict[str, str]:
+    """Authenticated connector base URL probe used by Meta during setup."""
+    return _readiness_payload()
+
+
+@router.get("/health")
+async def meta_agent_health() -> dict[str, str]:
+    """Authenticated readiness probe for Meta connector configuration."""
+    return _readiness_payload()
 
 
 @router.get("/capabilities", response_model=schemas.AgentCapabilities)
