@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
     REDIS_URL: str | None = None
+    META_AGENT_API_KEY: str | None = None
     REMOTE_API: str = "https://topchef-system.fastapicloud.dev"
     TERMINAL_ID: str = Field(default=os.getenv("TERMINAL_ID", "T1"))
     CORS_ORIGINS: str = "http://127.0.0.1:5500,http://localhost:5500,https://topchef-dashboard.vercel.app,https://topchefeg.com,https://www.topchefeg.com"

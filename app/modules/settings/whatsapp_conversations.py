@@ -16,7 +16,6 @@ from app.modules.settings.models import (
 )
 from app.modules.settings.whatsapp import build_order_message, normalize_whatsapp_phone
 
-
 TRACK_ORDER = "TRACK_ORDER"
 ENABLE_UPDATES = "ENABLE_ORDER_UPDATES"
 START_ORDER = "START_ORDER"
@@ -186,7 +185,12 @@ async def _renew_windows(db: AsyncSession, phone: str, now: datetime) -> None:
 
 
 async def process_incoming_message(
-    db: AsyncSession, message: dict, config, *, suppress_routing: bool = False
+    db: AsyncSession,
+    message: dict,
+    config,
+    *,
+    suppress_routing: bool = False,
+    suppression_result: str = "routing_suppressed",
 ) -> str:
     message_id = str(message.get("id") or "").strip()
     phone = normalize_whatsapp_phone(message.get("from"))
@@ -209,8 +213,8 @@ async def process_incoming_message(
     await _renew_windows(db, phone, now)
     if suppress_routing:
         inbound.processed_at = datetime.now(UTC).replace(tzinfo=None)
-        inbound.processing_result = "verification_consumed"
-        return "verification_consumed"
+        inbound.processing_result = suppression_result
+        return suppression_result
 
     conversation = await db.get(WhatsAppConversation, phone)
     state = "idle"
