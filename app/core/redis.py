@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Any, Optional
 
@@ -78,6 +79,7 @@ class RedisClient:
     def __init__(self):
         self.redis = None
         self.backend_name = "none"
+        self._connect_lock = asyncio.Lock()
         self.stats = {
             "hits": 0,
             "misses": 0,
@@ -90,21 +92,30 @@ class RedisClient:
         if self.redis:
             return self.redis
 
-        try:
-            self.redis = redis.from_url(
-                settings.REDIS_URL,
-                decode_responses=True,
-                socket_timeout=5,
-                socket_connect_timeout=5,
-            )
-            await self.redis.ping()
-            self.backend_name = "redis"
-            logger.info("Redis connected successfully")
-        except Exception as e:
-            logger.warning(f"Failed to connect to Redis: {e}. System will proceed without caching.")
-            self.redis = None
-            self.backend_name = "none"
-        return self.redis
+        async with self._connect_lock:
+            if self.redis:
+                return self.redis
+
+            candidate = None
+            try:
+                candidate = redis.from_url(
+                    settings.REDIS_URL,
+                    decode_responses=True,
+                    socket_timeout=5,
+                    socket_connect_timeout=5,
+                    max_connections=settings.REDIS_MAX_CONNECTIONS,
+                )
+                await candidate.ping()
+                self.redis = candidate
+                self.backend_name = "redis"
+                logger.info("Redis connected successfully")
+            except Exception as e:
+                if candidate is not None:
+                    await candidate.aclose()
+                logger.warning(f"Failed to connect to Redis: {e}. System will proceed without caching.")
+                self.redis = None
+                self.backend_name = "none"
+            return self.redis
 
     @property
     def is_available(self) -> bool:
@@ -119,11 +130,12 @@ class RedisClient:
         return "disconnected"
 
     async def disconnect(self):
-        if self.redis:
-            await self.redis.close()
-            self.redis = None
-            self.backend_name = "none"
-            logger.info("Cache backend disconnected")
+        async with self._connect_lock:
+            if self.redis:
+                await self.redis.aclose()
+                self.redis = None
+                self.backend_name = "none"
+                logger.info("Cache backend disconnected")
 
     async def get(self, key: str, track_hit: bool = True) -> Optional[Any]:
         if not self.redis:
