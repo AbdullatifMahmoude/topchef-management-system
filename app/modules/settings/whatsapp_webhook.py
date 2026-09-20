@@ -30,6 +30,15 @@ router = APIRouter(prefix="/whatsapp/webhook", tags=["WhatsApp Webhook"])
 _DELIVERY_RANK = {"accepted": 0, "sent": 1, "delivered": 2, "read": 3, "failed": 3}
 
 
+def webhook_events(value: dict, event_name: str) -> list[dict]:
+    """Return regular and Business Agent standby events in one stream."""
+    events = list(value.get(event_name) or [])
+    standby = value.get("standby") or {}
+    if isinstance(standby, dict):
+        events.extend(standby.get(event_name) or [])
+    return events
+
+
 def inbound_routing_policy(verification_consumed: bool) -> tuple[bool, str]:
     if verification_consumed:
         return True, "verification_consumed"
@@ -105,7 +114,7 @@ async def receive_webhook(
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
-            for message in value.get("messages", []):
+            for message in webhook_events(value, "messages"):
                 text = (message.get("text") or {}).get("body", "")
                 verification_consumed = await consume_incoming_message(
                     redis, message.get("from", ""), text
@@ -120,6 +129,6 @@ async def receive_webhook(
                     suppress_routing=suppress_routing,
                     suppression_result=suppression_result,
                 )
-            for delivery in value.get("statuses", []):
+            for delivery in webhook_events(value, "statuses"):
                 await record_delivery_status(db, delivery, redis)
     return {"received": True}
