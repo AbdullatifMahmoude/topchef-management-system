@@ -66,9 +66,12 @@ async def lifespan(app: FastAPI):
         logger.info("[WORKER] Starting Global Workers...")
         from app.modules.infrastructure.workers.sync_worker import init_global_workers
         init_global_workers()
-        from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
-        global_leader_manager.on_leader_elected(whatsapp_outbox_worker.start)
-        global_leader_manager.on_leader_lost(whatsapp_outbox_worker.stop)
+        if settings.WHATSAPP_OUTBOX_ENABLED:
+            from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
+            global_leader_manager.on_leader_elected(whatsapp_outbox_worker.start)
+            global_leader_manager.on_leader_lost(whatsapp_outbox_worker.stop)
+        else:
+            logger.info("[WORKER] WhatsApp outbox worker disabled")
         await global_leader_manager.start()
         logger.info(f"[WORKER] Global Worker awaiting leadership [PID: {pid}]")
     
@@ -80,8 +83,9 @@ async def lifespan(app: FastAPI):
     # --- SHUTDOWN ---
     logger.info(f"[SHUTDOWN] Shutting down application [PID: {pid}]")
     if APP_ROLE in ("worker", "all"):
-        from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
-        await whatsapp_outbox_worker.stop()
+        if settings.WHATSAPP_OUTBOX_ENABLED:
+            from app.modules.settings.whatsapp_outbox import whatsapp_outbox_worker
+            await whatsapp_outbox_worker.stop()
         await global_leader_manager.stop()
     if APP_ROLE in ("api", "all"):
         await order_events_manager.stop()
