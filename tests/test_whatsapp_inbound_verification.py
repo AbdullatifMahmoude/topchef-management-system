@@ -30,6 +30,7 @@ async def test_inbound_challenge_requires_same_sender_and_is_single_use(monkeypa
     challenge = await verification.create_inbound_challenge(
         object(), redis, phone="01000000001", actor_type="customer", actor_id=7, purpose="login"
     )
+    assert challenge["expires_in"] == 60
     code = challenge["whatsapp_url"].split("TCV-")[1]
     assert not await verification.consume_incoming_message(redis, "201000000002", f"TCV-{code}")
     assert await verification.consume_incoming_message(redis, "201000000001", f"TCV-{code}")
