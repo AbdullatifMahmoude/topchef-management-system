@@ -12,7 +12,7 @@ class CustomerAccountAvailability(BaseModel):
 
 class CustomerChallengeRequest(BaseModel):
     phone: str = Field(min_length=10, max_length=20)
-    purpose: Literal["activate", "login", "reset_pin"]
+    purpose: Literal["activate", "reset_pin"]
 
 class CustomerChallengeResponse(BaseModel):
     challenge_id: str
@@ -22,10 +22,15 @@ class CustomerChallengeResponse(BaseModel):
 class CustomerChallengeStatus(BaseModel):
     verified: bool
 
+class CustomerLoginRequest(BaseModel):
+    phone: str = Field(min_length=10, max_length=20)
+    pin: str = Field(pattern=r"^\d{4,12}$")
+    device_name: str = Field(default="جهاز", max_length=120)
+
 class CustomerCompleteRequest(BaseModel):
     phone: str = Field(min_length=10, max_length=20)
     challenge_id: str = Field(min_length=20, max_length=200)
-    purpose: Literal["activate", "login", "reset_pin"]
+    purpose: Literal["activate", "reset_pin"]
     pin: str = Field(pattern=r"^\d{4,12}$")
     name: str | None = Field(default=None, min_length=2, max_length=100)
     device_name: str = Field(default="جهاز", max_length=120)
