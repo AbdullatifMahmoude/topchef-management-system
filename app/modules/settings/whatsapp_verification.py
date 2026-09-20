@@ -9,7 +9,7 @@ from app.modules.customer.phone import normalize_egyptian_phone
 from app.modules.settings.service import SettingsService
 from app.modules.settings.whatsapp import inbound_verification_config_ready
 
-CHALLENGE_TTL_SECONDS = 300
+CHALLENGE_TTL_SECONDS = 60
 _CODE_RE = re.compile(r"\bTCV-([A-Z0-9]{8})\b", re.IGNORECASE)
 
 
