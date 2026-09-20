@@ -1,34 +1,52 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Cookie, Depends, Header, Response
+from fastapi import APIRouter, Cookie, Depends, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.exceptions import AuthenticationError, AuthenticationServiceUnavailable, ValidationError
+from app.core.exceptions import (
+    AuthenticationError,
+    ValidationError,
+)
 from app.core.redis import get_redis
 from app.core.security import get_password_hash, verify_password
 from app.modules.customer import models
 from app.modules.customer.account_schemas import (
-    CustomerAccountAvailability, CustomerChallengeRequest, CustomerChallengeResponse,
-    CustomerChallengeStatus, CustomerCompleteRequest, CustomerDeviceResponse,
-    CustomerOrdersResponse, CustomerProfile, CustomerProfileUpdate, CustomerTokenResponse,
+    CustomerAccountAvailability,
+    CustomerChallengeRequest,
+    CustomerChallengeResponse,
+    CustomerChallengeStatus,
+    CustomerCompleteRequest,
+    CustomerDeviceResponse,
+    CustomerLoginRequest,
+    CustomerOrdersResponse,
+    CustomerProfile,
+    CustomerProfileUpdate,
+    CustomerTokenResponse,
 )
 from app.modules.customer.account_security import (
-    COOKIE_NAME, DEVICE_DAYS, create_device_session, decode_customer_access,
+    COOKIE_NAME,
+    DEVICE_DAYS,
+    create_device_session,
+    decode_customer_access,
     rotate_device_session,
 )
-from app.modules.customer.schemas import CustomerAddressCreate, CustomerAddressResponse
 from app.modules.customer.phone import normalize_egyptian_phone
 from app.modules.customer.repository import CustomerRepository
+from app.modules.customer.schemas import CustomerAddressCreate, CustomerAddressResponse
 from app.modules.offer.models import OfferUsage
 from app.modules.orders.models import Order, OrderItem
 from app.modules.settings.service import SettingsService
 from app.modules.settings.whatsapp import inbound_verification_config_ready
-from app.modules.settings.whatsapp_verification import challenge_status, create_inbound_challenge, consume_verified_challenge
+from app.modules.settings.whatsapp_verification import (
+    challenge_status,
+    consume_verified_challenge,
+    create_inbound_challenge,
+)
 
 router = APIRouter(prefix="/customer-auth", tags=["Customer Account"])
 bearer = HTTPBearer(auto_error=False)
@@ -68,22 +86,29 @@ async def get_challenge_status(challenge_id: str, redis=Depends(get_redis)):
     return CustomerChallengeStatus(verified=await challenge_status(redis, challenge_id))
 
 
+@router.post("/login", response_model=CustomerTokenResponse)
+async def login_customer(data: CustomerLoginRequest, response: Response,
+                         db: AsyncSession = Depends(get_db)):
+    phone = normalize_egyptian_phone(data.phone)
+    customer = await CustomerRepository(db).get_by_phone(phone)
+    if not customer or not customer.pin_hash or not verify_password(data.pin, customer.pin_hash):
+        raise AuthenticationError("رقم الهاتف أو PIN غير صحيح")
+    access, refresh, _device = await create_device_session(db, customer.id, data.device_name)
+    await db.commit()
+    _set_refresh_cookie(response, refresh)
+    return CustomerTokenResponse(access_token=access, customer_id=customer.id)
+
+
 @router.post("/complete", response_model=CustomerTokenResponse)
 async def complete_customer_auth(data: CustomerCompleteRequest, response: Response,
                                  db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
     phone = normalize_egyptian_phone(data.phone)
     repo = CustomerRepository(db)
     customer = await repo.get_by_phone(phone)
-    if data.purpose == "login":
-        if not customer or not customer.pin_hash or not verify_password(data.pin, customer.pin_hash):
-            raise AuthenticationError("رقم الهاتف أو PIN غير صحيح")
     record = await consume_verified_challenge(redis, data.challenge_id, actor_type="customer", purpose=data.purpose)
     if record.get("phone") != phone:
         raise AuthenticationError("رقم الهاتف لا يطابق التحقق")
-    if data.purpose == "login":
-        if record.get("actor_id") != customer.id:
-            raise AuthenticationError("تعذر تأكيد الحساب")
-    elif data.purpose == "activate":
+    if data.purpose == "activate":
         if not customer:
             if not data.name:
                 raise ValidationError("الاسم مطلوب لإنشاء الحساب")
