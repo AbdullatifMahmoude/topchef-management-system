@@ -3,8 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.exceptions import AppExceptions
+from app.core.redis import get_redis
 from app.modules.meta_agent import schemas, service
 from app.modules.meta_agent.auth import require_meta_agent_key
+from app.modules.settings.whatsapp_verification import consume_incoming_message
 
 router = APIRouter(
     prefix="/integrations/meta-agent/v1",
@@ -37,7 +39,12 @@ async def meta_agent_health() -> dict[str, str]:
 async def meta_agent_capabilities() -> schemas.AgentCapabilities:
     """Declare the strict read-only boundary exposed to Meta Business Agent."""
     return schemas.AgentCapabilities(
-        allowed=["menu_and_pricing", "order_status", "order_status_history"],
+        allowed=[
+            "menu_and_pricing",
+            "order_status",
+            "order_status_history",
+            "customer_verification",
+        ],
         handoff_required=["create_order", "update_order", "cancel_order"],
     )
 
@@ -48,6 +55,20 @@ async def meta_agent_menu(
 ) -> schemas.MenuResponse:
     """Return only active, available menu products and their current prices."""
     return await service.get_available_menu(db)
+
+
+@router.post("/customer-verification", response_model=schemas.CustomerVerificationResponse)
+async def meta_agent_customer_verification(
+    data: schemas.CustomerVerificationRequest,
+    redis=Depends(get_redis),  # noqa: B008
+) -> schemas.CustomerVerificationResponse:
+    """Confirm only a live TCV challenge bound to the current WhatsApp sender."""
+    verified = await consume_incoming_message(
+        redis,
+        data.customer_phone,
+        data.message,
+    )
+    return schemas.CustomerVerificationResponse(verified=verified)
 
 
 @router.get("/orders/{order_number}/status", response_model=schemas.OrderTrackingResponse)

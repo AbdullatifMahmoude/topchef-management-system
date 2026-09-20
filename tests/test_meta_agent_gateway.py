@@ -1,3 +1,5 @@
+import asyncio
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -5,10 +7,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
+from app.core.redis import InMemoryCache, get_redis
 from app.modules.infrastructure.middlewares.auth import AuthMiddleware
 from app.modules.infrastructure.middlewares.error_handler import register_error_handlers
 from app.modules.meta_agent import register_meta_agent, service
 from app.modules.meta_agent.auth import META_AGENT_HEADER
+from app.modules.settings import whatsapp_verification
 
 
 def build_client() -> TestClient:
@@ -92,6 +96,7 @@ def test_gateway_declares_read_only_capabilities(monkeypatch):
         "menu_and_pricing",
         "order_status",
         "order_status_history",
+        "customer_verification",
     ]
     assert response.json()["handoff_required"] == [
         "create_order",
@@ -111,6 +116,80 @@ def test_gateway_exposes_no_order_mutation_routes(monkeypatch):
             headers=headers,
         )
         assert response.status_code == 405
+
+
+def test_customer_verification_tool_is_authenticated_and_phone_bound(monkeypatch):
+    monkeypatch.setattr(settings, "META_AGENT_API_KEY", "configured-secret")
+    cache = InMemoryCache()
+    client = build_client()
+    client.app.dependency_overrides[get_redis] = lambda: cache
+    headers = {META_AGENT_HEADER: "configured-secret"}
+
+    unauthenticated = client.post(
+        "/integrations/meta-agent/v1/customer-verification",
+        json={"customer_phone": "01000000000", "message": "TCV-12345678"},
+    )
+    invalid = client.post(
+        "/integrations/meta-agent/v1/customer-verification",
+        headers=headers,
+        json={"customer_phone": "01000000000", "message": "TCV-12345678"},
+    )
+
+    assert unauthenticated.status_code == 401
+    assert invalid.status_code == 200
+    assert invalid.json() == {"verified": False}
+
+
+def test_customer_verification_tool_consumes_live_sender_bound_code(monkeypatch):
+    monkeypatch.setattr(settings, "META_AGENT_API_KEY", "configured-secret")
+    cache = InMemoryCache()
+    challenge_id = "challenge-id"
+    code = "A1B2C3D4"
+    record = {
+        "phone": "01000000000",
+        "actor_type": "customer",
+        "actor_id": 7,
+        "purpose": "reset_pin",
+        "verified": False,
+    }
+
+    async def seed_cache():
+        await cache.setex(
+            whatsapp_verification._id_key(challenge_id),
+            60,
+            json.dumps(record),
+        )
+        await cache.setex(
+            whatsapp_verification._code_key(code),
+            60,
+            challenge_id,
+        )
+
+    asyncio.run(seed_cache())
+    client = build_client()
+    client.app.dependency_overrides[get_redis] = lambda: cache
+    wrong_sender = client.post(
+        "/integrations/meta-agent/v1/customer-verification",
+        headers={META_AGENT_HEADER: "configured-secret"},
+        json={
+            "customer_phone": "+201111111111",
+            "message": f"TCV-{code}",
+        },
+    )
+    response = client.post(
+        "/integrations/meta-agent/v1/customer-verification",
+        headers={META_AGENT_HEADER: "configured-secret"},
+        json={
+            "customer_phone": "+201000000000",
+            "message": f"تأكيد حساب توب شيف TCV-{code}",
+        },
+    )
+
+    assert wrong_sender.status_code == 200
+    assert wrong_sender.json() == {"verified": False}
+    assert response.status_code == 200
+    assert response.json() == {"verified": True}
+    assert asyncio.run(whatsapp_verification.challenge_status(cache, challenge_id)) is True
 
 
 def test_menu_returns_only_service_payload(monkeypatch):
