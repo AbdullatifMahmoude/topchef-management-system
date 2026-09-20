@@ -32,6 +32,7 @@
         <button class="side_btn" data-page="delivery"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg><span>المستخدمين</span></button>
         <button class="side_btn" data-page="delivery-ops"><svg viewBox="0 0 24 24"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>إدارة التوصيل</span></button>
         <button class="side_btn" data-page="shifts"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>الشيفتات</span></button>
+        <button class="side_btn" data-page="expenses"><svg viewBox="0 0 24 24"><path d="M4 7h16v12H4zM7 4h10v3M8 11h8M8 15h5"/></svg><span>المصاريف</span></button>
         <button class="side_btn" data-page="offers"><svg viewBox="0 0 24 24"><path d="M20 13 13 20 4 11V4h7z"/><circle cx="8" cy="8" r="1"/></svg><span>العروض</span></button>
         <button class="side_btn" data-page="reports"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>التقارير</span></button>
         <button class="side_btn" data-page="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/></svg><span>الإعدادات</span></button>
@@ -446,6 +447,43 @@
       </section>
     </div>
 
+    <!-- ===== صفحة إدارة المصاريف ===== -->
+    <div class="page-content" id="page-expenses" style="display: none">
+      <section class="admin_expenses_workspace" aria-labelledby="admin_expenses_title">
+        <header class="admin_expenses_header">
+          <div><p>الرقابة المالية</p><h1 id="admin_expenses_title">إدارة المصاريف</h1><span>تسجيل ومراجعة مصاريف أيام العمل</span></div>
+          <div class="admin_expenses_kpis"><article><span>عدد العمليات</span><strong id="adminExpensesCount">0</strong></article><article><span>إجمالي الفترة</span><strong id="adminExpensesTotal">0 ج.م</strong></article></div>
+        </header>
+        <div class="admin_expenses_grid">
+          <form id="adminExpenseForm" class="admin_expense_form">
+            <input id="adminExpenseId" type="hidden">
+            <div class="admin_expense_form_heading"><div><small>بيانات العملية</small><h2 id="adminExpenseFormTitle">تسجيل مصروف جديد</h2></div><button id="adminExpenseCancelEdit" type="button" hidden>إلغاء التعديل</button></div>
+            <label><span>البند</span><input id="adminExpenseTitle" type="text" maxlength="120" minlength="2" required placeholder="مثال: صيانة أو مشتريات"></label>
+            <div class="admin_expense_form_row">
+              <label><span>المبلغ</span><input id="adminExpenseAmount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label>
+              <label><span>يوم المصروف</span><span class="stable_date_input"><input id="adminExpenseDate" type="date" required><span class="stable_date_value" aria-hidden="true"></span></span></label>
+            </div>
+            <label><span>ملاحظة</span><textarea id="adminExpenseNote" rows="3" maxlength="500" placeholder="تفاصيل إضافية اختيارية"></textarea></label>
+            <button id="adminExpenseSubmit" class="admin_expense_submit" type="submit">حفظ المصروف</button>
+          </form>
+          <section class="admin_expenses_list_panel">
+            <div class="admin_expenses_filters">
+              <label><span>من</span><span class="stable_date_input"><input id="adminExpensesStart" type="date"><span class="stable_date_value" aria-hidden="true"></span></span></label>
+              <label><span>إلى</span><span class="stable_date_input"><input id="adminExpensesEnd" type="date"><span class="stable_date_value" aria-hidden="true"></span></span></label>
+              <label class="admin_expenses_search"><span>بحث</span><input id="adminExpensesSearch" type="search" placeholder="البند أو الملاحظة"></label>
+              <button id="adminExpensesApply" type="button">عرض</button>
+            </div>
+            <div class="table_structure_unified admin_expenses_table_wrap"><div class="table_scroll_unified">
+              <table class="orders_table" id="adminExpensesTable">
+                <thead><tr><th>اليوم</th><th>البند</th><th>المبلغ</th><th>الملاحظة</th><th>سجله</th><th>المصدر</th><th>الإجراءات</th></tr></thead>
+                <tbody><tr><td colspan="7" class="admin_expenses_empty">اختر الفترة لعرض المصاريف</td></tr></tbody>
+              </table>
+            </div></div>
+          </section>
+        </div>
+      </section>
+    </div>
+
     <!-- ===== صفحة التقارير ===== -->
     <div class="page-content" id="page-reports" style="display: none">
       <section class="reports_workspace" aria-labelledby="reports_heading">
@@ -525,7 +563,7 @@
           <div class="table_structure_reports reports_expenses_card">
             <div class="reports_table_scroll reports_expenses_scroll">
               <table class="orders_table_reports reports_expenses_table">
-                <thead><tr><th>البند</th><th>المبلغ</th><th>الكاشير</th><th>الملاحظة</th><th>التاريخ</th><th>الوقت</th></tr></thead>
+                <thead><tr><th>البند</th><th>المبلغ</th><th>سجله</th><th>الملاحظة</th><th>التاريخ</th><th>الوقت</th></tr></thead>
                 <tbody><tr><td colspan="6" class="reports_empty">اختر فترة لعرض المصروفات</td></tr></tbody>
               </table>
             </div>
@@ -849,6 +887,7 @@
     <script src="js/delivery-operations.js?v=20260820-delivery-desk"></script>
     <script src="js/offer.js?v=20260825-shared-live"></script>
     <script src="js/shifts.js?v=20260916-business-date-format"></script>
+    <script src="js/expenses-admin.js?v=20260921-admin-expenses"></script>
     <script src="js/settings.js?v=20260912-payment-settings"></script>
 
     <script src="js/chart.js?v=20260916-business-date"></script>

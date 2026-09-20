@@ -7,6 +7,7 @@
   let reconnectTimer = null;
   let heartbeatTimer = null;
   let fallbackRefreshTimer = null;
+  let dashboardLoadPromise = null;
   let latestStats = {};
   let currentOrderFilter = "all";
 
@@ -24,8 +25,10 @@
   }
 
   // ===== INITIAL LOAD =====
-  async function loadDashboardData() {
-    try {
+  function loadDashboardData() {
+    if (dashboardLoadPromise) return dashboardLoadPromise;
+    dashboardLoadPromise = (async () => {
+      try {
       // 1. Fetch Stats
       await loadDashboardStats();
 
@@ -46,9 +49,13 @@
         renderOrdersTable();
         updateOperationalUI();
       }
-    } catch (err) {
-      console.error("Dashboard load failed:", err);
-    }
+      } catch (err) {
+        console.error("Dashboard load failed:", err);
+      } finally {
+        dashboardLoadPromise = null;
+      }
+    })();
+    return dashboardLoadPromise;
   }
 
   // ===== RENDER TABLE =====
@@ -288,14 +295,6 @@
 
   function handleSocketEvent(payload) {
     const { type, data } = payload;
-
-    if (type === "ORDER_SNAPSHOT") {
-        ordersList = data.orders || [];
-        renderOrdersTable();
-        updateOperationalUI();
-        setTimeout(loadDashboardStats, 300);
-        return;
-    }
 
     // Refresh Orders/Dashboard
     if (type === "NEW_ORDER" || type === "ORDER_UPDATED") {

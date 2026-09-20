@@ -169,3 +169,25 @@ class OrderListResponse(BaseModel):
     page: int
     page_size: int
     orders: List[OrderResponse]
+
+
+class DashboardOrderResponse(BaseModel):
+    """Lean order shape used by the operational dashboard."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    order_number: str
+    customer_name: Optional[str] = None
+    order_type: OrderType
+    order_status: OrderStatus
+    total_amount: Decimal
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    items: List[OrderItemResponse]
+
+
+class DashboardOrderListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    orders: List[DashboardOrderResponse]

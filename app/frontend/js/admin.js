@@ -54,6 +54,9 @@ function showPage(pageId) {
   if (pageId === "delivery-ops" && typeof window.refreshDeliveryOperations === "function") {
     window.refreshDeliveryOperations();
   }
+  if (pageId === "expenses" && typeof window.refreshAdminExpenses === "function") {
+    window.refreshAdminExpenses();
+  }
 
   history.pushState({ page: pageId }, "", "#" + pageId);
 }
@@ -174,7 +177,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // --- تحديد الصفحة الأولى ---
   const hash = window.location.hash.replace("#", "");
-  const validPages = ["home", "items", "categories", "delivery", "delivery-ops", "shifts", "reports", "offers", "settings", "events"];
+  const validPages = ["home", "items", "categories", "delivery", "delivery-ops", "shifts", "expenses", "reports", "offers", "settings", "events"];
   showPage(validPages.includes(hash) ? hash : "home");
 
   // --- Back/Forward ---

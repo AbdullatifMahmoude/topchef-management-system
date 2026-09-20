@@ -1,4 +1,5 @@
 import inspect
+import asyncio
 
 import pytest
 from fastapi.testclient import TestClient
@@ -156,3 +157,56 @@ def test_whatsapp_worker_is_started_only_by_leader_election():
     assert "on_leader_elected(whatsapp_outbox_worker.start)" in source
     assert "on_leader_lost(whatsapp_outbox_worker.stop)" in source
     assert "await whatsapp_outbox_worker.start()" not in source
+
+
+def test_private_websocket_does_not_materialize_order_snapshot():
+    from app.modules.orders.router import websocket_orders
+
+    source = inspect.getsource(websocket_orders)
+    assert "page_size=500" not in source
+    assert "ORDER_SNAPSHOT" not in source
+    assert '"type": "CONNECTION_READY"' in source
+
+
+def test_admin_dashboard_coalesces_parallel_initial_loads():
+    source = open("app/frontend/js/orders_dashboard.js", encoding="utf-8").read()
+    assert "if (dashboardLoadPromise) return dashboardLoadPromise;" in source
+    assert 'type === "ORDER_SNAPSHOT"' not in source
+
+
+def test_cashier_reuses_authoritative_pricing_for_identical_previews():
+    source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+    assert "_lastSuccessfulPricingBody === requestBody" in source
+    assert "Date.now() - _lastSuccessfulPricingAt < 2000" in source
+    assert "displayCashierPricing(_lastSuccessfulPricingData)" in source
+    assert "generation !== _pricingGeneration" in source
+
+
+def test_dashboard_order_query_avoids_unrendered_relationships():
+    from app.modules.orders.repository import OrderRepository
+
+    source = inspect.getsource(OrderRepository.list_dashboard_orders)
+    assert "Order.items" in source
+    for relationship in ("Order.creator", "Order.delivery_person", "Order.address", "Order.modifications"):
+        assert relationship not in source
+
+
+@pytest.mark.asyncio
+async def test_leader_tasks_are_cancelled_when_leadership_is_lost():
+    from app.core.leader import LeaderManager
+
+    manager = LeaderManager("test-worker")
+    started = asyncio.Event()
+
+    async def long_running_task():
+        started.set()
+        await asyncio.sleep(3600)
+
+    manager._start_leader_task(long_running_task)
+    await started.wait()
+    task = next(iter(manager._leader_tasks))
+
+    await manager._cancel_leader_tasks()
+
+    assert task.cancelled()
+    assert not manager._leader_tasks

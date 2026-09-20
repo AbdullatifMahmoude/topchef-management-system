@@ -14,6 +14,7 @@ from app.core.logging import logger
 from app.core.observability import ObservabilityMiddleware, metrics
 from app.cors import add_cors_middleware
 
+from app.modules.ai_menu import register_ai_menu
 from app.modules.auth import register_auth
 from app.modules.comments import register_comments
 from app.modules.customer import register_customer
@@ -141,6 +142,7 @@ app.add_middleware(ObservabilityMiddleware)
 add_cors_middleware(app)
 
 register_auth(app)
+register_ai_menu(app)
 register_menu(app)
 register_meta_agent(app)
 register_user(app)

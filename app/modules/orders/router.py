@@ -99,7 +99,7 @@ async def get_dashboard_stats(
 ):
     return await service.get_today_stats()
 
-@router.get("/dashboard/today", response_model=schemas.OrderListResponse)
+@router.get("/dashboard/today", response_model=schemas.DashboardOrderListResponse)
 async def list_dashboard_today_orders(
     source: Optional[OrderSource] = None,
     status: Optional[OrderStatus] = None,
@@ -312,7 +312,7 @@ async def websocket_online(websocket: WebSocket):
 async def websocket_orders(
     websocket: WebSocket,
     channel: str = "default",
-    service: OrderService = Depends(get_order_service),
+    db: AsyncSession = Depends(get_db),
 ):
 
     token = websocket_protocol_token(websocket.headers.get("sec-websocket-protocol"))
@@ -324,32 +324,17 @@ async def websocket_orders(
         logger.warning("WebSocket authentication rejected channel=%s", channel)
         await websocket.close(code=4401, reason="Authentication required")
         return
-    user = await AuthRepository(service.db).get_user_by_id(payload["user_id"])
+    user = await AuthRepository(db).get_user_by_id(payload["user_id"])
     if not user or not user.is_active or user.role.value not in WS_CHANNEL_ROLES[channel]:
         logger.warning("WebSocket authorization rejected channel=%s user_id=%s", channel, payload["user_id"])
         await websocket.close(code=4403, reason="Not authorized for this channel")
         return
     await order_events_manager.connect(websocket, channel, already_accepted=True)
     try:
-        if channel in {"cashier", "admin", "default"}:
-            total, orders = await service.list_orders_paginated(page=1, page_size=500)
-            
-            validated_orders = []
-            for order in orders:
-                try:
-                    validated_orders.append(
-                        schemas.OrderResponse.model_validate(order).model_dump(mode="json")
-                    )
-                except Exception as e:
-                    logger.warning(f"Skipping malformed order {getattr(order, 'id', 'unknown')} in WS snapshot: {e}")
-
-            await websocket.send_json({
-                "type": "ORDER_SNAPSHOT",
-                "data": {
-                    "total": total,
-                    "orders": validated_orders,
-                },
-            })
+        # Initial order data is fetched through the paginated HTTP endpoints.
+        # Keeping WebSocket startup payload-free avoids materializing hundreds
+        # of orders and all eager-loaded relationships for every reconnect.
+        await websocket.send_json({"type": "CONNECTION_READY"})
 
         while True:
             message = await websocket.receive_text()

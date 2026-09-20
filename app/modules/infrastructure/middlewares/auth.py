@@ -22,6 +22,7 @@ PUBLIC_PATHS = {
     "/settings/menu-checkout",
     "/health",
     "/metrics",
+    "/ai-menu",
 }
 
 # Paths that allow prefix matching (like WebSockets)

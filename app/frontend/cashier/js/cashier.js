@@ -396,15 +396,7 @@ function renderCart() {
   const empty = document.getElementById("cart_empty");
   const totalEl = document.getElementById("total_price");
 
-  const itemsTotal = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
-  let fee = 0;
-  if (orderType === "delivery" && hasFeeValue(selectedDeliveryFee))
-    fee = selectedDeliveryFee;
-  else if (orderType === "dine_in" && hasFeeValue(selectedDineInFee))
-    fee = selectedDineInFee;
-
-  const grandTotal = itemsTotal + fee;
-  totalEl.textContent = grandTotal.toFixed(2) + " ج.م";
+  totalEl.textContent = cart.length ? "جاري الحساب..." : "0.00 ج.م";
 
   // استدعاء معاينة الأسعار من الباك إند
   updatePricingPreview();
@@ -1356,13 +1348,30 @@ function selectOrderType(type) {
 // ===================================================
 let _pricingTimeout = null;
 let _pricingAbortController = null;
+let _pricingInFlightBody = null;
+let _lastSuccessfulPricingBody = null;
+let _lastSuccessfulPricingAt = 0;
+let _lastSuccessfulPricingData = null;
+let _pricingGeneration = 0;
+
+function displayCashierPricing(pricing) {
+  const totalEl = document.getElementById("total_price");
+  if (totalEl && pricing?.total_amount != null) {
+    totalEl.textContent = parseFloat(pricing.total_amount).toFixed(2) + " ج.م";
+  }
+}
 
 async function updatePricingPreview() {
+  const generation = ++_pricingGeneration;
+  if (_pricingAbortController) _pricingAbortController.abort();
+  _pricingAbortController = null;
+  _pricingInFlightBody = null;
+
   if (cart.length === 0) {
     if (_pricingTimeout) clearTimeout(_pricingTimeout);
     _pricingTimeout = null;
-    if (_pricingAbortController) _pricingAbortController.abort();
-    _pricingAbortController = null;
+    const totalEl = document.getElementById("total_price");
+    if (totalEl) totalEl.textContent = "0.00 ج.م";
     return;
   }
 
@@ -1371,9 +1380,7 @@ async function updatePricingPreview() {
 
   _pricingTimeout = setTimeout(async () => {
     _pricingTimeout = null;
-    if (_pricingAbortController) _pricingAbortController.abort();
-    const controller = new AbortController();
-    _pricingAbortController = controller;
+    let controller = null;
     try {
       const items = cart.map((c) => {
         let prodId = c.item.id;
@@ -1412,33 +1419,54 @@ async function updatePricingPreview() {
         manual_discount_value: selectedOfferCode ? null : discountValue,
       };
 
+      const requestBody = JSON.stringify(payload);
+      if (
+        _lastSuccessfulPricingBody === requestBody &&
+        Date.now() - _lastSuccessfulPricingAt < 2000 &&
+        _lastSuccessfulPricingData
+      ) {
+        if (generation === _pricingGeneration) {
+          displayCashierPricing(_lastSuccessfulPricingData);
+        }
+        return;
+      }
+
+      controller = new AbortController();
+      _pricingAbortController = controller;
+      _pricingInFlightBody = requestBody;
       const res = await apiFetch("/pricing/preview", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: requestBody,
         hideLoader: true, // لا نريد إيقاف الواجهة في المعاينة
         signal: controller.signal,
       });
 
       if (res.ok) {
         const data = await res.json();
+        if (generation !== _pricingGeneration) return;
+        _lastSuccessfulPricingBody = requestBody;
+        _lastSuccessfulPricingAt = Date.now();
+        _lastSuccessfulPricingData = data;
+        displayCashierPricing(data);
+      } else if (generation === _pricingGeneration) {
+        const errorPayload = await res.json().catch(() => ({}));
+        const message = typeof errorPayload.detail === "string"
+          ? errorPayload.detail
+          : "تعذر حساب إجمالي الطلب";
         const totalEl = document.getElementById("total_price");
-        if (totalEl && data.total_amount != null) {
-          totalEl.textContent =
-            parseFloat(data.total_amount).toFixed(2) + " ج.م";
-          // يمكننا مستقبلاً عرض الخصم والـ subtotal هنا
-        }
-      } else if (selectedOfferCode) {
-        const payload = await res.json().catch(() => ({}));
-        const message = typeof payload.detail === "string" ? payload.detail : "شروط العرض غير مكتملة في الطلب الحالي";
+        if (totalEl) totalEl.textContent = "تعذر الحساب";
         showToast(message, "error");
       }
     } catch (err) {
-      if (err.name !== "AbortError") {
+      if (err.name !== "AbortError" && generation === _pricingGeneration) {
+        const totalEl = document.getElementById("total_price");
+        if (totalEl) totalEl.textContent = "تعذر الحساب";
         console.warn("Pricing preview failed:", err);
       }
     } finally {
-      if (_pricingAbortController === controller) {
+      if (controller && _pricingAbortController === controller) {
         _pricingAbortController = null;
+        _pricingInFlightBody = null;
       }
     }
   }, 400);
@@ -2894,36 +2922,6 @@ function handleSocketEvent(payload) {
     scheduleOffersRefresh(450);
   }
 
-  if (payload.type === "ORDER_SNAPSHOT") {
-    const orders = Array.isArray(payload.data?.orders)
-      ? payload.data.orders
-      : [];
-    ordersSnapshotLoaded = true;
-    // Split the live snapshot into cashier and online orders.
-    const allFromSnapshot = orders.filter((o) => !isOnlineOrder(o));
-    const onlineFromSnapshot = orders.filter(isOnlineOrder);
-    // Respect pagination: only keep first page and set totals
-    allOrdersTotal = allFromSnapshot.length;
-    onlineOrdersTotal = onlineFromSnapshot.length;
-    allOrdersList = allFromSnapshot.slice(0, ordersPageSize);
-    onlineOrdersList = onlineFromSnapshot.slice(0, ordersPageSize);
-    allOrdersCurrentPage = 1;
-    onlineOrdersCurrentPage = 1;
-    lastSocketOrderUpdate = Date.now();
-    updateOnlineStats();
-    renderOnlineOrders();
-    renderAllOrders();
-    refreshNewOrdersBadge();
-    updateConnectionStatus("connected");
-
-    // Always fetch from server for accurate pagination and data
-    setTimeout(() => {
-      fetchOnlineOrdersServer(1, true);
-      fetchAllOrdersServer(1, true);
-    }, 300);
-    return;
-  }
-
   if (payload.type === "SYNC_COMPLETE") {
     console.debug("Desktop master data sync complete, refreshing data safely...");
     // Safe targeted refresh: reload menu and orders without resetting UI state (cart, modals, etc.)
@@ -3852,6 +3850,11 @@ function openOrderDetails(orderId, source) {
     dine_in: "صالة",
     hall: "صالة",
   };
+  const paymentMethodLabels = {
+    cash: "نقدي",
+    instapay: "InstaPay",
+    wallet: "محفظة",
+  };
 
   const statusMap = {
     new: { label: "جديد", cls: "badge_new" },
@@ -3976,6 +3979,10 @@ function openOrderDetails(orderId, source) {
           <div class="info_group">
             <h4>نوع الطلب</h4>
             <p>${typeLabels[order.order_type] || order.order_type}</p>
+          </div>
+          <div class="info_group">
+            <h4>طريقة الدفع</h4>
+            <p>${paymentMethodLabels[order.payment_method] || "غير محددة"}</p>
           </div>
           <div class="info_group">
             <h4>العنوان</h4>

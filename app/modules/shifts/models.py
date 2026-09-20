@@ -37,7 +37,9 @@ class ShiftExpense(Base):
     __tablename__ = "shift_expenses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    shift_id: Mapped[int] = mapped_column(Integer, ForeignKey("cashier_shifts.id", ondelete="CASCADE"), index=True)
+    # Admin-entered day expenses are not attributed to a cashier's till, so
+    # they deliberately have no shift. Cashier-entered expenses remain linked.
+    shift_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("cashier_shifts.id", ondelete="CASCADE"), nullable=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True)
     target_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(120), nullable=False)

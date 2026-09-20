@@ -41,4 +41,6 @@ def test_admin_date_fields_use_business_date_and_stable_day_month_format():
 
     assert 'window.apiFetch("/shifts/business-date"' in chart_source
     assert "`${day}/${month}/${year}`" in admin_source
-    assert dashboard.count('class="stable_date_input"') == 5
+    assert dashboard.count('class="stable_date_input"') == 8
+    for field_id in ("adminExpenseDate", "adminExpensesStart", "adminExpensesEnd"):
+        assert f'id="{field_id}"' in dashboard

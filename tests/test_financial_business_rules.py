@@ -169,6 +169,20 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("if (cart.length === 0) {", source)
         self.assertIn("_pricingTimeout = null;", source)
 
+    def test_cashier_displays_only_authoritative_pricing(self):
+        source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+        self.assertIn('totalEl.textContent = cart.length ? "جاري الحساب..."', source)
+        self.assertNotIn("const grandTotal = itemsTotal + fee", source)
+        self.assertIn("displayCashierPricing(_lastSuccessfulPricingData)", source)
+        self.assertIn("if (generation !== _pricingGeneration) return;", source)
+
+    def test_order_details_display_persisted_payment_method(self):
+        source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+        details_start = source.index("function openOrderDetails")
+        details_end = source.index("// ===================================================", details_start + 1)
+        details_source = source[details_start:details_end]
+        self.assertIn("طريقة الدفع", details_source)
+        self.assertIn("paymentMethodLabels[order.payment_method]", details_source)
 
 if __name__ == "__main__":
     unittest.main()

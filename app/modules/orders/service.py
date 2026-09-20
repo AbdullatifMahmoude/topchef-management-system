@@ -291,7 +291,7 @@ class OrderService:
         return await self.repository.list_orders(cashier_id=cashier_id, **kwargs)
 
     async def list_orders_for_business_day(self, source: Optional[str] = None, status: Optional[str] = None, order_type: Optional[str] = None, cashier_id: Optional[int] = None) -> List[models.Order]:
-        return await self.repository.list_orders(
+        return await self.repository.list_dashboard_orders(
             source=source,
             status=status,
             order_type=order_type,

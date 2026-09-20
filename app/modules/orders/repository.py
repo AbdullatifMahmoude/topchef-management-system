@@ -180,6 +180,40 @@ class OrderRepository:
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    async def list_dashboard_orders(
+        self,
+        source: OrderSource | None = None,
+        status: OrderStatus | None = None,
+        order_type: OrderType | None = None,
+        cashier_id: int | None = None,
+    ) -> list[models.Order]:
+        """Load only relationships rendered by the operational dashboard."""
+        query = select(models.Order).options(
+            selectinload(models.Order.items).selectinload(models.OrderItem.product),
+        ).where(
+            models.Order.is_deleted == False,
+            models.Order.order_date == self.get_business_date(),
+        )
+        if source:
+            query = query.where(models.Order.order_source == source)
+        if status:
+            query = query.where(models.Order.order_status == status)
+        if order_type:
+            query = query.where(models.Order.order_type == order_type)
+        if cashier_id:
+            from sqlalchemy import and_, or_
+            query = query.where(
+                or_(
+                    and_(
+                        models.Order.order_source == OrderSource.CASHIER,
+                        models.Order.created_by_user_id == cashier_id,
+                    ),
+                    models.Order.order_source == OrderSource.ONLINE,
+                )
+            )
+        result = await self.db.execute(query.order_by(desc(models.Order.created_at)))
+        return result.scalars().all()
+
     async def get_next_order_number(self) -> str:
         """Atomically increment the per-terminal, per-business-day counter."""
         from sqlalchemy.dialects.postgresql import insert as pg_insert
