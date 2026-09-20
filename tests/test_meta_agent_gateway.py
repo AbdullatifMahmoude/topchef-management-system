@@ -65,6 +65,20 @@ def test_gateway_accepts_configured_key(monkeypatch):
     }
 
 
+def test_gateway_base_url_is_an_authenticated_readiness_probe(monkeypatch):
+    monkeypatch.setattr(settings, "META_AGENT_API_KEY", "configured-secret")
+
+    unauthenticated = build_client().get("/integrations/meta-agent/v1")
+    authenticated = build_client().get(
+        "/integrations/meta-agent/v1",
+        headers={META_AGENT_HEADER: "configured-secret"},
+    )
+
+    assert unauthenticated.status_code == 401
+    assert authenticated.status_code == 200
+    assert authenticated.json()["status"] == "ready"
+
+
 def test_gateway_declares_read_only_capabilities(monkeypatch):
     monkeypatch.setattr(settings, "META_AGENT_API_KEY", "configured-secret")
 
