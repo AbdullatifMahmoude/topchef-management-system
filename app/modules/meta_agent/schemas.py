@@ -43,3 +43,20 @@ class AgentCapabilities(BaseModel):
     specialist_message: str = Field(
         default="هذا الطلب يحتاج إلى مختص من المطعم لإتمامه بأمان."
     )
+
+
+class CustomerVerificationRequest(BaseModel):
+    customer_phone: str = Field(
+        min_length=10,
+        max_length=20,
+        description="WhatsApp sender phone number from the current conversation",
+    )
+    message: str = Field(
+        min_length=12,
+        max_length=200,
+        description="The customer's message containing the exact TCV-XXXXXXXX code",
+    )
+
+
+class CustomerVerificationResponse(BaseModel):
+    verified: bool
