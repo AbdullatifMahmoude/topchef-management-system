@@ -4,6 +4,7 @@ import re
 import secrets
 from urllib.parse import quote
 
+from app.core.config import settings
 from app.core.exceptions import AuthenticationError, AuthenticationServiceUnavailable
 from app.modules.customer.phone import normalize_egyptian_phone
 from app.modules.settings.service import SettingsService
@@ -33,6 +34,8 @@ async def _setex(redis, key: str, ttl: int, value: str) -> None:
 
 async def create_inbound_challenge(db, redis, *, phone: str, actor_type: str,
                                    actor_id: int | None, purpose: str) -> dict:
+    if not settings.WHATSAPP_VERIFICATION_ENABLED:
+        raise AuthenticationServiceUnavailable()
     if redis is None:
         raise AuthenticationServiceUnavailable()
     config = await SettingsService(db, redis).get_whatsapp_settings()
@@ -65,6 +68,8 @@ async def create_inbound_challenge(db, redis, *, phone: str, actor_type: str,
 
 
 async def consume_incoming_message(redis, sender: str, message: str) -> bool:
+    if not settings.WHATSAPP_VERIFICATION_ENABLED:
+        return False
     if redis is None:
         return False
     match = _CODE_RE.search(message or "")

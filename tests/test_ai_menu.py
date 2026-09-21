@@ -52,6 +52,10 @@ def test_ai_menu_is_public_current_and_excludes_delivery_fee(monkeypatch):
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-cache, max-age=0, must-revalidate"
+    assert '<meta name="googlebot" content="noindex,nofollow">' in response.text
+    assert '<meta name="bingbot" content="noindex,nofollow">' in response.text
+    assert '<meta name="robots" content="index,follow">' not in response.text
+    assert "x-robots-tag" not in response.headers
     assert "وجبة توب شيف" in response.text
     assert "125.00 جنيه" in response.text
     assert "LUNCH10" in response.text

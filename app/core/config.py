@@ -2,7 +2,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -19,7 +19,19 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 720
     REDIS_URL: str | None = None
     META_AGENT_API_KEY: str | None = None
+    META_AGENT_ENABLED: bool = False
     WHATSAPP_OUTBOX_ENABLED: bool = False
+    WHATSAPP_VERIFICATION_ENABLED: bool = False
+    EMAIL_ENABLED: bool = False
+    SMTP_HOST: str = "smtp.hostinger.com"
+    SMTP_PORT: int = Field(default=465, ge=1, le=65535)
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_SECURITY: str = "ssl"
+    SMTP_TIMEOUT_SECONDS: int = Field(default=15, ge=1, le=60)
+    EMAIL_FROM_ADDRESS: str | None = None
+    EMAIL_FROM_NAME: str = "Top Chef"
+    SUPPORT_EMAIL: str | None = None
     REMOTE_API: str = "https://topchef-system.fastapicloud.dev"
     TERMINAL_ID: str = Field(default=os.getenv("TERMINAL_ID", "T1"))
     CORS_ORIGINS: str = "http://127.0.0.1:5500,http://localhost:5500,https://topchef-dashboard.vercel.app,https://topchefeg.com,https://www.topchefeg.com"
@@ -42,6 +54,30 @@ class Settings(BaseSettings):
             for origin in (*configured, *required_origins)
             if origin and origin != "*"
         ))
+
+    @field_validator("SMTP_SECURITY", mode="before")
+    @classmethod
+    def normalize_smtp_security(cls, value: str) -> str:
+        normalized = str(value).strip().lower()
+        if normalized not in {"ssl", "starttls"}:
+            raise ValueError("SMTP_SECURITY must be 'ssl' or 'starttls'")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_email_settings(self):
+        if self.EMAIL_ENABLED:
+            required = {
+                "SMTP_USERNAME": self.SMTP_USERNAME,
+                "SMTP_PASSWORD": self.SMTP_PASSWORD,
+                "EMAIL_FROM_ADDRESS": self.EMAIL_FROM_ADDRESS,
+                "SUPPORT_EMAIL": self.SUPPORT_EMAIL,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing:
+                raise ValueError(
+                    "EMAIL_ENABLED requires: " + ", ".join(missing)
+                )
+        return self
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

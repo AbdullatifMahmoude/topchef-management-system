@@ -1,14 +1,17 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Cookie, Depends, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import desc, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import (
+    AccountAlreadyActiveError,
     AuthenticationError,
     ValidationError,
 )
@@ -20,6 +23,7 @@ from app.modules.customer.account_schemas import (
     CustomerChallengeRequest,
     CustomerChallengeResponse,
     CustomerChallengeStatus,
+    CustomerChallengeVerifyRequest,
     CustomerCompleteRequest,
     CustomerDeviceResponse,
     CustomerLoginRequest,
@@ -35,18 +39,17 @@ from app.modules.customer.account_security import (
     decode_customer_access,
     rotate_device_session,
 )
+from app.modules.customer.email_verification import (
+    consume_email_challenge,
+    create_email_challenge,
+    normalize_email,
+    verify_email_challenge,
+)
 from app.modules.customer.phone import normalize_egyptian_phone
 from app.modules.customer.repository import CustomerRepository
 from app.modules.customer.schemas import CustomerAddressCreate, CustomerAddressResponse
 from app.modules.offer.models import OfferUsage
 from app.modules.orders.models import Order, OrderItem
-from app.modules.settings.service import SettingsService
-from app.modules.settings.whatsapp import inbound_verification_config_ready
-from app.modules.settings.whatsapp_verification import (
-    challenge_status,
-    consume_verified_challenge,
-    create_inbound_challenge,
-)
 
 router = APIRouter(prefix="/customer-auth", tags=["Customer Account"])
 bearer = HTTPBearer(auto_error=False)
@@ -64,35 +67,53 @@ async def current_customer_payload(credentials: HTTPAuthorizationCredentials | N
 
 
 @router.get("/availability", response_model=CustomerAccountAvailability)
-async def availability(db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
-    config = await SettingsService(db, redis).get_whatsapp_settings()
-    return CustomerAccountAvailability(available=bool(redis and inbound_verification_config_ready(config)))
+async def availability(redis=Depends(get_redis)):
+    return CustomerAccountAvailability(available=bool(redis and settings.EMAIL_ENABLED))
 
 
 @router.post("/challenges", response_model=CustomerChallengeResponse)
 async def begin_challenge(data: CustomerChallengeRequest, db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
-    phone = normalize_egyptian_phone(data.phone)
-    customer = await CustomerRepository(db).get_by_phone(phone)
-    if data.purpose == "activate" and customer and customer.pin_hash:
-        raise ValidationError("الحساب مفعل بالفعل؛ اختر تسجيل الدخول")
-    return await create_inbound_challenge(
-        db, redis, phone=phone, actor_type="customer", actor_id=customer.id if customer else None,
-        purpose=data.purpose,
+    repo = CustomerRepository(db)
+    email = normalize_email(data.email)
+    phone = normalize_egyptian_phone(data.phone) if data.phone else None
+    if data.purpose == "activate":
+        customer = await repo.get_by_phone(phone)
+        email_owner = await repo.get_by_email(email)
+        if customer and customer.pin_hash:
+            raise AccountAlreadyActiveError()
+        if email_owner and (not customer or email_owner.id != customer.id):
+            raise ValidationError("البريد الإلكتروني مستخدم بالفعل")
+        send_email = True
+    else:
+        customer = await repo.get_by_email(email)
+        send_email = bool(customer and customer.pin_hash)
+    return await create_email_challenge(
+        redis, email=email, phone=phone, actor_type="customer",
+        actor_id=customer.id if customer else None, purpose=data.purpose,
+        send_email=send_email,
     )
 
 
-@router.get("/challenges/{challenge_id}", response_model=CustomerChallengeStatus)
-async def get_challenge_status(challenge_id: str, redis=Depends(get_redis)):
-    return CustomerChallengeStatus(verified=await challenge_status(redis, challenge_id))
+@router.post("/challenges/{challenge_id}/verify", response_model=CustomerChallengeStatus)
+async def verify_challenge(challenge_id: str, data: CustomerChallengeVerifyRequest,
+                           redis=Depends(get_redis)):
+    return CustomerChallengeStatus(
+        verified=await verify_email_challenge(redis, challenge_id, data.code)
+    )
 
 
 @router.post("/login", response_model=CustomerTokenResponse)
 async def login_customer(data: CustomerLoginRequest, response: Response,
                          db: AsyncSession = Depends(get_db)):
-    phone = normalize_egyptian_phone(data.phone)
-    customer = await CustomerRepository(db).get_by_phone(phone)
+    repo = CustomerRepository(db)
+    identifier = data.identifier.strip()
+    customer = (
+        await repo.get_by_email(normalize_email(identifier))
+        if "@" in identifier
+        else await repo.get_by_phone(normalize_egyptian_phone(identifier))
+    )
     if not customer or not customer.pin_hash or not verify_password(data.pin, customer.pin_hash):
-        raise AuthenticationError("رقم الهاتف أو PIN غير صحيح")
+        raise AuthenticationError("رقم الهاتف أو البريد أو PIN غير صحيح")
     access, refresh, _device = await create_device_session(db, customer.id, data.device_name)
     await db.commit()
     _set_refresh_cookie(response, refresh)
@@ -102,13 +123,18 @@ async def login_customer(data: CustomerLoginRequest, response: Response,
 @router.post("/complete", response_model=CustomerTokenResponse)
 async def complete_customer_auth(data: CustomerCompleteRequest, response: Response,
                                  db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
-    phone = normalize_egyptian_phone(data.phone)
+    email = normalize_email(data.email)
+    phone = normalize_egyptian_phone(data.phone) if data.phone else None
     repo = CustomerRepository(db)
-    customer = await repo.get_by_phone(phone)
-    record = await consume_verified_challenge(redis, data.challenge_id, actor_type="customer", purpose=data.purpose)
-    if record.get("phone") != phone:
-        raise AuthenticationError("رقم الهاتف لا يطابق التحقق")
+    record = await consume_email_challenge(
+        redis, data.challenge_id, actor_type="customer", purpose=data.purpose
+    )
+    if record.get("email") != email:
+        raise AuthenticationError("البريد الإلكتروني لا يطابق التحقق")
     if data.purpose == "activate":
+        if record.get("phone") != phone:
+            raise AuthenticationError("رقم الهاتف لا يطابق التحقق")
+        customer = await repo.get_by_phone(phone)
         if not customer:
             if not data.name:
                 raise ValidationError("الاسم مطلوب لإنشاء الحساب")
@@ -116,17 +142,26 @@ async def complete_customer_auth(data: CustomerCompleteRequest, response: Respon
             db.add(customer)
             await db.flush()
         elif record.get("actor_id") != customer.id or customer.pin_hash:
-            raise AuthenticationError("الحساب مفعل بالفعل")
+            raise AccountAlreadyActiveError()
+        email_owner = await repo.get_by_email(email)
+        if email_owner and email_owner.id != customer.id:
+            raise ValidationError("البريد الإلكتروني مستخدم بالفعل")
+        customer.email = email
         customer.pin_hash = get_password_hash(data.pin)
-        customer.account_activated_at = datetime.utcnow()
+        customer.account_activated_at = datetime.now(UTC).replace(tzinfo=None)
         if data.name:
             customer.name = data.name.strip()
     else:
+        customer = await repo.get_by_email(email)
         if not customer or not customer.pin_hash or record.get("actor_id") != customer.id:
             raise AuthenticationError("تعذر تأكيد الحساب")
         customer.pin_hash = get_password_hash(data.pin)
     access, refresh, _device = await create_device_session(db, customer.id, data.device_name)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise ValidationError("البريد الإلكتروني أو رقم الهاتف مستخدم بالفعل") from exc
     if redis:
         await redis.delete(f"customer_profile:{customer.id}")
         await redis.delete(f"customer_at_phone:{customer.phone_number}")
@@ -165,6 +200,7 @@ async def _profile(customer_id: int, db, redis):
     if not customer:
         raise AuthenticationError("الحساب غير متاح")
     data = CustomerProfile(id=customer.id, name=customer.name, phone_number=customer.phone_number,
+                           email=customer.email,
                            whatsapp_status=customer.whatsapp_status,
                            addresses=customer.addresses).model_dump(mode="json")
     if redis:

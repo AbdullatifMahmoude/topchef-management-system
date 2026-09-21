@@ -142,6 +142,7 @@ def test_customer_verification_tool_is_authenticated_and_phone_bound(monkeypatch
 
 def test_customer_verification_tool_consumes_live_sender_bound_code(monkeypatch):
     monkeypatch.setattr(settings, "META_AGENT_API_KEY", "configured-secret")
+    monkeypatch.setattr(settings, "WHATSAPP_VERIFICATION_ENABLED", True)
     cache = InMemoryCache()
     challenge_id = "challenge-id"
     code = "A1B2C3D4"

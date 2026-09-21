@@ -96,7 +96,8 @@ def render_ai_menu(catalog: dict) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="index,follow">
+  <meta name="googlebot" content="noindex,nofollow">
+  <meta name="bingbot" content="noindex,nofollow">
   <title>منيو وعروض توب شيف المحدثة</title>
 </head>
 <body>
@@ -120,6 +121,5 @@ async def ai_menu(db: AsyncSession = Depends(get_db)) -> HTMLResponse:  # noqa: 
         content=render_ai_menu(catalog),
         headers={
             "Cache-Control": "no-cache, max-age=0, must-revalidate",
-            "X-Robots-Tag": "index, follow",
         },
     )
