@@ -20,6 +20,7 @@ from app.core.security import get_password_hash, verify_password
 from app.modules.customer import models
 from app.modules.customer.account_schemas import (
     CustomerAccountAvailability,
+    CustomerBasicProfile,
     CustomerChallengeRequest,
     CustomerChallengeResponse,
     CustomerChallengeStatus,
@@ -27,9 +28,12 @@ from app.modules.customer.account_schemas import (
     CustomerCompleteRequest,
     CustomerDeviceResponse,
     CustomerLoginRequest,
+    CustomerNotificationResponse,
+    CustomerNotificationsResponse,
     CustomerOrdersResponse,
     CustomerProfile,
     CustomerProfileUpdate,
+    CustomerSessionResponse,
     CustomerTokenResponse,
 )
 from app.modules.customer.account_security import (
@@ -37,6 +41,7 @@ from app.modules.customer.account_security import (
     DEVICE_DAYS,
     create_device_session,
     decode_customer_access,
+    inspect_device_session,
     rotate_device_session,
 )
 from app.modules.customer.email_verification import (
@@ -180,6 +185,32 @@ async def refresh_customer_session(response: Response, db: AsyncSession = Depend
     return CustomerTokenResponse(access_token=access, customer_id=device.customer_id)
 
 
+@router.post("/session", response_model=CustomerSessionResponse)
+async def customer_session(response: Response, db: AsyncSession = Depends(get_db),
+                           topchef_customer_refresh: str | None = Cookie(default=None)):
+    if not topchef_customer_refresh:
+        return CustomerSessionResponse(authenticated=False)
+    try:
+        access, device = await inspect_device_session(db, topchef_customer_refresh)
+        customer = await CustomerRepository(db).get_basic_by_id(device.customer_id)
+        if not customer:
+            response.delete_cookie(COOKIE_NAME, path="/customer-auth", secure=True, samesite="none")
+            return CustomerSessionResponse(authenticated=False)
+    except AuthenticationError:
+        response.delete_cookie(COOKIE_NAME, path="/customer-auth", secure=True, samesite="none")
+        return CustomerSessionResponse(authenticated=False)
+    return CustomerSessionResponse(
+        authenticated=True,
+        access_token=access,
+        customer=CustomerBasicProfile(
+            id=customer.id,
+            name=customer.name,
+            phone_number=customer.phone_number,
+            email=customer.email,
+        ),
+    )
+
+
 @router.post("/logout")
 async def customer_logout(response: Response, payload=Depends(current_customer_payload), db: AsyncSession = Depends(get_db)):
     device = await db.get(models.CustomerDevice, payload["device_id"])
@@ -201,7 +232,6 @@ async def _profile(customer_id: int, db, redis):
         raise AuthenticationError("الحساب غير متاح")
     data = CustomerProfile(id=customer.id, name=customer.name, phone_number=customer.phone_number,
                            email=customer.email,
-                           whatsapp_status=customer.whatsapp_status,
                            addresses=customer.addresses).model_dump(mode="json")
     if redis:
         await redis.setex(key, 300, json.dumps(data, ensure_ascii=False))
@@ -211,6 +241,68 @@ async def _profile(customer_id: int, db, redis):
 @router.get("/me", response_model=CustomerProfile)
 async def customer_me(payload=Depends(current_customer_payload), db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
     return await _profile(payload["customer_id"], db, redis)
+
+
+@router.get("/me/basic", response_model=CustomerBasicProfile)
+async def customer_basic_profile(payload=Depends(current_customer_payload), db: AsyncSession = Depends(get_db)):
+    customer = await CustomerRepository(db).get_basic_by_id(payload["customer_id"])
+    if not customer:
+        raise AuthenticationError("الحساب غير متاح")
+    return CustomerBasicProfile(
+        id=customer.id,
+        name=customer.name,
+        phone_number=customer.phone_number,
+        email=customer.email,
+    )
+
+
+@router.patch("/me/basic", response_model=CustomerBasicProfile)
+async def update_customer_basic_profile(data: CustomerProfileUpdate, payload=Depends(current_customer_payload),
+                                        db: AsyncSession = Depends(get_db), redis=Depends(get_redis)):
+    customer = await CustomerRepository(db).get_basic_by_id(payload["customer_id"])
+    if not customer:
+        raise AuthenticationError("الحساب غير متاح")
+    customer.name = data.name.strip()
+    await db.commit()
+    if redis:
+        await redis.delete(f"customer_profile:{customer.id}")
+    return CustomerBasicProfile(
+        id=customer.id,
+        name=customer.name,
+        phone_number=customer.phone_number,
+        email=customer.email,
+    )
+
+
+@router.get("/me/notifications", response_model=CustomerNotificationsResponse)
+async def customer_notifications(payload=Depends(current_customer_payload), db: AsyncSession = Depends(get_db)):
+    customer_id = payload["customer_id"]
+    rows = list((await db.scalars(
+        select(models.CustomerNotification)
+        .where(models.CustomerNotification.customer_id == customer_id)
+        .order_by(desc(models.CustomerNotification.created_at))
+        .limit(50)
+    )).all())
+    return CustomerNotificationsResponse(
+        notifications=[CustomerNotificationResponse.model_validate(row, from_attributes=True) for row in rows],
+        unread_count=sum(not row.is_read for row in rows),
+    )
+
+
+@router.post("/me/notifications/read")
+async def read_customer_notifications(payload=Depends(current_customer_payload), db: AsyncSession = Depends(get_db)):
+    rows = list((await db.scalars(
+        select(models.CustomerNotification).where(
+            models.CustomerNotification.customer_id == payload["customer_id"],
+            models.CustomerNotification.is_read.is_(False),
+        )
+    )).all())
+    read_at = datetime.now(UTC).replace(tzinfo=None)
+    for row in rows:
+        row.is_read = True
+        row.read_at = read_at
+    await db.commit()
+    return {"updated": len(rows)}
 
 
 @router.patch("/me", response_model=CustomerProfile)

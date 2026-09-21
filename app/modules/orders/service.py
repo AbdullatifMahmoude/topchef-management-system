@@ -15,7 +15,7 @@ from app.core.protocols import PricingServiceInterface, OfferServiceInterface, C
 from app.core.events import order_events_manager
 from app.core.enums import OrderStatus, OrderSource, OrderType, PaymentMethod, UserRole
 from app.core.business_calendar import get_current_business_date, is_weekly_holiday
-from app.modules.orders.notifications import OrderNotificationPort, OutboxOrderNotifications
+from app.modules.orders.notifications import AccountOrderNotifications, OrderNotificationPort
 
 
 class OrderService:
@@ -33,7 +33,7 @@ class OrderService:
         self.pricing_service = pricing_service or PricingService(db)
         self.offer_service = offer_service or OfferService(db, redis=redis)
         self.settings_service = SettingsService(db, redis=redis)
-        self.notifications = notification_service or OutboxOrderNotifications(db)
+        self.notifications = notification_service or AccountOrderNotifications(db)
 
     @contextlib.asynccontextmanager
     async def _transaction_scope(self):

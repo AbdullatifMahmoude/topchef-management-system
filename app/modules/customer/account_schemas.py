@@ -59,6 +59,18 @@ class CustomerTokenResponse(BaseModel):
     token_type: str = "bearer"
     customer_id: int
 
+class CustomerBasicProfile(BaseModel):
+    id: int
+    name: str
+    phone_number: str
+    email: str | None = None
+
+class CustomerSessionResponse(BaseModel):
+    authenticated: bool
+    access_token: str | None = None
+    token_type: str = "bearer"
+    customer: CustomerBasicProfile | None = None
+
 class CustomerProfileUpdate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
 
@@ -67,8 +79,19 @@ class CustomerProfile(BaseModel):
     name: str
     phone_number: str
     email: str | None = None
-    whatsapp_status: str = "unknown"
     addresses: list[CustomerAddressResponse]
+
+class CustomerNotificationResponse(BaseModel):
+    id: int
+    order_id: int
+    title: str
+    message: str
+    is_read: bool
+    created_at: datetime
+
+class CustomerNotificationsResponse(BaseModel):
+    notifications: list[CustomerNotificationResponse]
+    unread_count: int
 
 class CustomerDeviceResponse(BaseModel):
     id: str

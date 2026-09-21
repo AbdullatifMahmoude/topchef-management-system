@@ -29,6 +29,15 @@ class CustomerRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
+    async def get_basic_by_id(self, customer_id: int) -> Optional[models.Customer]:
+        result = await self.db.execute(
+            select(models.Customer).where(
+                models.Customer.id == customer_id,
+                models.Customer.is_deleted == False,
+            )
+        )
+        return result.scalars().first()
+
     async def get_by_phone(self, phone: str) -> Optional[models.Customer]:
         candidates = phone_lookup_candidates(phone)
         if not candidates:

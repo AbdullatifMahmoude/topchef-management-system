@@ -61,3 +61,11 @@ async def rotate_device_session(db, raw_refresh: str) -> tuple[str, str, Custome
     device.expires_at = datetime.utcnow() + timedelta(days=DEVICE_DAYS)
     await db.flush()
     return create_customer_access(device.customer_id, device.id), new_refresh, device
+
+
+async def inspect_device_session(db, raw_refresh: str) -> tuple[str, CustomerDevice]:
+    result = await db.execute(select(CustomerDevice).where(CustomerDevice.refresh_token_hash == token_hash(raw_refresh)))
+    device = result.scalar_one_or_none()
+    if not device or device.revoked_at or device.expires_at < datetime.utcnow():
+        raise AuthenticationError("انتهت جلسة الجهاز")
+    return create_customer_access(device.customer_id, device.id), device
