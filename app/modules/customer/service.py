@@ -1,10 +1,13 @@
+import contextlib
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
-from app.modules.customer.repository import CustomerRepository
+
+from app.core.exceptions import NotFoundError, ValidationError
+from app.core.logging import logger
 from app.modules.customer import models, schemas
 from app.modules.customer.phone import normalize_egyptian_phone
-from app.core.exceptions import NotFoundError, ValidationError
-import contextlib
+from app.modules.customer.repository import CustomerRepository
+
 
 class CustomerService:
     def __init__(self, db: AsyncSession, redis=None):
@@ -45,8 +48,9 @@ class CustomerService:
         
         # 6. Emit real-time event for WebSocket subscribers
         try:
-            from app.core.events import order_events_manager
             import asyncio
+
+            from app.core.events import order_events_manager
             asyncio.ensure_future(order_events_manager.emit({
                 "type": "CUSTOMER_CREATED",
                 "data": {
@@ -55,8 +59,8 @@ class CustomerService:
                     "phone_number": reloaded_customer.phone_number,
                 }
             }))
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Customer cache invalidation failed: %s", exc)
         
         # 7. Invalidate any list caches if they exist
         await self._invalidate_cache(f"customer_at_phone:{reloaded_customer.phone_number}")
@@ -73,8 +77,8 @@ class CustomerService:
             try:
                 data = schemas.CustomerResponse.model_validate(customer).model_dump_json()
                 await self.redis.setex(f"customer_profile:{customer_id}", 3600, data)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Customer profile cache write failed: %s", exc)
         
         return customer
 
@@ -90,8 +94,8 @@ class CustomerService:
                 await self.redis.setex(f"customer_at_phone:{customer.phone_number}", 3600, data)
                 if normalized and normalized != customer.phone_number:
                     await self.redis.setex(f"customer_at_phone:{normalized}", 3600, data)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Customer phone cache write failed: %s", exc)
                 
         return customer
 
@@ -128,8 +132,9 @@ class CustomerService:
             
             # 6. Emit real-time event for WebSocket subscribers
             try:
-                from app.core.events import order_events_manager
                 import asyncio
+
+                from app.core.events import order_events_manager
                 asyncio.ensure_future(order_events_manager.emit({
                     "type": "ADDRESS_CREATED",
                     "data": {
@@ -138,8 +143,8 @@ class CustomerService:
                         "address": address_data.address,
                     }
                 }))
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Customer address cache invalidation failed: %s", exc)
             
             # 7. Invalidate Customer cache (since addresses changed)
             if self.redis:
@@ -152,8 +157,8 @@ class CustomerService:
         if self.redis:
             try:
                 await self.redis.delete(key)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Customer cache delete failed for %s: %s", key, exc)
 
-    async def list_customers(self) -> List[models.Customer]:
+    async def list_customers(self) -> list[models.Customer]:
         return await self.repository.list_customers()

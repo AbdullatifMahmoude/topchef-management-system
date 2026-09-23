@@ -1,14 +1,16 @@
 import calendar
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case, cast, Integer
 from datetime import date, timedelta
-from app.modules.orders.models import Order, OrderItem
-from app.modules.menu.models import Product
-from app.core.enums import OrderStatus, OrderType
-from decimal import Decimal, ROUND_HALF_UP
-from typing import List
-from . import schemas
+from decimal import ROUND_HALF_UP, Decimal
+
+from sqlalchemy import Integer, case, cast, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.business_calendar import get_current_business_date
+from app.core.enums import OrderStatus, OrderType
+from app.modules.menu.models import Product
+from app.modules.orders.models import Order, OrderItem
+
+from . import schemas
 
 
 # ─────────────────────────────────────────────────────────
@@ -99,7 +101,7 @@ def normalize_order_type(value) -> str:
 
 async def get_report_orders(
     db: AsyncSession, start_date: date, end_date: date, limit: int = 50, offset: int = 0
-) -> List[schemas.OrderReportItem]:
+) -> list[schemas.OrderReportItem]:
     delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     stmt = (
         select(
@@ -142,7 +144,7 @@ async def get_report_orders(
     return report_orders
 
 
-async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: date) -> List[schemas.TopSellingItem]:
+async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: date) -> list[schemas.TopSellingItem]:
     # Allocate the order-level discount proportionally across its items. This
     # keeps item revenue consistent with net sales for offers and manual
     # discounts instead of reporting the undiscounted line total.
@@ -185,7 +187,7 @@ async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: da
     ]
 
 
-async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date) -> List[schemas.RevenueTrendPoint]:
+async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date) -> list[schemas.RevenueTrendPoint]:
     delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     stmt = (
         select(
@@ -204,7 +206,7 @@ async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date) 
     return [schemas.RevenueTrendPoint(period_date=row.period_date, revenue=row.revenue or Decimal("0.00")) for row in rows]
 
 
-async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: date) -> List[schemas.ActivityBreakdownPoint]:
+async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: date) -> list[schemas.ActivityBreakdownPoint]:
     hour_expr = cast(func.extract("hour", Order.created_at), Integer)
     stmt = (
         select(Order.order_type, hour_expr.label("hour"), func.count(Order.id).label("count"))
@@ -226,7 +228,7 @@ async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: d
     ]
 
 
-async def get_report_expenses(db: AsyncSession, start_date: date, end_date: date) -> List[schemas.ExpenseReportItem]:
+async def get_report_expenses(db: AsyncSession, start_date: date, end_date: date) -> list[schemas.ExpenseReportItem]:
     from app.modules.shifts.models import ShiftExpense
     from app.modules.users.models import User
 

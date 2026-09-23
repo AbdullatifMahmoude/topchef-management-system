@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
+
+from pydantic import BaseModel, Field
+
 
 class ReportSummary(BaseModel):
     total_orders: int
@@ -20,7 +21,7 @@ class OrderReportItem(BaseModel):
     order_type: str
     items_summary: str
     total_amount: Decimal
-    order_date: Optional[date] = None
+    order_date: date | None = None
     created_at_time: str
     status: str = "completed"
 
@@ -42,23 +43,23 @@ class ExpenseReportItem(BaseModel):
     id: int
     title: str
     amount: Decimal
-    note: Optional[str] = None
+    note: str | None = None
     cashier_name: str
     target_date: date
     created_at: datetime
 
 class ReportDataMixin(BaseModel):
     summary: ReportSummary
-    orders: List[OrderReportItem] = Field(default_factory=list)
+    orders: list[OrderReportItem] = Field(default_factory=list)
     orders_offset: int = 0
     orders_limit: int = 50
-    top_items: List[TopSellingItem] = Field(default_factory=list)
-    revenue_trend: List[RevenueTrendPoint] = Field(default_factory=list)
-    activity_breakdown: List[ActivityBreakdownPoint] = Field(default_factory=list)
-    expenses: List[ExpenseReportItem] = Field(default_factory=list)
+    top_items: list[TopSellingItem] = Field(default_factory=list)
+    revenue_trend: list[RevenueTrendPoint] = Field(default_factory=list)
+    activity_breakdown: list[ActivityBreakdownPoint] = Field(default_factory=list)
+    expenses: list[ExpenseReportItem] = Field(default_factory=list)
 
 class ReportOrdersPage(BaseModel):
-    orders: List[OrderReportItem] = Field(default_factory=list)
+    orders: list[OrderReportItem] = Field(default_factory=list)
     offset: int
     limit: int
 

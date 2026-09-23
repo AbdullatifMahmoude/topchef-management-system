@@ -1,8 +1,9 @@
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Tuple, Optional
-from app.modules.comments.repository import CommentRepository
-from app.modules.comments import schemas, models
+
 from app.core.exceptions import NotFoundError
+from app.modules.comments import models, schemas
+from app.modules.comments.repository import CommentRepository
 
 
 class CommentService:
@@ -28,7 +29,7 @@ class CommentService:
         self,
         page: int = 1,
         page_size: int = 50
-    ) -> Tuple[int, List[models.Comment], Optional[float]]:
+    ) -> tuple[int, list[models.Comment], float | None]:
         """Get paginated comments with average rating."""
         total, comments = await self.repository.list_paginated(page=page, page_size=page_size)
         average_rating = await self.repository.get_average_rating()

@@ -109,7 +109,7 @@ async def collect_health(db_engine=engine, cache=redis_client) -> tuple[int, dic
     try:
         async with db_engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.error("Database health check failed: %s", exc)
         return 503, {"status": "unhealthy", "database": "disconnected", "redis": cache.status_label}
 
@@ -117,7 +117,7 @@ async def collect_health(db_engine=engine, cache=redis_client) -> tuple[int, dic
     if cache.redis is not None:
         try:
             await cache.redis.ping()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Redis health check failed: %s", exc)
             redis_status = "disconnected"
     status = "healthy" if redis_status == "connected" else "degraded"

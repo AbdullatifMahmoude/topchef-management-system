@@ -1,9 +1,9 @@
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.modules.menu import models, schemas
-from typing import Optional
-from sqlalchemy import delete
 from sqlalchemy.orm import selectinload
+
+from app.modules.menu import models, schemas
 
 
 # ============== category ===============#

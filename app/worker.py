@@ -5,10 +5,10 @@ import sys
 # Ensure project root is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.core.redis import redis_client
 from app.core.leader import global_leader_manager
 from app.core.logging import logger
-from app.core.config import settings
+from app.core.redis import redis_client
+
 
 async def main():
     logger.info("🚀 Starting Global Worker Process...")

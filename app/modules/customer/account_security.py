@@ -43,7 +43,7 @@ async def create_device_session(db, customer_id: int, device_name: str) -> tuple
     device = CustomerDevice(
         id=str(uuid4()), customer_id=customer_id, refresh_token_hash=token_hash(raw_refresh),
         device_name=(device_name.strip() or "جهاز")[:120],
-        expires_at=datetime.utcnow() + timedelta(days=DEVICE_DAYS),
+        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=DEVICE_DAYS),
     )
     db.add(device)
     await db.flush()
@@ -53,12 +53,12 @@ async def create_device_session(db, customer_id: int, device_name: str) -> tuple
 async def rotate_device_session(db, raw_refresh: str) -> tuple[str, str, CustomerDevice]:
     result = await db.execute(select(CustomerDevice).where(CustomerDevice.refresh_token_hash == token_hash(raw_refresh)))
     device = result.scalar_one_or_none()
-    if not device or device.revoked_at or device.expires_at < datetime.utcnow():
+    if not device or device.revoked_at or device.expires_at < datetime.now(UTC).replace(tzinfo=None):
         raise AuthenticationError("انتهت جلسة الجهاز")
     new_refresh = secrets.token_urlsafe(48)
     device.refresh_token_hash = token_hash(new_refresh)
-    device.last_used_at = datetime.utcnow()
-    device.expires_at = datetime.utcnow() + timedelta(days=DEVICE_DAYS)
+    device.last_used_at = datetime.now(UTC).replace(tzinfo=None)
+    device.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=DEVICE_DAYS)
     await db.flush()
     return create_customer_access(device.customer_id, device.id), new_refresh, device
 
@@ -66,6 +66,6 @@ async def rotate_device_session(db, raw_refresh: str) -> tuple[str, str, Custome
 async def inspect_device_session(db, raw_refresh: str) -> tuple[str, CustomerDevice]:
     result = await db.execute(select(CustomerDevice).where(CustomerDevice.refresh_token_hash == token_hash(raw_refresh)))
     device = result.scalar_one_or_none()
-    if not device or device.revoked_at or device.expires_at < datetime.utcnow():
+    if not device or device.revoked_at or device.expires_at < datetime.now(UTC).replace(tzinfo=None):
         raise AuthenticationError("انتهت جلسة الجهاز")
     return create_customer_access(device.customer_id, device.id), device

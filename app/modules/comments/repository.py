@@ -1,6 +1,7 @@
+
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
-from typing import Optional, Tuple, List
+
 from app.modules.comments import models, schemas
 
 
@@ -15,7 +16,7 @@ class CommentRepository:
         await self.db.flush()
         return comment
 
-    async def get_by_id(self, comment_id: int) -> Optional[models.Comment]:
+    async def get_by_id(self, comment_id: int) -> models.Comment | None:
         """Get a comment by ID."""
         query = select(models.Comment).where(
             models.Comment.id == comment_id,
@@ -28,7 +29,7 @@ class CommentRepository:
         self,
         page: int = 1,
         page_size: int = 50
-    ) -> Tuple[int, List[models.Comment]]:
+    ) -> tuple[int, list[models.Comment]]:
         """Get paginated comments, ordered by newest first."""
         query = select(models.Comment).where(models.Comment.is_deleted == False).order_by(desc(models.Comment.created_at))
         
@@ -43,7 +44,7 @@ class CommentRepository:
         result = await self.db.execute(query)
         return total, result.scalars().all()
 
-    async def get_average_rating(self) -> Optional[float]:
+    async def get_average_rating(self) -> float | None:
         """Get average rating of all comments."""
         query = select(func.avg(models.Comment.stars)).where(models.Comment.is_deleted == False)
         result = await self.db.scalar(query)

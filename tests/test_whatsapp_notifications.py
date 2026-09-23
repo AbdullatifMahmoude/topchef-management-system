@@ -1,5 +1,5 @@
-from types import SimpleNamespace
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest

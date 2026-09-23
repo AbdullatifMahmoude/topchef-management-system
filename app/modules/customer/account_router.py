@@ -215,7 +215,7 @@ async def customer_session(response: Response, db: AsyncSession = Depends(get_db
 async def customer_logout(response: Response, payload=Depends(current_customer_payload), db: AsyncSession = Depends(get_db)):
     device = await db.get(models.CustomerDevice, payload["device_id"])
     if device:
-        device.revoked_at = datetime.utcnow()
+        device.revoked_at = datetime.now(UTC).replace(tzinfo=None)
         await db.commit()
     response.delete_cookie(COOKIE_NAME, path="/customer-auth", secure=True, samesite="none")
     return {"message": "تم تسجيل الخروج"}
@@ -358,7 +358,7 @@ async def revoke_my_device(device_id: str, response: Response, payload=Depends(c
     device = await db.get(models.CustomerDevice, device_id)
     if not device or device.customer_id != payload["customer_id"]:
         raise ValidationError("الجهاز غير موجود")
-    device.revoked_at = datetime.utcnow()
+    device.revoked_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
     if device.id == payload["device_id"]:
         response.delete_cookie(COOKIE_NAME, path="/customer-auth", secure=True, samesite="none")

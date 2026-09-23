@@ -1,6 +1,9 @@
 from app.core.enums import UserRole
 from app.core.security import create_access_token
-from app.modules.orders.router import authorize_websocket_token, websocket_protocol_token
+from app.modules.orders.router import (
+    authorize_websocket_token,
+    websocket_protocol_token,
+)
 
 
 def token_for(role: UserRole, user_id: int = 1) -> str:

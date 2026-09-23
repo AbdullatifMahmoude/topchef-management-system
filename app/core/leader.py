@@ -2,8 +2,10 @@ import asyncio
 import contextlib
 import os
 import socket
-from app.core.redis import redis_client
+
 from app.core.logging import logger
+from app.core.redis import redis_client
+
 
 class LeaderManager:
     """
@@ -80,7 +82,7 @@ class LeaderManager:
                 await asyncio.sleep(10)
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"Leader heartbeat error: {e}")
                 await asyncio.sleep(5)
 

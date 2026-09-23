@@ -5238,7 +5238,24 @@ async function updateEditOrderConfirm() {
       throw new Error("فشل تحديث الطلب في الباك إند");
     }
 
-    const updatedOrder = await res.json();
+    let updatedOrder = await res.json();
+    const requestedAddress = String(payload.customer_address || "").trim();
+    const addressChanged =
+      mappedOrderType === "delivery" &&
+      requestedAddress !== String(getOrderAddressText(orig) || "").trim();
+    if (addressChanged) {
+      const verifyRes = await apiFetch(`/orders/${orig.id}`, {
+        cache: "no-store",
+      });
+      if (!verifyRes.ok) {
+        throw new Error("تعذر التأكد من حفظ عنوان الطلب. حاول مرة أخرى.");
+      }
+      const storedOrder = await verifyRes.json();
+      if (String(getOrderAddressText(storedOrder) || "").trim() !== requestedAddress) {
+        throw new Error("لم يُحفظ العنوان الجديد. لم تُغلق نافذة التعديل.");
+      }
+      updatedOrder = storedOrder;
+    }
     showToast("تم تعديل الطلب بنجاح ✓", "success");
 
     // إغلاق المودال بعد النجاح
@@ -5314,7 +5331,7 @@ async function updateEditOrderConfirm() {
     }
   } catch (err) {
     console.error(err);
-    showToast("حدث خطأ أثناء الاتصال بالسيرفر لحفظ التعديلات", "error");
+    showToast(err.message || "حدث خطأ أثناء الاتصال بالسيرفر لحفظ التعديلات", "error");
   } finally {
     showGlobalLoader(false);
   }

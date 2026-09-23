@@ -4,9 +4,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.modules.menu import models as _menu_models  # noqa: F401 - register ORM relationships
 from app.core.business_calendar import EGYPT_TZ
 from app.core.enums import OrderStatus, OrderType, PaymentMethod
+from app.modules.menu import (
+    models as _menu_models,  # noqa: F401 - register ORM relationships
+)
 from app.modules.orders.router import get_rider_stats
 
 

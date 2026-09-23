@@ -1,6 +1,9 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Text, Integer, ForeignKey
-from app.core.database import Base
 from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+
+from app.core.database import Base
+
 
 class AppSetting(Base):
     __tablename__ = "app_settings"

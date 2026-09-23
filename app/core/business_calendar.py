@@ -1,6 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
 
-
 BUSINESS_DAY_START_HOUR = 7
 EGYPT_TZ = timezone(timedelta(hours=3))
 WEEKLY_HOLIDAY_WEEKDAY = 4  # Friday (Monday is 0)

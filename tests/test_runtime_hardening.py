@@ -1,5 +1,6 @@
-import inspect
 import asyncio
+import inspect
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -169,13 +170,13 @@ def test_private_websocket_does_not_materialize_order_snapshot():
 
 
 def test_admin_dashboard_coalesces_parallel_initial_loads():
-    source = open("app/frontend/js/orders_dashboard.js", encoding="utf-8").read()
+    source = Path("app/frontend/js/orders_dashboard.js").read_text(encoding="utf-8")
     assert "if (dashboardLoadPromise) return dashboardLoadPromise;" in source
     assert 'type === "ORDER_SNAPSHOT"' not in source
 
 
 def test_cashier_reuses_authoritative_pricing_for_identical_previews():
-    source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+    source = Path("app/frontend/cashier/js/cashier.js").read_text(encoding="utf-8")
     assert "_lastSuccessfulPricingBody === requestBody" in source
     assert "Date.now() - _lastSuccessfulPricingAt < 2000" in source
     assert "displayCashierPricing(_lastSuccessfulPricingData)" in source

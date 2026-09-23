@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -62,7 +63,7 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
     async def test_free_delivery_offer_rejects_non_delivery_order(self):
         service = PricingService(object(), offer_service=FakeOfferService(waive_delivery_fee=True))
         request = PricingRequest(
-            items=[PricingItem(product_id=1, quantity=1, unit_price=Decimal("50"))],
+            items=[PricingItem(product_id=1, quantity=1, unit_price=Decimal(50))],
             order_type=OrderType.HALL,
             offer_code="FREEDELIVERY",
         )
@@ -82,11 +83,13 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
         product.category = category
         product.variants = [Variant(id=1, product_id=1, name="Normal", price=Decimal("50.00"), is_deleted=False)]
         service = OrderService(object())
-        with patch("app.modules.menu.service.ProductService.get_products_by_ids", new=AsyncMock(return_value=[product])):
-            with self.assertRaises(ValidationError):
-                await service._validate_order_items([
-                    OrderItemCreate(product_id=1, quantity=1, unit_price=Decimal("1.00"))
-                ])
+        with (
+            patch("app.modules.menu.service.ProductService.get_products_by_ids", new=AsyncMock(return_value=[product])),
+            self.assertRaises(ValidationError),
+        ):
+            await service._validate_order_items([
+                OrderItemCreate(product_id=1, quantity=1, unit_price=Decimal("1.00"))
+            ])
 
     async def test_order_accepts_exact_database_variant_price(self):
         category = Category(id=1, cat_name="Main", is_active=True, is_deleted=False)
@@ -111,7 +114,7 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
         offer = Offer(
             code="CAIRO",
             discount_type=DiscountType.PERCENTAGE,
-            discount_value=Decimal("10"),
+            discount_value=Decimal(10),
             valid_from=cairo_now - timedelta(minutes=1),
             valid_to=cairo_now + timedelta(minutes=1),
             is_active=True,
@@ -121,39 +124,39 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(offer.is_expired())
 
     def test_restaurant_sales_excludes_delivery_fee_only(self):
-        delivery = SimpleNamespace(order_type=OrderType.DELIVERY, total_amount=Decimal("120"), delivery_fee=Decimal("20"))
-        hall = SimpleNamespace(order_type=OrderType.HALL, total_amount=Decimal("120"), delivery_fee=Decimal("20"))
-        self.assertEqual(restaurant_sales_amount(delivery), Decimal("100"))
-        self.assertEqual(restaurant_sales_amount(hall), Decimal("120"))
+        delivery = SimpleNamespace(order_type=OrderType.DELIVERY, total_amount=Decimal(120), delivery_fee=Decimal(20))
+        hall = SimpleNamespace(order_type=OrderType.HALL, total_amount=Decimal(120), delivery_fee=Decimal(20))
+        self.assertEqual(restaurant_sales_amount(delivery), Decimal(100))
+        self.assertEqual(restaurant_sales_amount(hall), Decimal(120))
 
     def test_shift_cash_expected_uses_restaurant_share_after_rider_is_paid(self):
-        opening_cash = Decimal("100")
-        expense = Decimal("10")
+        opening_cash = Decimal(100)
+        expense = Decimal(10)
         cash_delivery_order = SimpleNamespace(
             order_type=OrderType.DELIVERY,
-            total_amount=Decimal("120"),
-            delivery_fee=Decimal("20"),
+            total_amount=Decimal(120),
+            delivery_fee=Decimal(20),
         )
         expected_cash = opening_cash + restaurant_sales_amount(cash_delivery_order) - expense
-        self.assertEqual(expected_cash, Decimal("190"))
+        self.assertEqual(expected_cash, Decimal(190))
 
     def test_all_report_queries_condition_delivery_fee_on_delivery_type(self):
-        report_source = open("app/modules/report/service.py", encoding="utf-8").read()
-        repository_source = open("app/modules/orders/repository.py", encoding="utf-8").read()
+        report_source = Path("app/modules/report/service.py").read_text(encoding="utf-8")
+        repository_source = Path("app/modules/orders/repository.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(report_source.count("Order.order_type == OrderType.DELIVERY"), 4)
         self.assertGreaterEqual(repository_source.count("models.Order.order_type == OrderType.DELIVERY"), 2)
 
     def test_report_before_discount_includes_hall_service_fee(self):
-        report_source = open("app/modules/report/service.py", encoding="utf-8").read()
+        report_source = Path("app/modules/report/service.py").read_text(encoding="utf-8")
         self.assertIn("Order.subtotal + hall_service_fee", report_source)
 
     def test_edit_repricing_keeps_existing_offer_and_does_not_redeem_again(self):
-        source = open("app/modules/orders/service.py", encoding="utf-8").read()
+        source = Path("app/modules/orders/service.py").read_text(encoding="utf-8")
         self.assertIn("offer_code=existing_offer_code", source)
         self.assertIn("redeemed_order_id=order.id if existing_offer_code else None", source)
 
     def test_confirmation_fetches_authoritative_pricing(self):
-        source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+        source = Path("app/frontend/cashier/js/cashier.js").read_text(encoding="utf-8")
         confirm_start = source.index("async function confirmOrder()")
         modal_start = source.index("function showConfirmModal", confirm_start)
         confirm_source = source[confirm_start:modal_start]
@@ -161,7 +164,7 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("pricing.total_amount", confirm_source)
 
     def test_cashier_coalesces_pricing_preview_requests(self):
-        source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+        source = Path("app/frontend/cashier/js/cashier.js").read_text(encoding="utf-8")
         self.assertIn("if (_confirmOrderInFlight) return;", source)
         self.assertIn("_pricingAbortController.abort()", source)
         self.assertIn("signal: controller.signal", source)
@@ -170,14 +173,14 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("_pricingTimeout = null;", source)
 
     def test_cashier_displays_only_authoritative_pricing(self):
-        source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+        source = Path("app/frontend/cashier/js/cashier.js").read_text(encoding="utf-8")
         self.assertIn('totalEl.textContent = cart.length ? "جاري الحساب..."', source)
         self.assertNotIn("const grandTotal = itemsTotal + fee", source)
         self.assertIn("displayCashierPricing(_lastSuccessfulPricingData)", source)
         self.assertIn("if (generation !== _pricingGeneration) return;", source)
 
     def test_order_details_display_persisted_payment_method(self):
-        source = open("app/frontend/cashier/js/cashier.js", encoding="utf-8").read()
+        source = Path("app/frontend/cashier/js/cashier.js").read_text(encoding="utf-8")
         details_start = source.index("function openOrderDetails")
         details_end = source.index("// ===================================================", details_start + 1)
         details_source = source[details_start:details_end]

@@ -1,10 +1,11 @@
+
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
+
 
 class SettingBase(BaseModel):
     key: str
     value_bool: bool
-    description: Optional[str] = None
+    description: str | None = None
 
 class SettingUpdate(BaseModel):
     value_bool: bool
@@ -13,7 +14,7 @@ class SettingResponse(SettingBase):
     model_config = ConfigDict(from_attributes=True)
 
 class WhatsAppSettingsUpdate(BaseModel):
-    api_key: Optional[str] = Field(default=None, max_length=2000)
+    api_key: str | None = Field(default=None, max_length=2000)
     phone_number_id: str = Field(default="", max_length=100)
     first_order_template_name: str = Field(default="topchef_first_order_details", max_length=512)
     order_details_template_name: str = Field(default="topchef_order_details", max_length=512)
@@ -29,8 +30,8 @@ class WhatsAppSettingsUpdate(BaseModel):
     business_phone_number: str = Field(default="201129820007", max_length=20)
     customer_service_phone: str = Field(default="", max_length=20)
     menu_url: str = Field(default="https://topchefeg.com/", max_length=500)
-    webhook_verify_token: Optional[str] = Field(default=None, max_length=512)
-    app_secret: Optional[str] = Field(default=None, max_length=512)
+    webhook_verify_token: str | None = Field(default=None, max_length=512)
+    app_secret: str | None = Field(default=None, max_length=512)
 
 class WhatsAppSettingsResponse(BaseModel):
     api_key_configured: bool

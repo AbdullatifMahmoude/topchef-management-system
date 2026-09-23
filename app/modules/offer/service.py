@@ -1,16 +1,24 @@
-import json
-from datetime import datetime, timedelta, timezone
 import contextlib
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.exceptions import NotFoundError, ValidationError
-from app.modules.offer.repository import OfferRepository
-from app.modules.offer.schemas import OfferCreate, OfferUpdate, OfferResponse, ApplyOfferResponse, OfferAnalyticsResponse, OfferUsageActivity
-from typing import List, Optional
-from decimal import Decimal, ROUND_HALF_UP
-from app.core.enums import DiscountType
-from app.core.logging import logger
+import json
+from datetime import UTC, datetime, timedelta, timezone
+from decimal import ROUND_HALF_UP, Decimal
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.enums import DiscountType
+from app.core.exceptions import NotFoundError, ValidationError
+from app.core.logging import logger
 from app.modules.customer.phone import normalize_egyptian_phone
+from app.modules.offer.repository import OfferRepository
+from app.modules.offer.schemas import (
+    ApplyOfferResponse,
+    OfferAnalyticsResponse,
+    OfferCreate,
+    OfferResponse,
+    OfferUpdate,
+    OfferUsageActivity,
+)
 
 
 class OfferService:
@@ -36,7 +44,7 @@ class OfferService:
                 if offer:
                     await self.redis.delete(f"offer:code:{offer.code}")
                     await self.redis.delete(f"offer:id:{offer.offer_id}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error invalidating offers cache: {e}")
 
     async def _emit_offer_change(self, action: str, offer_id: int) -> None:
@@ -46,12 +54,12 @@ class OfferService:
                 "type": "OFFER_UPDATED",
                 "data": {"id": offer_id, "action": action},
             })
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             # The database change remains valid if a client is temporarily
             # offline; clients also refresh on reconnect/visibility change.
             logger.warning(f"Could not broadcast offer update {offer_id}: {exc}")
 
-    async def _get_cached_offer(self, key_prefix: str, identifier: str) -> Optional[OfferResponse]:
+    async def _get_cached_offer(self, key_prefix: str, identifier: str) -> OfferResponse | None:
         if not self.redis:
             return None
         try:
@@ -65,7 +73,7 @@ class OfferService:
                 if offer.is_active and offer.valid_to < cairo_now:
                     return None
                 return offer
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Redis error reading granular offer cache {identifier}: {e}")
         return None
 
@@ -76,10 +84,10 @@ class OfferService:
             data = json.dumps(offer_res.model_dump(mode='json'))
             await self.redis.setex(f"offer:code:{offer_res.code}", 3600, data)
             await self.redis.setex(f"offer:id:{offer_res.offer_id}", 3600, data)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Redis error caching offer {offer_res.code}: {e}")
 
-    async def _resolve_products(self, product_ids: List[int]):
+    async def _resolve_products(self, product_ids: list[int]):
         if not product_ids:
             return []
         from app.modules.menu.models import Product
@@ -124,9 +132,10 @@ class OfferService:
                 raise ValidationError("اختر تصنيفًا واحدًا على الأقل")
             if rules.get("discount_mode", "percentage") == "percentage" and Decimal(str(offer.discount_value)) > 100:
                 raise ValidationError("نسبة الخصم لا يمكن أن تتجاوز 100%")
-        elif dtype == DiscountType.HAPPY_HOUR:
-            if not rules.get("start_time") or not rules.get("end_time"):
-                raise ValidationError("حدد وقت بداية ونهاية العرض")
+        elif dtype == DiscountType.HAPPY_HOUR and (
+            not rules.get("start_time") or not rules.get("end_time")
+        ):
+            raise ValidationError("حدد وقت بداية ونهاية العرض")
 
     async def create_offer(self, offer_data: OfferCreate) -> OfferResponse:
         async with self._transaction_scope():
@@ -151,14 +160,14 @@ class OfferService:
         await self._emit_offer_change("created", offer.offer_id)
         return response
 
-    async def list_all_offers(self, only_active: bool = False) -> List[OfferResponse]:
+    async def list_all_offers(self, only_active: bool = False) -> list[OfferResponse]:
         # 1. Get current cache version
         version = "1"
         if self.redis:
             try:
                 version = await self.redis.get("offers:version") or "1"
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Offer version cache read failed: %s", exc)
         
         # Distinguish cache by active status
         cache_key = f"offers:{'active' if only_active else 'all'}:v{version}"
@@ -170,7 +179,7 @@ class OfferService:
                 if cached:
                     data = json.loads(cached)
                     return [OfferResponse(**item) for item in data]
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error reading offers: {e}")
 
         # 3. DB Fallback
@@ -191,7 +200,7 @@ class OfferService:
                 try:
                     serializable = [o.model_dump(mode='json') for o in response]
                     await self.redis.setex(cache_key, 300, json.dumps(serializable))
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"Redis error writing offers cache: {e}")
         
         return response
@@ -200,8 +209,8 @@ class OfferService:
         egypt_tz = timezone(timedelta(hours=3))
         local_now = datetime.now(egypt_tz)
         start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        start_utc = start_local.astimezone(timezone.utc).replace(tzinfo=None)
-        end_utc = (start_local + timedelta(days=1)).astimezone(timezone.utc).replace(tzinfo=None)
+        start_utc = start_local.astimezone(UTC).replace(tzinfo=None)
+        end_utc = (start_local + timedelta(days=1)).astimezone(UTC).replace(tzinfo=None)
         offers = await self.repository.list_offers(only_active=False)
         now = datetime.now(egypt_tz).replace(tzinfo=None)
         active_now = sum(1 for offer in offers if offer.is_active and offer.valid_from <= now <= offer.valid_to and not offer.is_usage_limit_reached())
@@ -325,10 +334,10 @@ class OfferService:
         await self._emit_offer_change("deleted", deleted_id)
         return True
 
-    async def apply_offer(self, code: str, subtotal: Decimal, items: List = None, 
-                          customer_phone: str = None, cashier_id: int = None,
-                          commit_usage: bool = False, order_id: int = None,
-                          existing_order_id: int = None) -> ApplyOfferResponse:
+    async def apply_offer(self, code: str, subtotal: Decimal, items: list | None = None,
+                          customer_phone: str | None = None, cashier_id: int | None = None,
+                          commit_usage: bool = False, order_id: int | None = None,
+                          existing_order_id: int | None = None) -> ApplyOfferResponse:
         """
         Production-ready offer application logic:
         - Validates timing (start/end) and status.
@@ -486,7 +495,7 @@ class OfferService:
                 if reward_units < 1 or available_rewards < 1:
                     raise ValidationError("شروط اشترِ X وخذ Y غير مكتملة في الطلب")
                 reward_units = min(reward_units, available_rewards)
-                reward_percent = Decimal(str(rules.get("reward_percent", 100))) / Decimal("100")
+                reward_percent = Decimal(str(rules.get("reward_percent", 100))) / Decimal(100)
                 for item in reward_items:
                     units = min(int(item.quantity), reward_units)
                     calculated_discount += Decimal(str(item.unit_price)) * units * reward_percent
@@ -498,7 +507,7 @@ class OfferService:
                 required = max(1, int(rules.get("quantity_required", 1)))
                 if total_qty < required:
                     raise ValidationError(f"العرض يحتاج شراء {required} وحدات على الأقل")
-                calculated_discount = eligible_subtotal * (dval / Decimal("100"))
+                calculated_discount = eligible_subtotal * (dval / Decimal(100))
 
             elif dtype == DiscountType.FREE_DELIVERY:
                 waive_delivery_fee = True
@@ -506,7 +515,7 @@ class OfferService:
             elif dtype == DiscountType.CATEGORY_DISCOUNT:
                 mode = rules.get("discount_mode", "percentage")
                 calculated_discount = (
-                    eligible_subtotal * (dval / Decimal("100"))
+                    eligible_subtotal * (dval / Decimal(100))
                     if mode == "percentage" else min(dval, eligible_subtotal)
                 )
 
@@ -524,7 +533,7 @@ class OfferService:
                 in_window = start_time <= now_time <= end_time if start_time <= end_time else (now_time >= start_time or now_time <= end_time)
                 if not in_window:
                     raise ValidationError("العرض غير متاح في الساعة الحالية")
-                calculated_discount = eligible_subtotal * (dval / Decimal("100"))
+                calculated_discount = eligible_subtotal * (dval / Decimal(100))
             
             # --- 6. Caps and Safeties ---
             if offer.max_discount_amount:

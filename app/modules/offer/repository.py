@@ -1,9 +1,12 @@
+from datetime import datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from datetime import datetime
+
 from app.modules.offer.models import Offer
 from app.modules.offer.schemas import OfferCreate
+
 
 class OfferRepository:
     def __init__(self, db: AsyncSession):
@@ -42,8 +45,9 @@ class OfferRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_customer_usage_count(self, offer_id: int, customer_phone: str = None) -> int:
+    async def get_customer_usage_count(self, offer_id: int, customer_phone: str | None = None) -> int:
         from sqlalchemy import func
+
         from app.modules.offer.models import OfferUsage
         
         query = select(func.count(OfferUsage.usage_id)).where(OfferUsage.offer_id == offer_id)
@@ -69,9 +73,10 @@ class OfferRepository:
 
     async def usage_analytics(self, start_utc: datetime, end_utc: datetime, limit: int = 12):
         from sqlalchemy import func
+
+        from app.core.enums import OrderStatus
         from app.modules.offer.models import OfferUsage
         from app.modules.orders.models import Order
-        from app.core.enums import OrderStatus
         from app.modules.users.models import User
         summary = await self.db.execute(
             select(

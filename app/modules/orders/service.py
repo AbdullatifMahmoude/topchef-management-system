@@ -1,31 +1,38 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional, Tuple
-from app.modules.orders.repository import OrderRepository
-from app.modules.orders import schemas, models
-from app.modules.pricing.service import PricingService
-from app.modules.settings.service import SettingsService
-from app.modules.pricing.schemas import PricingRequest, PricingItem
-from app.modules.offer.service import OfferService
-from app.core.exceptions import ValidationError, NotFoundError
 import contextlib
 from decimal import Decimal
-from sqlalchemy.exc import IntegrityError
 
-from app.core.protocols import PricingServiceInterface, OfferServiceInterface, CacheStore
-from app.core.events import order_events_manager
-from app.core.enums import OrderStatus, OrderSource, OrderType, PaymentMethod, UserRole
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.business_calendar import get_current_business_date, is_weekly_holiday
-from app.modules.orders.notifications import AccountOrderNotifications, OrderNotificationPort
+from app.core.enums import OrderSource, OrderStatus, OrderType, PaymentMethod, UserRole
+from app.core.events import order_events_manager
+from app.core.exceptions import NotFoundError, ValidationError
+from app.core.protocols import (
+    CacheStore,
+    OfferServiceInterface,
+    PricingServiceInterface,
+)
+from app.modules.offer.service import OfferService
+from app.modules.orders import models, schemas
+from app.modules.orders.notifications import (
+    AccountOrderNotifications,
+    OrderNotificationPort,
+)
+from app.modules.orders.repository import OrderRepository
+from app.modules.pricing.schemas import PricingItem, PricingRequest
+from app.modules.pricing.service import PricingService
+from app.modules.settings.service import SettingsService
 
 
 class OrderService:
     def __init__(
         self, 
         db: AsyncSession, 
-        redis: Optional[CacheStore] = None,
-        pricing_service: Optional[PricingServiceInterface] = None,
-        offer_service: Optional[OfferServiceInterface] = None,
-        notification_service: Optional[OrderNotificationPort] = None,
+        redis: CacheStore | None = None,
+        pricing_service: PricingServiceInterface | None = None,
+        offer_service: OfferServiceInterface | None = None,
+        notification_service: OrderNotificationPort | None = None,
     ):
         self.db = db
         self.repository = OrderRepository(db)
@@ -43,7 +50,7 @@ class OrderService:
             async with self.db.begin():
                 yield
 
-    async def _validate_order_items(self, items: List[schemas.OrderItemCreate]):
+    async def _validate_order_items(self, items: list[schemas.OrderItemCreate]):
         """Validate products exist and are available."""
         from app.modules.menu.service import ProductService
         
@@ -74,9 +81,11 @@ class OrderService:
             if requested_price not in allowed_prices:
                 raise ValidationError(f"Invalid price for '{product.product_name}'")
 
-    async def create_order(self, order_data: schemas.OrderCreate, current_user_id: Optional[int] = None) -> models.Order:
+    async def create_order(self, order_data: schemas.OrderCreate, current_user_id: int | None = None) -> models.Order:
         import asyncio as _asyncio
+
         from sqlalchemy.exc import OperationalError as _OperationalError
+
         from app.core.logging import logger as _logger
 
         _max_retries = 3
@@ -93,7 +102,7 @@ class OrderService:
                 else:
                     raise
 
-    async def _create_order_inner(self, order_data: schemas.OrderCreate, current_user_id: Optional[int] = None) -> models.Order:
+    async def _create_order_inner(self, order_data: schemas.OrderCreate, current_user_id: int | None = None) -> models.Order:
         async with self._transaction_scope():
             if is_weekly_holiday(get_current_business_date()):
                 raise ValidationError("المطعم مغلق يوم الجمعة للإجازة الأسبوعية ولا يمكن إنشاء طلبات جديدة")
@@ -129,8 +138,11 @@ class OrderService:
             
             # Auto-create or link customer
             if order_data.customer_phone and order_data.customer_name:
+                from app.modules.customer.schemas import (
+                    CustomerAddressCreate,
+                    CustomerCreate,
+                )
                 from app.modules.customer.service import CustomerService
-                from app.modules.customer.schemas import CustomerCreate, CustomerAddressCreate
                 
                 customer_service = CustomerService(self.db, self.redis)
                 try:
@@ -153,14 +165,14 @@ class OrderService:
                                 phone_number=order_data.customer_phone,
                             ))
                         order_data.customer_id = new_cust.id
-                    except (ValidationError, IntegrityError) as create_error:
+                    except (ValidationError, IntegrityError):
                         # Race condition: phone was created between lookup and create
                         # Fall back to lookup again. If no matching customer exists,
                         # the failure was unrelated (for example a bad PK sequence),
                         # so preserve the original error.
                         fallback = await customer_service.repository.get_by_phone(order_data.customer_phone)
                         if not fallback:
-                            raise create_error
+                            raise
                         order_data.customer_id = fallback.id
                 
                 if getattr(order_data, 'customer_address', None):
@@ -271,13 +283,13 @@ class OrderService:
 
     async def list_orders_paginated(
         self,
-        source: Optional[str] = None,
-        status: Optional[str] = None,
-        order_type: Optional[str] = None,
+        source: str | None = None,
+        status: str | None = None,
+        order_type: str | None = None,
         page: int = 1,
         page_size: int = 50,
-        cashier_id: Optional[int] = None
-    ) -> Tuple[int, List[models.Order]]:
+        cashier_id: int | None = None
+    ) -> tuple[int, list[models.Order]]:
         return await self.repository.list_orders_paginated(
             source=source,
             status=status,
@@ -287,10 +299,10 @@ class OrderService:
             cashier_id=cashier_id
         )
 
-    async def list_orders(self, cashier_id: Optional[int] = None, **kwargs) -> List[models.Order]:
+    async def list_orders(self, cashier_id: int | None = None, **kwargs) -> list[models.Order]:
         return await self.repository.list_orders(cashier_id=cashier_id, **kwargs)
 
-    async def list_orders_for_business_day(self, source: Optional[str] = None, status: Optional[str] = None, order_type: Optional[str] = None, cashier_id: Optional[int] = None) -> List[models.Order]:
+    async def list_orders_for_business_day(self, source: str | None = None, status: str | None = None, order_type: str | None = None, cashier_id: int | None = None) -> list[models.Order]:
         return await self.repository.list_dashboard_orders(
             source=source,
             status=status,
@@ -298,7 +310,7 @@ class OrderService:
             cashier_id=cashier_id,
         )
 
-    async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: Optional[int] = None) -> models.Order:
+    async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: int | None = None) -> models.Order:
         async with self._transaction_scope():
             order = await self.get_order(order_id)
             status_changed = bool(update_data.order_status and order.order_status != update_data.order_status)
@@ -321,9 +333,13 @@ class OrderService:
                     raise ValidationError(f"Invalid status transition from {order.order_status} to {update_data.order_status}")
                 
                 # If an online order is confirmed by a cashier, assign it to them
-                if update_data.order_status == OrderStatus.CONFIRMED and order.order_source == OrderSource.ONLINE:
-                    if not order.created_by_user_id and current_user_id:
-                        order.created_by_user_id = current_user_id
+                if (
+                    update_data.order_status == OrderStatus.CONFIRMED
+                    and order.order_source == OrderSource.ONLINE
+                    and not order.created_by_user_id
+                    and current_user_id
+                ):
+                    order.created_by_user_id = current_user_id
             
             updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
             await self.db.flush()
@@ -339,7 +355,7 @@ class OrderService:
         await self.notifications.enqueue(payload_data, "status_changed" if status_changed else "updated")
         return completed_order
 
-    async def update_order(self, order_id: int, update_data: schemas.OrderUpdateFull, current_user_id: Optional[int] = None) -> models.Order:
+    async def update_order(self, order_id: int, update_data: schemas.OrderUpdateFull, current_user_id: int | None = None) -> models.Order:
         async with self._transaction_scope():
             order = await self.get_order(order_id)
             if order.order_status in [models.OrderStatus.COMPLETED, models.OrderStatus.DELIVERED, models.OrderStatus.CANCELLED]:
@@ -357,10 +373,29 @@ class OrderService:
             if update_data.customer_phone or update_data.customer_name or getattr(update_data, 'customer_address', None):
                 target_phone = update_data.customer_phone or order.customer_phone
                 target_name = update_data.customer_name or order.customer_name
+                if update_data.customer_address and not (target_phone and target_name):
+                    # Older/guest orders may have a linked customer without both
+                    # display fields. Resolve from that customer before saving an
+                    # address; never return 200 for an address we did not apply.
+                    from app.modules.customer.repository import CustomerRepository
+
+                    linked_customer_id = update_data.customer_id or order.customer_id
+                    linked_customer = (
+                        await CustomerRepository(self.db).get_by_id(linked_customer_id)
+                        if linked_customer_id else None
+                    )
+                    if linked_customer:
+                        target_phone = target_phone or linked_customer.phone_number
+                        target_name = target_name or linked_customer.name
+                    if not (target_phone and target_name):
+                        raise ValidationError("لا يمكن حفظ العنوان بدون بيانات عميل مرتبطة بالطلب")
                 if target_phone and target_name:
-                    from app.modules.customer.service import CustomerService
-                    from app.modules.customer.schemas import CustomerCreate, CustomerAddressCreate
                     from app.modules.customer.phone import normalize_egyptian_phone
+                    from app.modules.customer.schemas import (
+                        CustomerAddressCreate,
+                        CustomerCreate,
+                    )
+                    from app.modules.customer.service import CustomerService
                     customer_service = CustomerService(self.db, self.redis)
                     try:
                         existing_cust = await customer_service.get_customer_by_phone(target_phone)

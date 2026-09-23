@@ -1,5 +1,8 @@
 from app.modules.settings.whatsapp import normalize_whatsapp_phone
-from app.modules.settings.whatsapp_conversations import _message_content, _normalize_intent_text
+from app.modules.settings.whatsapp_conversations import (
+    _message_content,
+    _normalize_intent_text,
+)
 
 
 def test_phone_formats_normalize_to_same_whatsapp_identity():

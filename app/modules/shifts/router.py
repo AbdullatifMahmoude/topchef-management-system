@@ -1,47 +1,49 @@
 import asyncio
+from datetime import date
 from decimal import Decimal
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Any, List, Optional
-from datetime import date
 
 from app.core.database import get_db
-from app.modules.auth.dependencies import get_current_user
-from app.modules.users.models import User
 from app.core.enums import UserRole
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from app.core.redis import get_redis
+from app.modules.auth.dependencies import get_current_user
 from app.modules.shifts.service import ShiftsService, get_business_date
+from app.modules.users.models import User
 
 router = APIRouter(prefix="/shifts", tags=["shifts"])
 
 class ShiftCashUpdate(BaseModel):
-    opening_cash: Optional[Decimal] = Field(default=None, ge=0)
-    actual_closing_cash: Optional[Decimal] = Field(default=None, ge=0)
-    closing_note: Optional[str] = Field(default=None, max_length=500)
+    opening_cash: Decimal | None = Field(default=None, ge=0)
+    actual_closing_cash: Decimal | None = Field(default=None, ge=0)
+    closing_note: str | None = Field(default=None, max_length=500)
 
 class ExpenseCreate(BaseModel):
     title: str = Field(min_length=2, max_length=120)
     amount: Decimal = Field(gt=0)
-    note: Optional[str] = Field(default=None, max_length=500)
+    note: str | None = Field(default=None, max_length=500)
 
 class AdminExpenseCreate(ExpenseCreate):
     target_date: date
 
 class AdminExpenseUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=2, max_length=120)
-    amount: Optional[Decimal] = Field(default=None, gt=0)
-    note: Optional[str] = Field(default=None, max_length=500)
-    target_date: Optional[date] = None
+    title: str | None = Field(default=None, min_length=2, max_length=120)
+    amount: Decimal | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=500)
+    target_date: date | None = None
 
 class CashAdditionCreate(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     reason: str = Field(min_length=2, max_length=500)
 
-async def _current_shift(db: AsyncSession, user_id: int):
+async def _current_shift(db: AsyncSession, user_id: int, redis):
     # Roll over sessions left logged in past the 07:00 business-day boundary.
-    await ShiftsService(db).start_shift(user_id)
+    await ShiftsService(db, redis).start_shift(user_id, sync_web_orders=True)
     from app.modules.shifts.models import CashierShift
     result = await db.execute(select(CashierShift).where(
         CashierShift.user_id == user_id,
@@ -55,28 +57,29 @@ async def _expense_totals(db: AsyncSession, shift_id: int, target_date: date) ->
     shift_total = await db.scalar(select(func.sum(ShiftExpense.amount)).where(
         ShiftExpense.shift_id == shift_id,
         ShiftExpense.is_deleted == False,
-    )) or Decimal("0")
+    )) or Decimal(0)
     day_total = await db.scalar(select(func.sum(ShiftExpense.amount)).where(
         ShiftExpense.target_date == target_date,
         ShiftExpense.is_deleted == False,
-    )) or Decimal("0")
+    )) or Decimal(0)
     return shift_total, day_total
 
 @router.get("/current/cash")
 async def get_current_shift_cash(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
 ) -> Any:
     if current_user.role != UserRole.CASHIER:
         raise AuthorizationError("Only cashier can view the current shift")
-    shift = await _current_shift(db, current_user.id)
+    shift = await _current_shift(db, current_user.id, redis)
     if not shift:
         return {"active": False}
     from app.modules.shifts.models import ShiftExpense
     expenses = await db.scalar(select(func.sum(ShiftExpense.amount)).where(
         ShiftExpense.shift_id == shift.id,
         ShiftExpense.is_deleted == False,
-    )) or Decimal("0")
+    )) or Decimal(0)
     return {
         "active": True,
         "shift_id": shift.id,
@@ -91,10 +94,11 @@ async def update_current_shift_cash(
     payload: ShiftCashUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
 ) -> Any:
     if current_user.role != UserRole.CASHIER:
         raise AuthorizationError("Only cashier can reconcile the current shift")
-    shift = await _current_shift(db, current_user.id)
+    shift = await _current_shift(db, current_user.id, redis)
     if not shift:
         raise ValidationError("لا يوجد شيفت نشط لتسويته")
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -106,10 +110,11 @@ async def update_current_shift_cash(
 async def list_current_expenses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
 ) -> Any:
     if current_user.role != UserRole.CASHIER:
         raise AuthorizationError("Only cashier can view shift expenses")
-    shift = await _current_shift(db, current_user.id)
+    shift = await _current_shift(db, current_user.id, redis)
     if not shift:
         return {"shift_id": None, "total": 0, "items": []}
     from app.modules.shifts.models import ShiftExpense
@@ -128,10 +133,11 @@ async def create_current_expense(
     payload: ExpenseCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
 ) -> Any:
     if current_user.role != UserRole.CASHIER:
         raise AuthorizationError("Only cashier can add shift expenses")
-    shift = await _current_shift(db, current_user.id)
+    shift = await _current_shift(db, current_user.id, redis)
     if not shift:
         raise ValidationError("لا يوجد شيفت نشط لتسجيل المصروف")
     from app.modules.shifts.models import ShiftExpense
@@ -157,11 +163,12 @@ async def delete_current_expense(
     expense_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    redis=Depends(get_redis),
 ) -> Any:
     if current_user.role != UserRole.CASHIER:
         raise AuthorizationError("Only cashier can delete shift expenses")
     from app.modules.shifts.models import ShiftExpense
-    shift = await _current_shift(db, current_user.id)
+    shift = await _current_shift(db, current_user.id, redis)
     expense = await db.scalar(select(ShiftExpense).where(ShiftExpense.id == expense_id, ShiftExpense.user_id == current_user.id, ShiftExpense.shift_id == (shift.id if shift else -1), ShiftExpense.is_deleted == False))
     if not expense:
         raise NotFoundError("Expense")
@@ -174,7 +181,7 @@ async def delete_current_expense(
 
 @router.get("")
 async def get_shifts(
-    target_date: Optional[date] = Query(default=None),
+    target_date: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> Any:
@@ -229,7 +236,7 @@ async def list_admin_expenses(
         .order_by(ShiftExpense.target_date.desc(), ShiftExpense.created_at.desc())
     )).all()
     items = [_admin_expense_payload(expense, recorder) for expense, recorder in rows]
-    total = sum((expense.amount or Decimal("0")) for expense, _ in rows)
+    total = sum((expense.amount or Decimal(0)) for expense, _ in rows)
     return {"items": items, "count": len(items), "total": float(total)}
 
 @router.post("/admin/expenses")
@@ -346,8 +353,8 @@ async def create_shift_cash_addition(
 
     additions_total = await db.scalar(select(func.sum(ShiftCashAddition.amount)).where(
         ShiftCashAddition.shift_id == shift.id,
-    )) or Decimal("0")
-    adjusted_closing_cash = (shift.actual_closing_cash or Decimal("0")) + additions_total
+    )) or Decimal(0)
+    adjusted_closing_cash = (shift.actual_closing_cash or Decimal(0)) + additions_total
     return {
         "id": addition.id,
         "shift_id": shift.id,

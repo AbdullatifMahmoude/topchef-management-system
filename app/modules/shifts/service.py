@@ -1,14 +1,15 @@
-from datetime import datetime, date, timedelta, timezone
-from sqlalchemy import select, func, desc, and_
+from datetime import UTC, date, datetime, timedelta, timezone
+from typing import Any
+
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from typing import List, Dict, Any, Optional
 
-from app.modules.shifts.models import CashierShift, ShiftExpense, ShiftCashAddition
-from app.modules.orders.models import Order
-from app.core.enums import OrderStatus, PaymentMethod, OrderType
-from app.core.logging import logger
 from app.core.business_calendar import business_day_start, get_current_business_date
+from app.core.enums import OrderStatus, OrderType, PaymentMethod
+from app.core.logging import logger
+from app.modules.orders.models import Order
+from app.modules.shifts.models import CashierShift, ShiftCashAddition, ShiftExpense
 
 
 def restaurant_sales_amount(order):
@@ -32,7 +33,7 @@ class ShiftsService:
             await SettingsService(self.db, self.redis).toggle_web_orders(True)
             await self.db.commit()
 
-    async def _username_for(self, user_id: int) -> Optional[str]:
+    async def _username_for(self, user_id: int) -> str | None:
         from app.modules.users.models import User
         user = await self.db.get(User, user_id)
         return user.username if user else None
@@ -56,7 +57,7 @@ class ShiftsService:
             return active_shift
         if active_shift:
             # End stale shifts so their expenses cannot appear in the new day.
-            active_shift.end_time = datetime.now(timezone.utc).replace(tzinfo=None)
+            active_shift.end_time = datetime.now(UTC).replace(tzinfo=None)
             await self.db.flush()
 
         # Get the absolute last shift for today, regardless of who owns it
@@ -84,7 +85,7 @@ class ShiftsService:
             new_shift = CashierShift(
                 user_id=user_id,
                 target_date=target_date,
-                start_time=datetime.now(timezone.utc).replace(tzinfo=None)
+                start_time=datetime.now(UTC).replace(tzinfo=None)
             )
             self.db.add(new_shift)
             await self.db.flush() # To get the ID
@@ -105,7 +106,7 @@ class ShiftsService:
         active_shift = result.scalars().first()
         
         if active_shift:
-            active_shift.end_time = datetime.now(timezone.utc).replace(tzinfo=None)
+            active_shift.end_time = datetime.now(UTC).replace(tzinfo=None)
             await self.db.commit()
             if sync_web_orders:
                 remaining = await self.db.scalar(select(func.count(CashierShift.id)).where(
@@ -122,7 +123,7 @@ class ShiftsService:
                 get_business_date(),
             )
 
-    async def get_shifts_report(self, target_date: date) -> List[Dict[str, Any]]:
+    async def get_shifts_report(self, target_date: date) -> list[dict[str, Any]]:
         # Fetch shifts for the day
         query = select(CashierShift).options(selectinload(CashierShift.user)).where(
             CashierShift.target_date == target_date
@@ -186,8 +187,7 @@ class ShiftsService:
             if not dt:
                 return None
             s = dt.isoformat()
-            if s.endswith("+00:00"):
-                s = s[:-6]
+            s = s.removesuffix("+00:00")
             if not s.endswith("Z"):
                 s += "Z"
             return s

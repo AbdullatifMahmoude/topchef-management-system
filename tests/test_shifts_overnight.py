@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.core.enums import OrderStatus, OrderType, PaymentMethod
-from app.modules.shifts.service import ShiftsService
-from app.modules.shifts.models import CashierShift
 from app.core.business_calendar import get_current_business_date
+from app.core.enums import OrderStatus, OrderType, PaymentMethod
+from app.modules.shifts.models import CashierShift
+from app.modules.shifts.service import ShiftsService
 
 
 class _Scalars:

@@ -9,7 +9,6 @@ from app.core.database import AsyncSessionLocal
 from app.core.logging import logger
 from app.modules.settings.service import SettingsService
 
-
 STATUS_NAMES = {
     "new": "تم استلام الطلب",
     "confirmed": "تم تأكيد الطلب",
@@ -239,7 +238,7 @@ async def send_template_message(
             False, error=error.get("message") or f"Meta API rejected the message ({response.status_code})",
             error_code=int(error_code) if str(error_code).isdigit() else None,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("WhatsApp template '%s' request failed: %s", template_name, type(exc).__name__)
         return WhatsAppSendResult(False, error="WhatsApp request failed")
 
@@ -303,6 +302,6 @@ async def send_session_message(
             error=error.get("message") or f"Meta API rejected the message ({response.status_code})",
             error_code=int(code) if str(code).isdigit() else None,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("WhatsApp session message failed: %s", type(exc).__name__)
         return WhatsAppSendResult(False, error="WhatsApp request failed")

@@ -89,7 +89,7 @@ async def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
     hub_verify_token: str = Query(alias="hub.verify_token"),
     hub_challenge: str = Query(alias="hub.challenge"),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ):
     expected = await SettingsService(db).get_whatsapp_webhook_verify_token()
     if not expected or hub_mode != "subscribe" or not hmac.compare_digest(expected, hub_verify_token):
@@ -101,8 +101,8 @@ async def verify_webhook(
 async def receive_webhook(
     request: Request,
     x_hub_signature_256: str | None = Header(default=None),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
-    redis=Depends(get_redis),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
 ):
     secret = await SettingsService(db).get_whatsapp_app_secret()
     body = await request.body()

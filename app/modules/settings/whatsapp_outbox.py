@@ -117,13 +117,13 @@ class WhatsAppOutboxWorker:
                     await asyncio.sleep(self.poll_seconds)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.error("WhatsApp outbox worker failed: %s", exc, exc_info=True)
                 self._failure_count += 1
                 await asyncio.sleep(min(60, self.poll_seconds * (2 ** min(self._failure_count, 5))))
 
     async def process_once(self) -> int:
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         stale = now - timedelta(minutes=5)
         async with AsyncSessionLocal() as db:
             async with db.begin():
@@ -149,7 +149,7 @@ class WhatsAppOutboxWorker:
 
             client = get_whatsapp_http_client()
             for row in rows:
-                check_now = datetime.utcnow()
+                check_now = datetime.now(UTC).replace(tzinfo=None)
                 if row.message_type in {"session_text", "interactive"}:
                     window_open = bool(row.service_window_expires_at and row.service_window_expires_at > check_now)
                     if row.subscription_id:
@@ -187,13 +187,13 @@ class WhatsAppOutboxWorker:
                     if not current:
                         continue
                     current.attempts += 1
-                    current.updated_at = datetime.utcnow()
+                    current.updated_at = datetime.now(UTC).replace(tzinfo=None)
                     if send_result.accepted:
                         current.status = "sent"
-                        current.sent_at = datetime.utcnow()
+                        current.sent_at = datetime.now(UTC).replace(tzinfo=None)
                         current.meta_message_id = send_result.message_id
                         current.delivery_status = "accepted"
-                        current.delivery_updated_at = datetime.utcnow()
+                        current.delivery_updated_at = datetime.now(UTC).replace(tzinfo=None)
                         current.last_error = None
                         if current.subscription_id and current.order_id:
                             subscription = await db.get(
@@ -204,7 +204,7 @@ class WhatsAppOutboxWorker:
                                 OrderStatus.COMPLETED, OrderStatus.DELIVERED, OrderStatus.CANCELLED,
                             }:
                                 subscription.status = "stopped"
-                                subscription.stopped_at = datetime.utcnow()
+                                subscription.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                     elif (
                         send_result.error_code in PERMANENT_RECIPIENT_ERROR_CODES
                         or current.attempts >= self.max_attempts
@@ -227,7 +227,7 @@ class WhatsAppOutboxWorker:
                                 customer.whatsapp_failure_reason = current.last_error[:255]
                     else:
                         current.status = "pending"
-                        current.next_attempt_at = datetime.utcnow() + retry_delay(current.attempts)
+                        current.next_attempt_at = datetime.now(UTC).replace(tzinfo=None) + retry_delay(current.attempts)
                         current.last_error = send_result.error or "Temporary WhatsApp delivery failure"
             return len(rows)
 

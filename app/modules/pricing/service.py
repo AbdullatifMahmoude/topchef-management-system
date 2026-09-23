@@ -1,16 +1,17 @@
 from decimal import Decimal
-from typing import List, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.modules.pricing.schemas import PricingRequest, PricingResult
-from app.core.enums import OrderType, DiscountType
+
+from app.core.enums import DiscountType, OrderType
+from app.core.exceptions import ValidationError
+from app.core.protocols import OfferServiceInterface
 from app.modules.offer.service import OfferService
 from app.modules.pricing.domain import FinancialSnapshot
+from app.modules.pricing.schemas import PricingRequest, PricingResult
 
-from app.core.protocols import OfferServiceInterface
-from app.core.exceptions import ValidationError
 
 class PricingService:
-    def __init__(self, db: AsyncSession, offer_service: Optional[OfferServiceInterface] = None):
+    def __init__(self, db: AsyncSession, offer_service: OfferServiceInterface | None = None):
         self.db = db
         # If not provided, we can still fallback or raise error depending on policy
         # However, for Clean Architecture, explicit injection is better.
@@ -43,7 +44,7 @@ class PricingService:
         # 2b. Apply manual discount if present (cashier-entered)
         if request.manual_discount_type and request.manual_discount_value and request.manual_discount_value > 0:
             if request.manual_discount_type == DiscountType.PERCENTAGE:
-                manual_disc = (subtotal * request.manual_discount_value) / Decimal("100")
+                manual_disc = (subtotal * request.manual_discount_value) / Decimal(100)
             else:  # fixed
                 manual_disc = request.manual_discount_value
             discount_amount = discount_amount + min(manual_disc, subtotal - discount_amount)

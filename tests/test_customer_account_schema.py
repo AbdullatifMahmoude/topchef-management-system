@@ -2,8 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.modules.customer.account_schemas import (
-    CustomerCompleteRequest,
     CustomerBasicProfile,
+    CustomerCompleteRequest,
     CustomerProfile,
     CustomerSessionResponse,
 )

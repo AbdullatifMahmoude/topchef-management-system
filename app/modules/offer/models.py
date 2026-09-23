@@ -1,6 +1,20 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SA_Enum, Numeric, ForeignKey, Index, Table, JSON
-from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta, timezone
+from typing import ClassVar
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Table,
+)
+from sqlalchemy.orm import relationship
+
 from app.core.database import Base, DbEnum
 from app.core.enums import DiscountType
 
@@ -41,7 +55,7 @@ class Offer(Base):
     # which is safer for high-concurrency scenarios.
     version = Column(Integer, nullable=False, default=1)
     
-    __mapper_args__ = {
+    __mapper_args__: ClassVar[dict[str, object]] = {
         "version_id_col": version
     }
 

@@ -1,7 +1,7 @@
-from datetime import datetime
 import importlib
-from types import SimpleNamespace
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,7 +21,7 @@ def test_before_seven_am_belongs_to_previous_business_date():
 @pytest.mark.asyncio
 async def test_admin_business_date_endpoint_uses_business_day_boundary(monkeypatch):
     shifts_router = importlib.import_module("app.modules.shifts.router")
-    monkeypatch.setattr(shifts_router, "get_business_date", lambda: datetime(2026, 9, 15).date())
+    monkeypatch.setattr(shifts_router, "get_business_date", lambda: datetime(2026, 9, 15, tzinfo=UTC).date())
 
     result = await get_shift_business_date(SimpleNamespace(role=UserRole.ADMIN))
 

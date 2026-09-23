@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +16,7 @@ class CustomerRepository:
             models.Customer.addresses.and_(models.CustomerAddress.is_deleted == False)
         )
 
-    async def get_by_id(self, customer_id: int) -> Optional[models.Customer]:
+    async def get_by_id(self, customer_id: int) -> models.Customer | None:
         query = (
             select(models.Customer)
             .where(
@@ -29,7 +28,7 @@ class CustomerRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_basic_by_id(self, customer_id: int) -> Optional[models.Customer]:
+    async def get_basic_by_id(self, customer_id: int) -> models.Customer | None:
         result = await self.db.execute(
             select(models.Customer).where(
                 models.Customer.id == customer_id,
@@ -38,7 +37,7 @@ class CustomerRepository:
         )
         return result.scalars().first()
 
-    async def get_by_phone(self, phone: str) -> Optional[models.Customer]:
+    async def get_by_phone(self, phone: str) -> models.Customer | None:
         candidates = phone_lookup_candidates(phone)
         if not candidates:
             return None
@@ -53,7 +52,7 @@ class CustomerRepository:
         result = await self.db.execute(query)
         return result.scalars().first()
 
-    async def get_by_email(self, email: str) -> Optional[models.Customer]:
+    async def get_by_email(self, email: str) -> models.Customer | None:
         query = (
             select(models.Customer)
             .where(
@@ -70,7 +69,7 @@ class CustomerRepository:
         await self.db.flush()
         return obj
 
-    async def list_customers(self) -> List[models.Customer]:
+    async def list_customers(self) -> list[models.Customer]:
         query = (
             select(models.Customer)
             .where(models.Customer.is_deleted == False)

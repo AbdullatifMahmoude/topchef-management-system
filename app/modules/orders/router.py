@@ -1,23 +1,19 @@
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
-
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
 
 from app.core.database import get_db
-from app.modules.auth.dependencies import get_current_user, get_optional_user
-from app.modules.orders.service import OrderService
-from app.modules.orders import schemas
 from app.core.enums import OrderSource, OrderStatus, OrderType, UserRole
-
-from app.core.redis import get_redis
-from app.modules.orders.dependencies import get_order_service
 from app.core.events import order_events_manager
-from app.core.security import decode_token
 from app.core.logging import logger
+from app.core.security import decode_token
+from app.modules.auth.dependencies import get_current_user, get_optional_user
 from app.modules.auth.repository import AuthRepository
-
+from app.modules.orders import schemas
+from app.modules.orders.dependencies import get_order_service
+from app.modules.orders.service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -49,20 +45,20 @@ def websocket_protocol_token(header: str | None) -> str | None:
 async def create_order(
     order_data: schemas.OrderCreate,
     service: OrderService = Depends(get_order_service),
-    current_user: Optional[any] = Depends(get_optional_user)
+    current_user: Any | None = Depends(get_optional_user)
 ):
     user_id = current_user.id if current_user else None
     return await service.create_order(order_data, current_user_id=user_id)
 
 @router.get("/", response_model=schemas.OrderListResponse)  # Change to dict with pagination
 async def list_orders(
-    source: Optional[OrderSource] = None,
-    status: Optional[OrderStatus] = None,
-    order_type: Optional[OrderType] = None,
+    source: OrderSource | None = None,
+    status: OrderStatus | None = None,
+    order_type: OrderType | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     cashier_id = None
     if current_user and hasattr(current_user, 'role') and current_user.role == UserRole.CASHIER:
@@ -88,24 +84,24 @@ async def list_orders(
 async def get_order_detail(
     order_id: int,
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     return await service.get_order(order_id)
 
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     return await service.get_today_stats()
 
 @router.get("/dashboard/today", response_model=schemas.DashboardOrderListResponse)
 async def list_dashboard_today_orders(
-    source: Optional[OrderSource] = None,
-    status: Optional[OrderStatus] = None,
-    order_type: Optional[OrderType] = None,
+    source: OrderSource | None = None,
+    status: OrderStatus | None = None,
+    order_type: OrderType | None = None,
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     cashier_id = None
     if current_user and hasattr(current_user, 'role') and current_user.role == UserRole.CASHIER:
@@ -128,21 +124,24 @@ async def list_dashboard_today_orders(
 @router.get("/riders/stats")
 async def get_rider_stats(
     db: AsyncSession = Depends(get_db),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     """Return the live delivery desk snapshot for the current business day."""
-    from datetime import datetime, timedelta, timezone
-    from sqlalchemy import select, and_, or_
+    from datetime import datetime
+
+    from sqlalchemy import and_, or_, select
     from sqlalchemy.orm import selectinload
-    from app.modules.orders.models import Order
-    from app.modules.users.models import User
-    from app.core.enums import OrderStatus, OrderType, UserRole, PaymentMethod
-    
+
     from app.core.business_calendar import (
         EGYPT_TZ,
-        business_day_start as get_business_day_start,
         get_current_business_date,
     )
+    from app.core.business_calendar import (
+        business_day_start as get_business_day_start,
+    )
+    from app.core.enums import OrderStatus, OrderType, PaymentMethod, UserRole
+    from app.modules.orders.models import Order
+    from app.modules.users.models import User
 
     # `order_date` is set from the 7 AM business-day boundary when the order is
     # created. It is the authoritative order response.
@@ -272,7 +271,7 @@ async def update_order(
     order_id: int,
     update_data: schemas.OrderUpdateFull,
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     user_id = current_user.id if current_user else None
     return await service.update_order(order_id, update_data, current_user_id=user_id)
@@ -282,7 +281,7 @@ async def update_order_status(
     order_id: int,
     update_data: schemas.OrderUpdate,
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     user_id = current_user.id if current_user else None
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)

@@ -1,15 +1,9 @@
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
+
 from app.core.database import Base, DbEnum
 from app.core.enums import UserRole
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    Index,
-    Enum as SQLEnum,
-    Boolean
-)
-from datetime import datetime
 
 
 class User(Base):

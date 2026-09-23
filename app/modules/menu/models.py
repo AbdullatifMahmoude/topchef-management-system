@@ -1,24 +1,20 @@
 from datetime import datetime
 
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Index,
-    DateTime,
     Boolean,
+    Column,
+    DateTime,
     ForeignKey,
+    Integer,
     Numeric,
-    Enum as SQLEnum,
-    UniqueConstraint
-    , Text
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
+
 from app.core.database import Base, DbEnum
-from enum import Enum
-from app.core.enums import ProductType 
-
-
+from app.core.enums import ProductType
 
 
 class Category(Base):

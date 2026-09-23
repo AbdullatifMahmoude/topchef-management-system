@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
 from app.modules.settings import models
+
 
 class SettingsRepository:
     def __init__(self, db: AsyncSession):
@@ -24,7 +26,7 @@ class SettingsRepository:
         )
         return {setting.key: setting for setting in result.scalars().all()}
 
-    async def create_or_update_setting(self, key: str, value_bool: bool, description: str = None) -> models.AppSetting:
+    async def create_or_update_setting(self, key: str, value_bool: bool, description: str | None = None) -> models.AppSetting:
         setting = await self.get_setting(key)
         if setting:
             setting.value_bool = value_bool
@@ -35,7 +37,7 @@ class SettingsRepository:
             self.db.add(setting)
         return setting
 
-    async def create_or_update_text_setting(self, key: str, value_text: str, description: str = None) -> models.AppSetting:
+    async def create_or_update_text_setting(self, key: str, value_text: str, description: str | None = None) -> models.AppSetting:
         setting = await self.get_setting(key)
         if setting:
             setting.value_text = value_text

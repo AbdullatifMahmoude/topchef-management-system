@@ -126,7 +126,7 @@ def _resolve_env_file() -> str:
     return ".env"
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings(_env_file=_resolve_env_file())
 

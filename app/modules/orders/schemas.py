@@ -1,9 +1,24 @@
 from datetime import date, datetime
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator, AliasChoices
 from decimal import Decimal
-from app.core.enums import OrderType, OrderSource, OrderStatus, DiscountType, PaymentMethod
+
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+from app.core.enums import (
+    DiscountType,
+    OrderSource,
+    OrderStatus,
+    OrderType,
+    PaymentMethod,
+)
 from app.modules.customer.schemas import CustomerAddressResponse
+
 
 class OrderItemBase(BaseModel):
     product_id: int
@@ -17,38 +32,38 @@ class OrderItemResponse(OrderItemBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     total_price: Decimal
-    product_name: Optional[str] = None
+    product_name: str | None = None
 
 class AppliedOfferResponse(BaseModel):
     code: str
-    display_name: Optional[str] = None
+    display_name: str | None = None
     discount_type: DiscountType
     discount_value: Decimal
     discount_amount: Decimal
 
 class OrderBase(BaseModel):
-    customer_id: Optional[int] = None
-    customer_phone: Optional[str] = None
-    customer_name: Optional[str] = None
+    customer_id: int | None = None
+    customer_phone: str | None = None
+    customer_name: str | None = None
     order_type: OrderType
     source: OrderSource = Field(OrderSource.ONLINE, validation_alias=AliasChoices("source", "order_source"))
-    customer_notes: Optional[str] = None
-    internal_notes: Optional[str] = None
+    customer_notes: str | None = None
+    internal_notes: str | None = None
     payment_method: PaymentMethod = PaymentMethod.CASH
 
 class OrderCreate(OrderBase):
-    items: List[OrderItemCreate]
-    idempotency_key: Optional[str] = None
-    address_id: Optional[int] = None
-    customer_address: Optional[str] = None
-    delivery_person_id: Optional[int] = None
+    items: list[OrderItemCreate]
+    idempotency_key: str | None = None
+    address_id: int | None = None
+    customer_address: str | None = None
+    delivery_person_id: int | None = None
     delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
-    offer_code: Optional[str] = None
-    manual_discount_type: Optional[DiscountType] = None
-    manual_discount_value: Optional[Decimal] = Field(default=None, gt=0)
-    discount_reason: Optional[str] = None
-    order_number: Optional[str] = None
-    order_date: Optional[date] = None
+    offer_code: str | None = None
+    manual_discount_type: DiscountType | None = None
+    manual_discount_value: Decimal | None = Field(default=None, gt=0)
+    discount_reason: str | None = None
+    order_number: str | None = None
+    order_date: date | None = None
     
     @field_validator('customer_id', 'address_id', 'delivery_person_id', mode='before')
     @classmethod
@@ -61,16 +76,16 @@ class OrderCreate(OrderBase):
     def validate_discount_rules(self):
         if (self.manual_discount_type is None) != (self.manual_discount_value is None):
             raise ValueError("Manual discount type and value must be provided together")
-        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value > Decimal("100"):
+        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value > Decimal(100):
             raise ValueError("Manual percentage discount cannot exceed 100%")
         if self.offer_code and self.manual_discount_type:
             raise ValueError("An offer and a manual discount cannot be combined")
         return self
 
 class OrderUpdate(BaseModel):
-    order_status: Optional[OrderStatus] = None
-    delivery_person_id: Optional[int] = None
-    internal_notes: Optional[str] = None
+    order_status: OrderStatus | None = None
+    delivery_person_id: int | None = None
+    internal_notes: str | None = None
 
     @field_validator('delivery_person_id', mode='before')
     @classmethod
@@ -81,21 +96,21 @@ class OrderUpdate(BaseModel):
 
 class OrderUpdateFull(BaseModel):
     """Comprehensive order update schema for patch endpoint."""
-    order_type: Optional[OrderType] = None
-    delivery_person_id: Optional[int] = None
-    customer_name: Optional[str] = None
-    customer_phone: Optional[str] = None
-    customer_notes: Optional[str] = None
-    internal_notes: Optional[str] = None
-    address_id: Optional[int] = None
-    customer_address: Optional[str] = None
-    customer_id: Optional[int] = None
-    delivery_fee: Optional[Decimal] = None
-    items: Optional[List[OrderItemCreate]] = None
-    manual_discount_type: Optional[DiscountType] = None
-    manual_discount_value: Optional[Decimal] = Field(default=None, gt=0)
-    discount_reason: Optional[str] = None
-    payment_method: Optional[PaymentMethod] = None
+    order_type: OrderType | None = None
+    delivery_person_id: int | None = None
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    customer_notes: str | None = None
+    internal_notes: str | None = None
+    address_id: int | None = None
+    customer_address: str | None = None
+    customer_id: int | None = None
+    delivery_fee: Decimal | None = None
+    items: list[OrderItemCreate] | None = None
+    manual_discount_type: DiscountType | None = None
+    manual_discount_value: Decimal | None = Field(default=None, gt=0)
+    discount_reason: str | None = None
+    payment_method: PaymentMethod | None = None
 
     @field_validator('delivery_person_id', 'address_id', mode='before')
     @classmethod
@@ -106,7 +121,7 @@ class OrderUpdateFull(BaseModel):
 
     @model_validator(mode='after')
     def validate_percentage_discount(self):
-        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value is not None and self.manual_discount_value > Decimal("100"):
+        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value is not None and self.manual_discount_value > Decimal(100):
             raise ValueError("Manual percentage discount cannot exceed 100%")
         return self
 
@@ -116,24 +131,24 @@ class OrderResponse(OrderBase):
     order_number: str
     order_date: date
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     order_status: OrderStatus
     subtotal: Decimal
     discount_amount: Decimal
-    discount_type: Optional[DiscountType] = None
-    discount_value: Optional[Decimal] = None
-    discount_reason: Optional[str] = None
-    applied_offer: Optional[AppliedOfferResponse] = None
+    discount_type: DiscountType | None = None
+    discount_value: Decimal | None = None
+    discount_reason: str | None = None
+    applied_offer: AppliedOfferResponse | None = None
     delivery_fee: Decimal
     total_amount: Decimal
-    items: List[OrderItemResponse]
-    creator_name: Optional[str] = None
-    delivery_person_name: Optional[str] = None
-    delivery_person_id: Optional[int] = None
-    address_id: Optional[int] = None
-    customer_address: Optional[str] = None
-    address: Optional[CustomerAddressResponse] = None
-    modifications: List["OrderModificationResponse"] = []
+    items: list[OrderItemResponse]
+    creator_name: str | None = None
+    delivery_person_name: str | None = None
+    delivery_person_id: int | None = None
+    address_id: int | None = None
+    customer_address: str | None = None
+    address: CustomerAddressResponse | None = None
+    modifications: list["OrderModificationResponse"] = []
 
     @model_validator(mode='after')
     def validate_financial_integrity(self):
@@ -149,26 +164,26 @@ class OrderResponse(OrderBase):
 class OrderModificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    changed_by_user_id: Optional[int] = None
+    changed_by_user_id: int | None = None
     changed_at: datetime
-    changes: List[str]  # We will store a list of string messages
+    changes: list[str]  # We will store a list of string messages
 
 # Resolve forward reference for OrderResponse.modifications
 OrderResponse.model_rebuild()
 
 class OrderDetailResponse(OrderResponse):
-    created_by_user_id: Optional[int] = None
-    delivery_person_id: Optional[int] = None
+    created_by_user_id: int | None = None
+    delivery_person_id: int | None = None
     updated_at: datetime
-    internal_notes: Optional[str] = None
-    modifications: List[OrderModificationResponse] = []
+    internal_notes: str | None = None
+    modifications: list[OrderModificationResponse] = []
 
 
 class OrderListResponse(BaseModel):
     total: int
     page: int
     page_size: int
-    orders: List[OrderResponse]
+    orders: list[OrderResponse]
 
 
 class DashboardOrderResponse(BaseModel):
@@ -177,17 +192,17 @@ class DashboardOrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     order_number: str
-    customer_name: Optional[str] = None
+    customer_name: str | None = None
     order_type: OrderType
     order_status: OrderStatus
     total_amount: Decimal
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    items: List[OrderItemResponse]
+    updated_at: datetime | None = None
+    items: list[OrderItemResponse]
 
 
 class DashboardOrderListResponse(BaseModel):
     total: int
     page: int
     page_size: int
-    orders: List[DashboardOrderResponse]
+    orders: list[DashboardOrderResponse]

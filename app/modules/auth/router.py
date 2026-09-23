@@ -7,10 +7,10 @@ from app.modules.auth.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
     PasswordResetResponse,
-    VerificationChallengeResponse,
-    VerificationStatusResponse,
     ResetPasswordRequest,
     TokenResponse,
+    VerificationChallengeResponse,
+    VerificationStatusResponse,
 )
 from app.modules.auth.service import AuthService
 
@@ -56,9 +56,9 @@ async def login(
 
 from fastapi.security import HTTPAuthorizationCredentials
 
+from app.core.exceptions import AuthenticationError, AuthenticationServiceUnavailable
 from app.core.security import decode_token
 from app.core.token_blacklist import TokenBlacklist
-from app.core.exceptions import AuthenticationError, AuthenticationServiceUnavailable
 from app.modules.auth.dependencies import get_current_user, security_scheme
 
 

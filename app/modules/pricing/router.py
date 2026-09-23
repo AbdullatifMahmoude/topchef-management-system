@@ -1,15 +1,14 @@
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
-from app.core.exceptions import ValidationError
-from app.core.enums import UserRole
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from app.modules.pricing import schemas, service
-from app.modules.auth.dependencies import get_optional_user
-from app.modules.users.schemas import UserResponse
-from typing import Optional
 import time
 from collections import defaultdict
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
+
+from app.core.enums import UserRole
+from app.core.exceptions import ValidationError
+from app.modules.auth.dependencies import get_optional_user
+from app.modules.pricing import schemas, service
+from app.modules.users.schemas import UserResponse
 
 router = APIRouter(prefix="/pricing", tags=["Pricing"])
 
@@ -38,7 +37,7 @@ async def get_price_preview(
     request: schemas.PricingRequest,
     http_request: Request = None,
     pricing_service: service.PricingService = Depends(get_pricing_service),
-    current_user: Optional[UserResponse] = Depends(get_optional_user)
+    current_user: UserResponse | None = Depends(get_optional_user)
 ):
     """
     Public endpoint to preview pricing and offers.
@@ -62,19 +61,18 @@ async def get_price_preview(
         )
 
     # IDOR Protection: If user is logged in, they must probe their own phone or be staff
-    if current_user:
+    if current_user and not is_staff and request.customer_phone:
         # UserResponse exposes one `role` field (not a `roles` collection).
         # Checking the non-existent collection classified cashiers as customers,
         # so delivery previews were rejected when they contained the customer's
         # phone number.
         # If not staff, enforce that the requested phone matches the user's own phone
-        if not is_staff and request.customer_phone:
-            user_phone = getattr(current_user, 'phone', None)
-            if user_phone and request.customer_phone != user_phone:
-                from app.core.logging import logger
-                logger.warning("Pricing identity mismatch user_id=%s", current_user.id)
-                # We return a generic error or just override the phone to theirs
-                # For security, raising ValidationError is better to signal it's blocked
-                raise ValidationError("You can only preview pricing for your own phone number.")
+        user_phone = getattr(current_user, 'phone', None)
+        if user_phone and request.customer_phone != user_phone:
+            from app.core.logging import logger
+            logger.warning("Pricing identity mismatch user_id=%s", current_user.id)
+            # We return a generic error or just override the phone to theirs
+            # For security, raising ValidationError is better to signal it's blocked
+            raise ValidationError("You can only preview pricing for your own phone number.")
 
     return await pricing_service.calculate_price(request)

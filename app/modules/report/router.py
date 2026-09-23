@@ -1,10 +1,12 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import date
-from typing import Optional
+
 from app.core.database import get_db
-from . import schemas, service
 from app.modules.auth.dependencies import get_current_user
+
+from . import schemas, service
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -24,7 +26,7 @@ async def get_report_orders_page(
 
 @router.get("/daily", response_model=schemas.DailyReportResponse)
 async def get_daily_report(
-    target_date: Optional[date] = Query(default=None, description="Date for the report (YYYY-MM-DD). Defaults to current business day (7 AM shift)"),
+    target_date: date | None = Query(default=None, description="Date for the report (YYYY-MM-DD). Defaults to current business day (7 AM shift)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -36,7 +38,7 @@ async def get_daily_report(
 
 @router.get("/weekly", response_model=schemas.WeeklyReportResponse)
 async def get_weekly_report(
-    target_date: Optional[date] = Query(default=None, description="Any date within the target week (YYYY-MM-DD)"),
+    target_date: date | None = Query(default=None, description="Any date within the target week (YYYY-MM-DD)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),

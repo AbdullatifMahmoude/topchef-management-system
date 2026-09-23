@@ -1,5 +1,6 @@
 import logging
 import sys
+
 from pythonjsonlogger import json
 
 
@@ -31,8 +32,8 @@ def setup_logging():
         fh = RotatingFileHandler(log_file, maxBytes=5_242_880, backupCount=5, encoding="utf-8")
         fh.setFormatter(formatter)
         logger.addHandler(fh)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("File logging is unavailable: %s", exc)
 
     logger.setLevel(logging.INFO)
     return logger

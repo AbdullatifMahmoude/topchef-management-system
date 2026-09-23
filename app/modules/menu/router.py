@@ -1,22 +1,23 @@
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
 from app.core.redis import get_redis
-from app.modules.menu import service, schemas, models
-from typing import List
 from app.modules.infrastructure.dependencies import (
-    require_capability,
     Capability,
     get_current_user,
     get_optional_user,
+    require_capability,
 )
+from app.modules.menu import models, schemas, service
 
 router = APIRouter(prefix="/menu", tags=["menu"])
 
 # =============== category ==================
 
 # READ operations — any authenticated user can view
-@router.get("/categories", response_model=List[schemas.CategoryResponse])
+@router.get("/categories", response_model=list[schemas.CategoryResponse])
 async def list_categories(
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
@@ -84,7 +85,6 @@ async def delete_category(
 ):
     cat_service = service.CategoryService(db, redis)
     await cat_service.delete_category(id)
-    return None
 
 
 @router.patch("/categories/{id}/toggle", response_model=schemas.CategoryResponse)
@@ -102,7 +102,7 @@ async def toggle_category(
 # ================== products ==============
 
 # READ operations — any authenticated user can view
-@router.get("/products", response_model=List[schemas.ProductResponse])
+@router.get("/products", response_model=list[schemas.ProductResponse])
 async def list_products(
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
@@ -122,12 +122,14 @@ async def get_products_operations(
     _current_user=Depends(require_capability(Capability.MANAGE_MENU)),
 ):
     """Last 30 days sales and recent auditable menu changes."""
-    from datetime import datetime, timedelta
-    from sqlalchemy import select, func
-    from app.modules.orders.models import Order, OrderItem
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func, select
+
     from app.core.enums import OrderStatus
+    from app.modules.orders.models import Order, OrderItem
     from app.modules.users.models import User
-    cutoff = datetime.utcnow() - timedelta(days=30)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
     sales_result = await db.execute(
         select(
             OrderItem.product_id,
@@ -164,13 +166,15 @@ async def get_popular_products(
     _current_user=Depends(get_current_user),
 ):
     """Best-selling available products for the cashier quick-pick bar."""
-    from datetime import datetime, timedelta
-    from sqlalchemy import select, func
-    from app.modules.orders.models import Order, OrderItem
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import func, select
+
     from app.core.enums import OrderStatus
+    from app.modules.orders.models import Order, OrderItem
 
     safe_limit = max(1, min(limit, 12))
-    cutoff = datetime.utcnow() - timedelta(days=30)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
     result = await db.execute(
         select(OrderItem.product_id, func.sum(OrderItem.quantity).label("units_sold"))
         .join(Order, Order.id == OrderItem.order_id)
@@ -244,7 +248,6 @@ async def delete_product(
 ):
     products_service = service.ProductService(db, redis)
     await products_service.delete_product(id)
-    return None
 
 
 @router.patch("/products/{id}/toggle", response_model=schemas.ProductResponse)

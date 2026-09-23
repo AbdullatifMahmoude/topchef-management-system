@@ -1,8 +1,9 @@
-from typing import Protocol, Optional, List, Any
 from decimal import Decimal
+from typing import Any, Protocol
+
 
 class CacheStore(Protocol):
-    async def get(self, key: str) -> Optional[str]: ...
+    async def get(self, key: str) -> str | None: ...
     async def setex(self, key: str, ttl: int, value: str) -> None: ...
     async def delete(self, key: str) -> None: ...
     async def incr(self, key: str) -> int: ...
@@ -16,10 +17,10 @@ class OfferServiceInterface(Protocol):
         self, 
         code: str, 
         subtotal: Decimal, 
-        items: Optional[List] = None, 
-        customer_phone: Optional[str] = None, 
-        cashier_id: Optional[int] = None,
+        items: list | None = None,
+        customer_phone: str | None = None,
+        cashier_id: int | None = None,
         commit_usage: bool = False, 
-        order_id: Optional[int] = None,
-        existing_order_id: Optional[int] = None,
+        order_id: int | None = None,
+        existing_order_id: int | None = None,
     ) -> Any: ...

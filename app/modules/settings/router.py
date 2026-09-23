@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from app.core.redis import get_redis
-from app.modules.settings import schemas, service
-from app.modules.infrastructure.dependencies import require_role
-from app.core.enums import UserRole
+
 from app.core.business_calendar import is_weekly_holiday
+from app.core.database import get_db
+from app.core.enums import UserRole
+from app.core.redis import get_redis
 from app.modules.customer.repository import CustomerRepository
+from app.modules.infrastructure.dependencies import require_role
+from app.modules.settings import schemas, service
 from app.modules.settings.whatsapp import whatsapp_config_ready
 from app.modules.settings.whatsapp_outbox import enqueue_bulk_notifications
 

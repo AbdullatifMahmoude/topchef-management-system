@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.modules.orders import consent
 from app.core.enums import OrderSource
+from app.modules.orders import consent
 
 
 class FakeDb:

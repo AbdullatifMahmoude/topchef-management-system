@@ -115,7 +115,7 @@ def render_ai_menu(catalog: dict) -> str:
 
 
 @router.get("/ai-menu", response_class=HTMLResponse)
-async def ai_menu(db: AsyncSession = Depends(get_db)) -> HTMLResponse:  # noqa: B008
+async def ai_menu(db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     catalog = await service.get_public_catalog(db)
     return HTMLResponse(
         content=render_ai_menu(catalog),

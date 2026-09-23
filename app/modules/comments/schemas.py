@@ -1,6 +1,6 @@
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
 
 
 class CommentCreate(BaseModel):
@@ -20,4 +20,4 @@ class CommentListResponse(BaseModel):
     page: int
     page_size: int
     comments: list[CommentResponse]
-    average_rating: Optional[float] = None
+    average_rating: float | None = None
