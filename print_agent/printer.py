@@ -131,6 +131,46 @@ class PrinterManager:
         except (TypeError, ValueError):
             return default
 
+    def _offer_lines(self, order: Dict[str, Any]) -> list[str]:
+        offer = order.get("applied_offer")
+        if not isinstance(offer, dict):
+            return []
+        name = offer.get("display_name") or offer.get("code")
+        if not name:
+            return []
+        lines = [f"العرض: {name}"]
+        code = offer.get("code")
+        if code and code != name:
+            lines.append(f"كود العرض: {code}")
+        kind = str(offer.get("discount_type") or "").lower()
+        value = self._number(offer.get("discount_value"))
+        rules = offer.get("rules") or {}
+        detail = {
+            "percentage": f"خصم {value:g}%",
+            "fixed": f"خصم {value:g} ج.م",
+            "happy_hour": f"خصم {value:g}%",
+            "quantity_discount": f"خصم {value:g}% عند شراء {rules.get('quantity_required', 1)}",
+            "category_discount": f"خصم {value:g}{' ج.م' if rules.get('discount_mode') == 'fixed' else '%'} على التصنيف",
+            "buy_one_get_one": "اشترِ واحدًا واحصل على واحد",
+            "buy_x_get_y": f"اشترِ {rules.get('buy_quantity', 1)} وخذ {rules.get('get_quantity', 1)}",
+            "combo": f"الكومبو بسعر {self._number(rules.get('combo_price')):g} ج.م",
+            "free_delivery": "توصيل مجاني",
+        }.get(kind)
+        if detail:
+            lines.append(f"تفاصيل العرض: {detail}")
+        return lines
+
+    def _payment_lines(self, order: Dict[str, Any]) -> list[str]:
+        method = str(self._value(order, "payment_method", "paymentMethod", default="")).lower()
+        labels = {"cash": "نقدي", "instapay": "إنستا باي", "wallet": "محفظة إلكترونية"}
+        if method not in labels:
+            return []
+        lines = [f"طريقة الدفع: {labels[method]}"]
+        if method in ("instapay", "wallet"):
+            destination = self._value(order, "payment_destination", "paymentDestination", default="01009515031")
+            lines.append(f"رقم التحويل: {destination}")
+        return lines
+
     def _format_date_parts(self, raw_value: Any) -> tuple[str, str]:
         if not raw_value:
             return "---", "---"
@@ -420,6 +460,11 @@ class PrinterManager:
         discount_amount = self._number(self._value(order, "discount_amount", "discountAmount", default=0))
         discount_reason = self._value(order, "discount_reason", "discountReason", default="")
         
+        for offer_line in self._offer_lines(order):
+            for wrapped in wrap_text(offer_line, fonts["small"], self.CONTENT_WIDTH * scale):
+                draw.text((content_right, y), wrapped, fill="black", font=fonts["small"], anchor="ra")
+                y += u(34)
+
         if discount_amount > 0:
             discount_label = "الخصم:"
             if discount_reason:
@@ -434,6 +479,13 @@ class PrinterManager:
         draw_right("الإجمالي النهائي:", y, fonts["grand"])
         draw_text(f"{grand_total:.2f} ج.م", margin, y, fonts["grand"])
         y += u(50)
+
+        for payment_line in self._payment_lines(order):
+            for wrapped in wrap_text(payment_line, fonts["small"], self.CONTENT_WIDTH * scale):
+                draw.text((content_right, y), wrapped, fill="black", font=fonts["small"], anchor="ra")
+                y += u(34)
+        if self._payment_lines(order):
+            y += u(12)
 
         y = self._draw_customer_info(order, image, draw, fonts, y, scale)
 

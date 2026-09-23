@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from pydantic import (
     AliasChoices,
@@ -40,6 +41,7 @@ class AppliedOfferResponse(BaseModel):
     discount_type: DiscountType
     discount_value: Decimal
     discount_amount: Decimal
+    rules: dict[str, Any] = Field(default_factory=dict)
 
 class OrderBase(BaseModel):
     customer_id: int | None = None

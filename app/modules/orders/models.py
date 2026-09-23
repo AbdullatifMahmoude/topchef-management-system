@@ -133,6 +133,7 @@ class Order(Base):
             "discount_type": offer.discount_type,
             "discount_value": offer.discount_value,
             "discount_amount": usage.discount_amount,
+            "rules": offer.rules or {},
         }
 
     __table_args__ = (

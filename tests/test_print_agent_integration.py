@@ -10,6 +10,39 @@ class PrintAgentIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
+    def test_receipt_details_only_include_present_payment_and_offer(self):
+        from print_agent.printer import PrinterManager
+
+        printer = PrinterManager()
+        plain = {"payment_method": "cash", "discount_amount": 0}
+        self.assertEqual(printer._payment_lines(plain), ["طريقة الدفع: نقدي"])
+        self.assertEqual(printer._offer_lines(plain), [])
+
+        discounted = {
+            "payment_method": "instapay",
+            "payment_destination": "01009515031",
+            "applied_offer": {
+                "code": "SAVE20",
+                "display_name": "عرض العائلة",
+                "discount_type": "percentage",
+                "discount_value": 20,
+                "discount_amount": 30,
+            },
+            "discount_amount": 30,
+        }
+        self.assertEqual(
+            printer._payment_lines(discounted),
+            ["طريقة الدفع: إنستا باي", "رقم التحويل: 01009515031"],
+        )
+        self.assertEqual(
+            printer._offer_lines(discounted),
+            ["العرض: عرض العائلة", "كود العرض: SAVE20", "تفاصيل العرض: خصم 20%"],
+        )
+        self.assertEqual(
+            printer._payment_lines({"payment_method": "wallet"}),
+            ["طريقة الدفع: محفظة إلكترونية", "رقم التحويل: 01009515031"],
+        )
+
     def test_health_endpoint(self):
         response = self.client.get("/api/health")
         self.assertEqual(response.status_code, 200)

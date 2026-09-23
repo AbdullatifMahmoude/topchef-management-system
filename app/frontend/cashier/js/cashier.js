@@ -2,14 +2,31 @@ const API_BASE = window.location.origin;
 const TOPCHEF_PRINT_AGENT_URL = "http://127.0.0.1:8199";
 
 // Print Agent bridge: sends invoice data to the native local service only.
-function printReceipt(orderData) {
+async function printReceipt(orderData) {
+  let printOrder = orderData;
+  if (["instapay", "wallet"].includes(orderData.payment_method)) {
+    let destination = "01009515031";
+    try {
+      const response = await fetch(`${API_BASE}/settings/menu-checkout`, { cache: "no-store" });
+      if (response.ok) {
+        const settings = await response.json();
+        destination = orderData.payment_method === "instapay"
+          ? settings.instapay_account || destination
+          : settings.wallet_number || destination;
+      }
+    } catch (error) {
+      console.warn("Could not refresh payment destination for receipt", error);
+    }
+    printOrder = { ...orderData, payment_destination: destination };
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 1800);
 
   fetch(`${TOPCHEF_PRINT_AGENT_URL}/api/print`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ order: orderData, receipt_type: "customer" }),
+    body: JSON.stringify({ order: printOrder, receipt_type: "customer" }),
     targetAddressSpace: "loopback",
     signal: controller.signal,
   })

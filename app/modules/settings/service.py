@@ -7,6 +7,8 @@ from app.core.secrets import decrypt_secret, encrypt_secret
 from app.modules.settings import schemas
 from app.modules.settings.repository import SettingsRepository
 
+DEFAULT_TRANSFER_NUMBER = "01009515031"
+
 
 class SettingsService:
     WHATSAPP_API_KEY = "whatsapp_api_key"
@@ -109,10 +111,10 @@ class SettingsService:
         text = lambda key: (values.get(key).value_text or "") if values.get(key) else ""
         flag = lambda key: bool(values.get(key) and values.get(key).value_bool)
         return schemas.PaymentSettingsResponse(
-            instapay_enabled=flag(self.INSTAPAY_ENABLED) and bool(text(self.INSTAPAY_ACCOUNT).strip()),
-            instapay_account=text(self.INSTAPAY_ACCOUNT),
-            wallet_enabled=flag(self.WALLET_ENABLED) and bool(text(self.WALLET_NUMBER).strip()),
-            wallet_number=text(self.WALLET_NUMBER),
+            instapay_enabled=flag(self.INSTAPAY_ENABLED),
+            instapay_account=text(self.INSTAPAY_ACCOUNT).strip() or DEFAULT_TRANSFER_NUMBER,
+            wallet_enabled=flag(self.WALLET_ENABLED),
+            wallet_number=text(self.WALLET_NUMBER).strip() or DEFAULT_TRANSFER_NUMBER,
             payment_account_name=text(self.PAYMENT_ACCOUNT_NAME),
         )
 
