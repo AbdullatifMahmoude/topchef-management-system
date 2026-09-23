@@ -2058,3 +2058,130 @@ nav.cashier_nav {
   .expense_form label { font-size:13px; }.expense_form input,.expense_form textarea { font-size:14px; }
   .expense_row strong { font-size:13px; }.expense_row span,.expense_row small { font-size:10px; }.expense_row b { font-size:14px; }
 }
+
+/* Order editing uses the same menu, checkout, and setup columns as order entry. */
+#edit_order_modal_overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: rgba(0, 0, 0, .72);
+  backdrop-filter: blur(7px);
+}
+.edit_order_modal_shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1560px, 100%);
+  height: min(920px, calc(100dvh - 28px));
+  min-height: 0;
+  overflow: hidden;
+  direction: rtl;
+  border: 1px solid rgba(201, 168, 76, .45);
+  border-radius: 18px;
+  background: var(--color-bg);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
+}
+.edit_order_modal_header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 20px;
+  border-bottom: 1px solid rgba(201, 168, 76, .3);
+  background: linear-gradient(180deg, #c79a4a, #7a4f1a);
+}
+.edit_order_modal_heading { display: flex; align-items: center; gap: 11px; }
+.edit_order_modal_heading img { width: 42px; height: 42px; object-fit: contain; }
+.edit_order_modal_heading span { display: block; color: rgba(20, 13, 5, .72); font-size: 10px; font-weight: 800; }
+.edit_order_modal_heading h2 { margin: 0; color: #211605; font-size: 19px; font-weight: 900; }
+.edit_order_modal_close {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--color-bg);
+  color: var(--color-primary);
+  font-size: 24px;
+  cursor: pointer;
+}
+.edit_order_modal_layout {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px) minmax(280px, 330px);
+  gap: 14px;
+  padding: 14px 16px 18px;
+  overflow: hidden;
+}
+.edit_order_modal_layout .right_section {
+  min-width: 0;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, .075);
+  border-radius: 17px;
+  background: rgba(19, 17, 13, .54);
+}
+.edit_order_modal_layout .category_tabs {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 1px 7px;
+}
+.edit_order_modal_layout .tab_btn {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+.edit_order_modal_layout .items_grid { flex: 1; min-height: 0; gap: 10px; padding: 2px 4px 10px; }
+.edit_order_modal_layout .item_card {
+  min-height: 105px;
+  justify-content: center;
+  padding: 13px 10px;
+  border-color: rgba(255, 255, 255, .075);
+  background: rgba(18, 16, 12, .68);
+}
+.edit_order_modal_layout .order_setup_panel,
+.edit_order_modal_layout .total_container { min-height: 0; height: calc(100% - 8px); margin: 4px 0 12px; }
+.edit_order_modal_layout .total_container {
+  align-self: start;
+  border-color: rgba(201, 168, 76, .52);
+  border-radius: 18px;
+  background: rgba(15, 13, 9, .82);
+}
+.edit_order_modal_layout .total_header { padding: 13px 18px; text-align: right; }
+.edit_order_modal_layout .total_cards { min-height: 0; padding: 10px 12px; }
+.edit_order_modal_layout .total_footer { flex: 0 0 auto; padding: 11px 12px 13px; }
+.edit_order_modal_layout .discount_fields { grid-template-columns: 1fr; }
+.edit_order_modal_layout .discount_fields label,
+.edit_order_modal_layout .discount_reason_field { display: flex; min-width: 0; flex-direction: column; gap: 5px; font-size: 10px; }
+.edit_order_modal_layout .discount_fields .dcf_input,
+.edit_order_modal_layout .discount_fields .dcf_select,
+.edit_order_modal_layout .discount_reason_field .dcf_input { min-width: 0; height: 42px; }
+@media (max-width: 980px) {
+  .edit_order_modal_layout { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); overflow-y: auto; }
+  .edit_order_modal_layout .right_section,
+  .edit_order_modal_layout .total_container { min-height: 430px; height: 56vh; }
+  .edit_order_modal_layout .order_setup_panel { grid-column: 1 / -1; height: auto; min-height: 0; }
+  .edit_order_modal_layout .order_setup_body { overflow: visible; }
+}
+@media (max-width: 700px) {
+  #edit_order_modal_overlay { padding: 6px; }
+  .edit_order_modal_shell { height: calc(100dvh - 12px); border-radius: 12px; }
+  .edit_order_modal_header { padding: 9px 12px; }
+  .edit_order_modal_heading h2 { font-size: 15px; }
+  .edit_order_modal_layout { grid-template-columns: 1fr; padding: 10px; overflow-y: auto; }
+  .edit_order_modal_layout .right_section { min-height: 370px; height: 48vh; padding: 12px; }
+  .edit_order_modal_layout .total_container { min-height: 430px; height: auto; }
+  .edit_order_modal_layout .order_setup_panel { grid-column: 1; }
+  .edit_order_modal_layout .local_menu_header { flex-direction: column; }
+  .edit_order_modal_layout .local_product_search { width: 100%; min-width: 0; }
+}

@@ -4521,116 +4521,85 @@ function renderEditOrderModal() {
 
   const overlay = document.createElement("div");
   overlay.id = "edit_order_modal_overlay";
-  overlay.style.cssText = `
-    position:fixed; inset:0; background:rgba(0,0,0,0.4);
-    display:flex; align-items:center; justify-content:center; z-index:11000; padding: 20px;
-  `;
-
   overlay.innerHTML = `
-    <div style="background:var(--color-bg); width:90vw; max-width:1150px; height:85vh; border-radius:16px; border:1px solid var(--color-primary); display:flex; flex-direction:column; overflow:hidden; position:relative; direction:rtl; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
-      
-      <!-- Modal Navigation Header (Mirroring Navbar theme) -->
-      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 32px; background:linear-gradient(180deg, #c79a4a 0%, #7a4f1a 100%); direction:rtl;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <img src="/assets/توب شيف 1@2x.png" style="width:40px; height:40px; object-fit:contain;" />
-          <h2 style="color:var(--color-bg); margin:0; font-size:18px; font-weight:900;">تعديل الطلب #${displayOrderNumber(editModalState.originalOrder.order_number, editModalState.originalOrder.id)}</h2>
+    <div class="edit_order_modal_shell">
+      <div class="edit_order_modal_header">
+        <div class="edit_order_modal_heading">
+          <img src="/assets/توب شيف 1@2x.png" alt="" />
+          <div><span>نقطة البيع</span><h2>تعديل الطلب #${displayOrderNumber(editModalState.originalOrder.order_number, editModalState.originalOrder.id)}</h2></div>
         </div>
-        <button onclick="document.getElementById('edit_order_modal_overlay').remove()" style="background:var(--color-bg); border:none; color:var(--color-primary); width:32px; height:32px; border-radius:50%; font-size:20px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center;display:flex; align-items:center; justify-content:center">&times;</button>
+        <button type="button" class="edit_order_modal_close" onclick="document.getElementById('edit_order_modal_overlay').remove()" aria-label="إغلاق نافذة التعديل">&times;</button>
       </div>
 
-      <!-- Main Layout Mirror -->
-      <div class="main_layout" style="flex:1; height:auto; padding:20px; overflow:hidden; gap:16px;">
-        
-        <!-- Right Section: Categories & Products Grid -->
-        <div class="right_section" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
-          <div class="category_tabs" id="edit_modal_cat_tabs" style="margin-bottom:16px; flex-wrap:wrap; padding-bottom:4px;"></div>
-          <div class="items_grid" id="edit_modal_items_grid" style="flex:1; padding:4px;"></div>
+      <div class="main_layout edit_order_modal_layout">
+        <div class="right_section">
+          <header class="local_menu_header">
+            <div><p>منيو الطلب</p><h1>تعديل الأصناف</h1><span>اختر التصنيف ثم أضف الأصناف إلى الأوردر</span></div>
+            <label class="local_product_search">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input id="edit_modal_product_search" type="search" placeholder="ابحث عن صنف..." oninput="renderEditModalItems()" />
+            </label>
+          </header>
+          <div class="category_tabs" id="edit_modal_cat_tabs"></div>
+          <div class="items_grid" id="edit_modal_items_grid"></div>
         </div>
 
-        <!-- Left Section: Cart (Total Container) -->
-        <div class="total_container" id="edit_modal_cart_container" style="height:100%; display:flex; flex-direction:column; overflow:hidden;">
-          <div class="total_header" style="flex-shrink:0;">
-            <h1>ملخص التعديل</h1>
-          </div>
-          
-          <div style="flex:1; overflow-y:auto; padding:0 0 10px 0;">
-            <!-- Mini Customer Info Card (Matching Cashier Style) -->
-            <div id="edit_modal_customer_form" style="padding: 0 16px; margin-bottom: 12px; display: ${editModalState.orderType ? "block" : "none"};">
-               <div class="delivery_customer_card" style="margin-top: 0; box-shadow: none; border: 1px solid rgba(201,168,76,0.2);">
-                  <div class="dcf_title" id="edit_modal_dcf_title">
-                     <div style="display:flex; align-items:center; gap:6px;">
-                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                        </svg>
-                        <span>${editModalState.orderType === "delivery" ? "تعديل بيانات عميل الديليفري" : "تعديل بيانات العميل (اختياري)"}</span>
-                     </div>
-                     <button class="dcf_close_btn" onclick="clearOrderTypeInEditModal()" title="إغلاق وإلغاء نوع الطلب">✕</button>
-                  </div>
-                  <div class="dcf_field">
-                     <span class="dcf_label">📞 رقم التليفون</span>
-                     <input type="tel" class="dcf_input" placeholder="01xxxxxxxxx" maxlength="11" 
-                        value="${editModalState.customerPhone}" 
-                        oninput="editModalState.customerPhone = normalizePhoneDigits(this.value); this.value = editModalState.customerPhone" />
-                  </div>
-                  <div class="dcf_field">
-                     <span class="dcf_label">👤 الاسم</span>
-                     <input type="text" class="dcf_input" placeholder="اسم العميل" 
-                        value="${editModalState.customerName}" 
-                        oninput="editModalState.customerName = this.value" />
-                  </div>
-                  <div class="dcf_field">
-                     <span class="dcf_label">📍 العنوان</span>
-                     <input type="text" class="dcf_input" placeholder="العنوان بالتفصيل" 
-                        value="${editModalState.customerAddress}" 
-                        oninput="editModalState.customerAddress = this.value" />
-                  </div>
-               </div>
-            </div>
-            
-            <div class="total_cards" id="edit_modal_cart_list" style="padding:0 16px;"></div>
-
-            <!-- Edit Discount Section -->
-            <div id="edit_modal_discount_form" style="border-top: 1px solid rgba(201, 168, 76, 0.3); padding: 12px 14px; flex-shrink: 0; margin-bottom: 8px;">
-              <div class="dcf_title" style="margin-bottom: 8px;">
-                <i class="fa-solid fa-tags"></i>
-                <span>تعديل الخصم</span>
-              </div>
+        <aside class="order_setup_panel" aria-label="إعداد تعديل الطلب">
+          <header class="order_setup_header">
+            <div><span>بيانات الطلب</span><h2>استكمال التعديل</h2><p>راجع بيانات العميل والخصم قبل الحفظ</p></div>
+          </header>
+          <div class="order_setup_body">
+            <section id="edit_modal_customer_form" class="order_setup_section" style="display:${editModalState.orderType ? "block" : "none"}">
               <div class="delivery_customer_card">
-                <div style="display:flex; gap:8px;">
-                  <select id="edit_modal_discount_type" class="dcf_select" style="flex:1;" onchange="editModalState.discountType = this.value; updateEditModalGrandTotal()">
+                <div class="dcf_title" id="edit_modal_dcf_title">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>${editModalState.orderType === "delivery" ? "تعديل بيانات عميل الديليفري" : "تعديل بيانات العميل (اختياري)"}</span>
+                  </div>
+                  <button class="dcf_close_btn" onclick="hideEditModalCustomerForm()" title="إخفاء بيانات العميل">✕</button>
+                </div>
+                <div class="dcf_field"><span class="dcf_label">📞 رقم التليفون</span><input type="tel" class="dcf_input" placeholder="01xxxxxxxxx" maxlength="11" value="${editModalState.customerPhone}" oninput="editModalState.customerPhone = normalizePhoneDigits(this.value); this.value = editModalState.customerPhone" /></div>
+                <div class="dcf_field"><span class="dcf_label">👤 الاسم</span><input type="text" class="dcf_input" placeholder="اسم العميل" value="${editModalState.customerName}" oninput="editModalState.customerName = this.value" /></div>
+                <div class="dcf_field"><span class="dcf_label">📍 العنوان</span><input type="text" class="dcf_input" placeholder="العنوان بالتفصيل" value="${editModalState.customerAddress}" oninput="editModalState.customerAddress = this.value" /></div>
+              </div>
+            </section>
+
+            <section id="edit_modal_discount_form" class="order_setup_section">
+              <div class="order_setup_section_title"><span>خصم إضافي</span><small>اختياري</small></div>
+              <div class="delivery_customer_card discount_card">
+                <div class="discount_fields">
+                  <label><span>نوع الخصم</span><select id="edit_modal_discount_type" class="dcf_select" onchange="editModalState.discountType = this.value; updateEditModalGrandTotal()">
                     <option value="" ${!editModalState.discountType ? "selected" : ""}>بدون خصم</option>
                     <option value="fixed" ${editModalState.discountType === "fixed" ? "selected" : ""}>مبلغ ثابت</option>
                     <option value="percentage" ${editModalState.discountType === "percentage" ? "selected" : ""}>نسبة مئوية (%)</option>
-                  </select>
-                  <input type="number" id="edit_modal_discount_value" class="dcf_input" style="flex:1;" placeholder="القيمة" min="0" step="0.01" value="${editModalState.discountValue || ""}" oninput="editModalState.discountValue = parseFloat(this.value) || 0; updateEditModalGrandTotal()">
+                  </select></label>
+                  <label><span>قيمة الخصم</span><input type="number" id="edit_modal_discount_value" class="dcf_input" placeholder="0.00" min="0" step="0.01" value="${editModalState.discountValue || ""}" oninput="editModalState.discountValue = parseFloat(this.value) || 0; updateEditModalGrandTotal()"></label>
                 </div>
-                <input type="text" id="edit_modal_discount_reason" class="dcf_input" placeholder="سبب الخصم (اختياري)" value="${editModalState.discountReason || ""}" oninput="editModalState.discountReason = this.value">
+                <label class="discount_reason_field"><span>السبب (اختياري)</span><input type="text" id="edit_modal_discount_reason" class="dcf_input" placeholder="مثال: عميل دائم" value="${editModalState.discountReason || ""}" oninput="editModalState.discountReason = this.value"></label>
               </div>
-            </div>
+            </section>
           </div>
+        </aside>
 
-          <div class="total_footer" style="flex-shrink:0;">
-            <!-- Badge نوع الطلب -->
-            <div id="edit_modal_order_type_badge" class="order_type_badge" style="display: none; margin-bottom: 8px;"></div>
-
-            <!-- زراير نوع الطلب -->
-            <div id="edit_modal_order_type_btns" class="order_type_btns" style="margin-bottom: 8px;"></div>
-
-            <div class="total_sum">
-              <h1>إجمالي الأصناف الكاشير:</h1>
-              <h2 id="edit_modal_items_total">0 ج.م</h2>
-            </div>
+        <div class="total_container" id="edit_modal_cart_container">
+          <div class="total_header"><h1>الطلب الحالي</h1></div>
+          <div class="total_cards" id="edit_modal_cart_list"></div>
+          <div class="total_footer">
+            <div class="total_sum"><h1>الإجمالي</h1><h2 id="edit_modal_items_total">0 ج.م</h2></div>
+            <section class="checkout_order_type" aria-label="نوع الطلب">
+              <div class="checkout_order_type_title"><span>نوع الطلب</span><small>اختر طريقة الاستلام</small></div>
+              <div id="edit_modal_order_type_btns" class="order_type_btns"></div>
+              <div id="edit_modal_order_type_badge" class="order_type_badge" style="display:none"></div>
+            </section>
             <div class="footer_btns">
-               <button class="btn_confirm" onclick="updateEditOrderConfirm()">حفظ التعديلات</button>
-               <button class="btn_cancel" onclick="document.getElementById('edit_order_modal_overlay').remove()">إلغاء</button>
+              <button class="btn_confirm" onclick="updateEditOrderConfirm()">حفظ التعديلات</button>
+              <button class="btn_cancel" onclick="document.getElementById('edit_order_modal_overlay').remove()">إلغاء</button>
             </div>
           </div>
         </div>
-
       </div>
-      
-      <!-- Sub-modal container for delivery/dine-in selection -->
-      <div id="edit_modal_sub_container" class="delivery_modal_container" style="display: none; z-index: 12000; position: absolute; inset: 0;"></div>
+
+      <div id="edit_modal_sub_container" class="delivery_modal_container" style="display:none; z-index:12000; position:absolute; inset:0;"></div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -4940,8 +4909,11 @@ function renderEditModalItems() {
   if (!grid) return;
   grid.innerHTML = "";
 
+  const searchTerm = document.getElementById("edit_modal_product_search")?.value.trim().toLowerCase() || "";
   const catProducts = products.filter(
-    (p) => p.cat_id === editModalState.activeCatId && p.is_available,
+    (p) => p.cat_id === editModalState.activeCatId && p.is_available &&
+      (!searchTerm || String(p.product_name || "").toLowerCase().includes(searchTerm) ||
+        String(p.description || p.desc || "").toLowerCase().includes(searchTerm)),
   );
   if (catProducts.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);grid-column:1/-1;text-align:center;padding:30px">لا توجد أصناف في هذا التصنيف</p>`;
