@@ -3270,7 +3270,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .shift_status { display: inline-block; min-width: 58px; padding: 5px 9px; border-radius: 99px; font-size: 10px; font-weight: 800; text-align: center; }
 .shift_status.active { background: rgba(89,201,140,.11); color: #71dda2; }
 .shift_status.closed { background: rgba(255,255,255,.06); color: rgba(240,230,204,.55); }
-.shift_times { display: inline-flex; align-items: center; gap: 5px; direction: ltr; }
+.shift_times { display: inline-flex; align-items: center; gap: 5px; direction: rtl; }
 .shift_times i { color: rgba(240,230,204,.3); font-style: normal; }
 .shift_details_btn { padding: 6px 12px; border: 1px solid rgba(241,199,91,.24); border-radius: 7px; background: rgba(241,199,91,.08); color: var(--color-primary); font-family: inherit; cursor: pointer; }
 .shift_drawer { position: fixed; inset: 0; z-index: 12000; visibility: hidden; opacity: 0; transition: opacity .2s; }
