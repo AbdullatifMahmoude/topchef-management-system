@@ -604,9 +604,30 @@
     <div class="page-content" id="page-settings" style="display: none">
       <section class="settings_workspace" aria-labelledby="settings_page_title">
         <header class="settings_header">
-          <div><p>إعدادات النظام</p><h1 id="settings_page_title">تكامل واتساب</h1><span>احفظ بيانات الربط والرسالة الافتراضية للحملات الجماعية</span></div>
+          <div><p>إعدادات النظام</p><h1 id="settings_page_title">برنامج النقاط</h1><span>حدّد شرائح الكسب؛ لن تبدأ النقاط قبل حفظ قواعد صالحة وتفعيل البرنامج.</span></div>
         </header>
-        <form id="whatsappSettingsForm" class="settings_card">
+        <form id="loyaltySettingsForm" class="settings_card loyalty_settings_card">
+          <div class="settings_card_title">
+            <span class="payment_mark">★</span>
+            <div><h2>إعداد برنامج النقاط</h2><p>للعملاء أصحاب الحسابات المفعّلة فقط. تُضاف عند تأكيد الطلب وتُلغى إذا أُلغي.</p></div>
+          </div>
+          <p class="settings_template_help">الحساب على قيمة الأصناف بعد الخصم، بدون رسوم التوصيل. كل شريحة تحسب نقاطها على جزء المبلغ الخاص بها، والخطوة غير المكتملة لا تكسب نقاطًا. القواعد الجديدة تطبّق على الطلبات المؤكدة لاحقًا فقط.</p>
+          <div class="settings_grid">
+            <label class="settings_field"><span>أقل قيمة طلب مؤهلة للنقاط (ج.م)</span><input id="loyaltyMinimumOrder" type="number" min="0" step="0.01" value="0" required></label>
+            <label class="settings_field"><span>الحد الأقصى للنقاط في الطلب الواحد</span><input id="loyaltyMaxPoints" type="number" min="1" max="1000000" step="1" value="10000" required></label>
+          </div>
+          <div class="loyalty_tiers_heading"><h3>شرائح كسب النقاط</h3><button id="addLoyaltyTier" type="button">إضافة شريحة</button></div>
+          <div id="loyaltyTiers" class="loyalty_tiers"></div>
+          <p class="settings_template_help">مثال: شريحة تبدأ من 0، كل 100 جنيه = 10 نقاط؛ وشريحة تبدأ من 100، كل 100 جنيه = 15 نقطة. طلب بقيمة 250 جنيه يكسب 25 نقطة.</p>
+          <label class="settings_toggle"><input id="loyaltyEnabled" type="checkbox"><span>تفعيل احتساب النقاط بعد حفظ الشرائح</span></label>
+          <div class="loyalty_tiers_heading"><h3>قواعد استبدال النقاط</h3><button id="addRedemptionRule" type="button">إضافة قاعدة</button></div>
+          <p class="settings_template_help">اختر خصمًا ثابتًا أو صنفًا مجانيًا وحدد النقاط المطلوبة. الصنف المجاني يُضاف للطلب تلقائيًا. لن يظهر الاستبدال للعميل قبل حفظ قاعدة واحدة على الأقل وتفعيله.</p>
+          <div id="redemptionRules" class="loyalty_tiers"></div>
+          <label class="settings_toggle"><input id="redemptionEnabled" type="checkbox"><span>تفعيل استبدال النقاط للعملاء</span></label>
+          <div id="loyaltySettingsNotice" class="settings_notice" role="status" hidden></div>
+          <div class="settings_actions"><button id="saveLoyaltySettings" type="submit">حفظ قواعد النقاط</button></div>
+        </form>
+        <form id="whatsappSettingsForm" class="settings_card" hidden>
           <div class="settings_card_title">
             <span class="whatsapp_mark">W</span>
             <div><h2>إعدادات WhatsApp API</h2><p>المفتاح لا يظهر مرة أخرى بعد حفظه حفاظًا على سريته.</p></div>
@@ -888,7 +909,7 @@
     <script src="js/offer.js?v=20260825-shared-live"></script>
     <script src="js/shifts.js?v=20260916-business-date-format"></script>
     <script src="js/expenses-admin.js?v=20260921-admin-expenses"></script>
-    <script src="js/settings.js?v=20260912-payment-settings"></script>
+    <script src="js/settings.js?v=20260926-point-rewards"></script>
 
     <script src="js/chart.js?v=20260916-business-date"></script>
     <script src="js/orders_dashboard.js?v=20260901-report-ui-fixes"></script>

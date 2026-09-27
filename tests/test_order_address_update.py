@@ -1,3 +1,4 @@
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -112,5 +113,59 @@ async def test_address_edit_persists_or_rejects_missing_customer(
             address = await db.get(CustomerAddress, stored.address_id)
             assert address is not None
             assert address.address == "New address"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("starting_type", [OrderType.TAKEAWAY, OrderType.HALL])
+async def test_cashier_order_can_become_delivery_with_new_customer(starting_type, monkeypatch):
+    import app.main  # noqa: F401
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        async with sessions() as db:
+            order = Order(
+                order_number=f"TEST-CONVERT-{starting_type.value}",
+                order_type=starting_type,
+                order_source=OrderSource.CASHIER,
+                order_status=OrderStatus.NEW,
+            )
+            db.add(order)
+            await db.commit()
+            order_id = order.id
+
+        monkeypatch.setattr("app.modules.orders.service.order_events_manager.emit", AsyncMock())
+        async with sessions() as db:
+            pricing = AsyncMock()
+            pricing.calculate_price.return_value = SimpleNamespace(
+                subtotal=Decimal("0.00"), discount_amount=Decimal("0.00"),
+                delivery_fee=Decimal("10.00"), total_amount=Decimal("10.00"),
+            )
+            service = OrderService(
+                db, pricing_service=pricing, offer_service=AsyncMock(), notification_service=AsyncMock(),
+            )
+            updated = await service.update_order(order_id, schemas.OrderUpdateFull(
+                order_type=OrderType.DELIVERY,
+                customer_name="New Customer",
+                customer_phone="01000000012",
+                customer_address="New delivery address",
+                delivery_fee=Decimal("10.00"),
+            ))
+            assert updated.order_type == OrderType.DELIVERY
+            assert updated.customer_id is not None
+            assert updated.customer_address == "New delivery address"
+            await db.commit()
+
+        async with sessions() as db:
+            stored = await db.get(Order, order_id)
+            customer = await db.get(Customer, stored.customer_id)
+            address = await db.get(CustomerAddress, stored.address_id)
+            assert customer.phone_number == "01000000012"
+            assert address.customer_id == customer.id
+            assert address.address == "New delivery address"
     finally:
         await engine.dispose()

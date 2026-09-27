@@ -1,6 +1,7 @@
 import contextlib
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,12 @@ from app.core.protocols import (
     CacheStore,
     OfferServiceInterface,
     PricingServiceInterface,
+)
+from app.modules.customer.loyalty import (
+    award_order_points,
+    recalculate_order_points,
+    reverse_order_points,
+    select_redemption,
 )
 from app.modules.offer.service import OfferService
 from app.modules.orders import models, schemas
@@ -81,7 +88,8 @@ class OrderService:
             if requested_price not in allowed_prices:
                 raise ValidationError(f"Invalid price for '{product.product_name}'")
 
-    async def create_order(self, order_data: schemas.OrderCreate, current_user_id: int | None = None) -> models.Order:
+    async def create_order(self, order_data: schemas.OrderCreate, current_user_id: int | None = None,
+                           redeeming_customer: dict | None = None) -> models.Order:
         import asyncio as _asyncio
 
         from sqlalchemy.exc import OperationalError as _OperationalError
@@ -91,7 +99,7 @@ class OrderService:
         _max_retries = 3
         for _attempt in range(_max_retries):
             try:
-                return await self._create_order_inner(order_data, current_user_id)
+                return await self._create_order_inner(order_data, current_user_id, redeeming_customer)
             except _OperationalError as exc:
                 if "database is locked" in str(exc).lower() and _attempt < _max_retries - 1:
                     _logger.warning(
@@ -102,7 +110,8 @@ class OrderService:
                 else:
                     raise
 
-    async def _create_order_inner(self, order_data: schemas.OrderCreate, current_user_id: int | None = None) -> models.Order:
+    async def _create_order_inner(self, order_data: schemas.OrderCreate, current_user_id: int | None = None,
+                                  redeeming_customer: dict | None = None) -> models.Order:
         async with self._transaction_scope():
             if is_weekly_holiday(get_current_business_date()):
                 raise ValidationError("المطعم مغلق يوم الجمعة للإجازة الأسبوعية ولا يمكن إنشاء طلبات جديدة")
@@ -127,13 +136,17 @@ class OrderService:
                 if not rider or rider.role != UserRole.DELIVERY or not rider.is_active or rider.is_deleted:
                     raise ValidationError("المندوب المختار غير متاح")
 
-            # Validate items
-            await self._validate_order_items(order_data.items)
-            
+            if order_data.loyalty_rule_id and (order_data.source != OrderSource.ONLINE or not redeeming_customer):
+                raise ValidationError("استبدال النقاط متاح لصاحب الحساب من المنيو فقط")
+
             # Idempotency check
             if order_data.idempotency_key:
                 existing = await self.repository.get_by_idempotency_key(order_data.idempotency_key)
                 if existing:
+                    if existing.customer_phone != order_data.customer_phone or existing.order_source != order_data.source \
+                            or existing.loyalty_rule_id != (str(order_data.loyalty_rule_id) if order_data.loyalty_rule_id else None) \
+                            or (order_data.loyalty_rule_id and existing.customer_id != redeeming_customer["customer_id"]):
+                        raise ValidationError("مفتاح تكرار الطلب مستخدم لطلب مختلف")
                     return existing
             
             # Auto-create or link customer
@@ -190,13 +203,30 @@ class OrderService:
                         new_addr = await customer_service.add_address(order_data.customer_id, CustomerAddressCreate(address=order_data.customer_address))
                         order_data.address_id = new_addr.id
 
+            redemption = None
+            order_items = list(order_data.items)
+            if order_data.loyalty_rule_id:
+                redemption = await select_redemption(
+                    self.db, str(order_data.loyalty_rule_id), redeeming_customer, order_data.customer_phone,
+                )
+                if (redemption.points_required != order_data.loyalty_expected_points
+                        or redemption.reward_value != order_data.loyalty_expected_value):
+                    raise ValidationError("مكافأة النقاط اتغيرت. حدّث رصيدك واختارها من جديد")
+                if order_data.customer_id != redeeming_customer["customer_id"]:
+                    raise ValidationError("بيانات العميل لا تطابق الحساب المسجل")
+                if redemption.product_id:
+                    order_items.append(schemas.OrderItemCreate(
+                        product_id=redemption.product_id, quantity=1, unit_price=redemption.reward_value,
+                    ))
+            await self._validate_order_items(order_items)
+
             # 1. Prepare Pricing Request
             pricing_items = [
                 PricingItem(
                     product_id=item.product_id,
                     quantity=item.quantity,
                     unit_price=item.unit_price
-                ) for item in order_data.items
+                ) for item in order_items
             ]
             
             pricing_req = PricingRequest(
@@ -215,7 +245,7 @@ class OrderService:
             
             # 3. Create Order Object
             next_number = await self.repository.get_next_order_number()
-            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason'})
+            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason', 'loyalty_rule_id', 'loyalty_expected_points', 'loyalty_expected_value'})
             order = models.Order(**order_dict)
             
             # 4. Fill calculated financials and metadata
@@ -230,15 +260,28 @@ class OrderService:
                 order.order_status = models.OrderStatus.NEW
             
             order.subtotal = pricing_res.subtotal
-            order.discount_amount = pricing_res.discount_amount
+            loyalty_discount = Decimal("0.00")
+            if redemption:
+                if pricing_res.subtotal - pricing_res.discount_amount < redemption.reward_value:
+                    raise ValidationError("قيمة الطلب بعد الخصومات لا تكفي لتطبيق مكافأة النقاط")
+                loyalty_discount = redemption.reward_value
+                order.loyalty_rule_id = redemption.rule_id
+                order.loyalty_reward_type = redemption.reward_type
+                order.loyalty_points_spent = redemption.points_required
+                order.loyalty_discount_amount = loyalty_discount
+                order.loyalty_product_id = redemption.product_id
+                order.loyalty_product_name = redemption.product_name
+                order.loyalty_variant_name = redemption.variant_name
+                order.loyalty_status = "reserved"
+            order.discount_amount = pricing_res.discount_amount + loyalty_discount
             order.discount_type = getattr(order_data, 'manual_discount_type', None)
             order.discount_value = getattr(order_data, 'manual_discount_value', None)
             order.discount_reason = getattr(order_data, 'discount_reason', None)
             order.delivery_fee = pricing_res.delivery_fee
-            order.total_amount = pricing_res.total_amount
+            order.total_amount = pricing_res.total_amount - loyalty_discount
             
             # 5. Add Items
-            for item_data in order_data.items:
+            for item_data in order_items:
                 item = models.OrderItem(**item_data.model_dump())
                 item.total_price = item.quantity * item.unit_price
                 order.items.append(item)
@@ -260,6 +303,8 @@ class OrderService:
             # 7. Save and Refresh
             order = await self.repository.save_in_transaction(order)
             order = await self.get_order(order.id)
+            if order.order_status == OrderStatus.CONFIRMED:
+                await award_order_points(self.db, order)
             
             # Record Outbox Event
             order_schema = schemas.OrderResponse.model_validate(order)
@@ -312,6 +357,7 @@ class OrderService:
 
     async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: int | None = None) -> models.Order:
         async with self._transaction_scope():
+            await self.db.scalar(select(models.Order.id).where(models.Order.id == order_id).with_for_update())
             order = await self.get_order(order_id)
             status_changed = bool(update_data.order_status and order.order_status != update_data.order_status)
             if update_data.order_status and order.order_status != update_data.order_status:
@@ -343,6 +389,14 @@ class OrderService:
             
             updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
             await self.db.flush()
+            if status_changed and updated_order.order_status == OrderStatus.CONFIRMED:
+                if updated_order.loyalty_status == "reserved":
+                    updated_order.loyalty_status = "consumed"
+                await award_order_points(self.db, updated_order)
+            elif status_changed and updated_order.order_status == OrderStatus.CANCELLED:
+                if updated_order.loyalty_status in ("reserved", "consumed"):
+                    updated_order.loyalty_status = "reversed"
+                await reverse_order_points(self.db, updated_order.id)
             completed_order = await self.get_order(updated_order.id)
             completed_schema = schemas.OrderResponse.model_validate(completed_order)
             payload_data = completed_schema.model_dump(mode='json')
@@ -357,6 +411,7 @@ class OrderService:
 
     async def update_order(self, order_id: int, update_data: schemas.OrderUpdateFull, current_user_id: int | None = None) -> models.Order:
         async with self._transaction_scope():
+            await self.db.scalar(select(models.Order.id).where(models.Order.id == order_id).with_for_update())
             order = await self.get_order(order_id)
             if order.order_status in [models.OrderStatus.COMPLETED, models.OrderStatus.DELIVERED, models.OrderStatus.CANCELLED]:
                 raise ValidationError(f"Cannot update an order that is {order.order_status.value}")
@@ -490,11 +545,23 @@ class OrderService:
                         order.items.append(item)
                 
                 order.subtotal = pricing_res.subtotal
-                order.discount_amount = pricing_res.discount_amount
+                loyalty_discount = Decimal("0.00")
+                if order.loyalty_status in ("reserved", "consumed"):
+                    reward_value = Decimal(order.loyalty_discount_amount)
+                    gift_present = order.loyalty_reward_type != "free_product" or any(
+                        item.product_id == order.loyalty_product_id and Decimal(item.unit_price) == reward_value
+                        for item in order.items
+                    )
+                    if gift_present and pricing_res.subtotal - pricing_res.discount_amount >= reward_value:
+                        loyalty_discount = reward_value
+                    else:
+                        order.loyalty_status = "reversed"
+                order.loyalty_discount_amount = loyalty_discount
+                order.discount_amount = pricing_res.discount_amount + loyalty_discount
                 order.discount_type = disc_type
                 order.discount_value = disc_value
                 order.delivery_fee = pricing_res.delivery_fee
-                order.total_amount = pricing_res.total_amount
+                order.total_amount = pricing_res.total_amount - loyalty_discount
             
             # Update discount reason if provided
             if 'discount_reason' in provided_fields:
@@ -526,6 +593,7 @@ class OrderService:
                 updated_order.modifications.append(mod_history)
 
             await self.db.flush()
+            await recalculate_order_points(self.db, updated_order)
             
             completed_order = await self.get_order(updated_order.id)
             completed_schema = schemas.OrderResponse.model_validate(completed_order)

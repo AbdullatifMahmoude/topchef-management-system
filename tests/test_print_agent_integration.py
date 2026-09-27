@@ -17,6 +17,16 @@ class PrintAgentIntegrationTests(unittest.TestCase):
         plain = {"payment_method": "cash", "discount_amount": 0}
         self.assertEqual(printer._payment_lines(plain), ["طريقة الدفع: نقدي"])
         self.assertEqual(printer._offer_lines(plain), [])
+        self.assertEqual(printer._loyalty_lines(plain), [])
+        self.assertEqual(printer._loyalty_lines({
+            "loyalty_reward_type": "fixed_discount", "loyalty_points_spent": 100,
+            "loyalty_discount_amount": 10,
+        }), ["خصم نقاط — 100 نقطة"])
+        self.assertEqual(printer._loyalty_lines({
+            "loyalty_reward_type": "free_product", "loyalty_points_spent": 150,
+            "loyalty_discount_amount": 40, "loyalty_product_name": "حلو",
+            "loyalty_variant_name": "صغير",
+        }), ["نقاط: حلو (صغير) — 150 نقطة"])
 
         discounted = {
             "payment_method": "instapay",

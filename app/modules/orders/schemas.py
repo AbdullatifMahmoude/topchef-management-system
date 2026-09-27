@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from pydantic import (
     AliasChoices,
@@ -61,6 +62,9 @@ class OrderCreate(OrderBase):
     delivery_person_id: int | None = None
     delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
     offer_code: str | None = None
+    loyalty_rule_id: UUID | None = None
+    loyalty_expected_points: int | None = Field(default=None, ge=1)
+    loyalty_expected_value: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
     manual_discount_type: DiscountType | None = None
     manual_discount_value: Decimal | None = Field(default=None, gt=0)
     discount_reason: str | None = None
@@ -82,6 +86,10 @@ class OrderCreate(OrderBase):
             raise ValueError("Manual percentage discount cannot exceed 100%")
         if self.offer_code and self.manual_discount_type:
             raise ValueError("An offer and a manual discount cannot be combined")
+        if self.loyalty_rule_id and (self.loyalty_expected_points is None or self.loyalty_expected_value is None):
+            raise ValueError("اختر مكافأة النقاط بعد تحديث رصيدك")
+        if not self.loyalty_rule_id and (self.loyalty_expected_points is not None or self.loyalty_expected_value is not None):
+            raise ValueError("حدد قاعدة النقاط قبل إرسال قيمتها")
         return self
 
 class OrderUpdate(BaseModel):
@@ -143,6 +151,13 @@ class OrderResponse(OrderBase):
     applied_offer: AppliedOfferResponse | None = None
     delivery_fee: Decimal
     total_amount: Decimal
+    loyalty_reward_type: str | None = None
+    loyalty_points_spent: int = 0
+    loyalty_discount_amount: Decimal = Decimal("0.00")
+    loyalty_product_id: int | None = None
+    loyalty_product_name: str | None = None
+    loyalty_variant_name: str | None = None
+    loyalty_status: str | None = None
     items: list[OrderItemResponse]
     creator_name: str | None = None
     delivery_person_name: str | None = None
@@ -198,6 +213,13 @@ class DashboardOrderResponse(BaseModel):
     order_type: OrderType
     order_status: OrderStatus
     total_amount: Decimal
+    loyalty_reward_type: str | None = None
+    loyalty_points_spent: int = 0
+    loyalty_discount_amount: Decimal = Decimal("0.00")
+    loyalty_product_id: int | None = None
+    loyalty_product_name: str | None = None
+    loyalty_variant_name: str | None = None
+    loyalty_status: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
     items: list[OrderItemResponse]

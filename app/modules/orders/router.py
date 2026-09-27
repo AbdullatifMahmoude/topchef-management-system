@@ -2,20 +2,24 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.enums import OrderSource, OrderStatus, OrderType, UserRole
 from app.core.events import order_events_manager
+from app.core.exceptions import AuthenticationError
 from app.core.logging import logger
 from app.core.security import decode_token
 from app.modules.auth.dependencies import get_current_user, get_optional_user
 from app.modules.auth.repository import AuthRepository
+from app.modules.customer.account_security import decode_customer_access
 from app.modules.orders import schemas
 from app.modules.orders.dependencies import get_order_service
 from app.modules.orders.service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+customer_bearer = HTTPBearer(auto_error=False)
 
 WS_CHANNEL_ROLES = {
     "admin": {UserRole.ADMIN.value},
@@ -45,10 +49,16 @@ def websocket_protocol_token(header: str | None) -> str | None:
 async def create_order(
     order_data: schemas.OrderCreate,
     service: OrderService = Depends(get_order_service),
-    current_user: Any | None = Depends(get_optional_user)
+    current_user: Any | None = Depends(get_optional_user),
+    customer_credentials: HTTPAuthorizationCredentials | None = Depends(customer_bearer),
 ):
     user_id = current_user.id if current_user else None
-    return await service.create_order(order_data, current_user_id=user_id)
+    customer_payload = None
+    if order_data.loyalty_rule_id:
+        if not customer_credentials:
+            raise AuthenticationError("سجّل الدخول لاستبدال نقاطك")
+        customer_payload = decode_customer_access(customer_credentials.credentials)
+    return await service.create_order(order_data, current_user_id=user_id, redeeming_customer=customer_payload)
 
 @router.get("/", response_model=schemas.OrderListResponse)  # Change to dict with pagination
 async def list_orders(

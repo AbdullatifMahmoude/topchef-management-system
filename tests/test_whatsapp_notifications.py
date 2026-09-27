@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from app.modules.orders.schemas import OrderCreate
+from app.modules.settings import whatsapp
 from app.modules.settings.whatsapp import (
     build_order_message,
     normalize_whatsapp_phone,
@@ -71,7 +72,8 @@ def test_approved_templates_receive_exact_parameter_counts_without_hash_prefix()
     assert updated[0] == "تم تعديل تفاصيل الطلب"
 
 
-def test_whatsapp_features_require_complete_enabled_configuration():
+def test_whatsapp_features_require_complete_enabled_configuration(monkeypatch):
+    monkeypatch.setattr(whatsapp.app_settings, "WHATSAPP_INTEGRATION_PAUSED", False)
     complete = SimpleNamespace(
         enabled=True, api_key_configured=True, phone_number_id="123",
         graph_api_version="v23.0", language_code="ar",
@@ -86,6 +88,14 @@ def test_whatsapp_features_require_complete_enabled_configuration():
     assert whatsapp_config_ready(complete, template_name="") is False
 
 
+def test_whatsapp_pause_blocks_complete_configuration():
+    complete = SimpleNamespace(
+        enabled=True, api_key_configured=True, phone_number_id="123",
+        graph_api_version="v23.0", language_code="ar",
+    )
+    assert whatsapp_config_ready(complete, template_name="approved_template") is False
+
+
 def test_order_create_does_not_accept_legacy_whatsapp_permission():
     base = {
         "items": [{"product_id": 1, "quantity": 1, "unit_price": "10"}],
@@ -98,7 +108,8 @@ def test_order_create_does_not_accept_legacy_whatsapp_permission():
 
 
 @pytest.mark.asyncio
-async def test_template_send_returns_meta_message_id():
+async def test_template_send_returns_meta_message_id(monkeypatch):
+    monkeypatch.setattr(whatsapp.app_settings, "WHATSAPP_INTEGRATION_PAUSED", False)
     async def handler(request: httpx.Request) -> httpx.Response:
         assert '"name":"approved_template"' in request.content.decode()
         return httpx.Response(200, json={"messages": [{"id": "wamid.123"}]})
@@ -117,7 +128,8 @@ async def test_template_send_returns_meta_message_id():
 
 
 @pytest.mark.asyncio
-async def test_first_order_template_sends_body_values_and_quick_reply_payloads():
+async def test_first_order_template_sends_body_values_and_quick_reply_payloads(monkeypatch):
+    monkeypatch.setattr(whatsapp.app_settings, "WHATSAPP_INTEGRATION_PAUSED", False)
     captured = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:

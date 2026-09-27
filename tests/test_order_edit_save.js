@@ -9,10 +9,11 @@ const addressHelper = source.slice(
 );
 const saveFunction = source.slice(source.indexOf("async function updateEditOrderConfirm()"));
 
-async function runEdit(verifiedAddress) {
+async function runEdit(verifiedAddress, overrides = {}, patchError = null) {
   const calls = [];
   const toasts = [];
   const prints = [];
+  const payloads = [];
   const originalOrder = {
     id: 42,
     customer_id: 7,
@@ -20,6 +21,8 @@ async function runEdit(verifiedAddress) {
     customer_phone: "01000000001",
     customer_address: "Old address",
     address_id: 3,
+    order_type: "takeaway",
+    ...overrides.originalOrder,
   };
   const context = vm.createContext({
     editModalState: {
@@ -30,6 +33,7 @@ async function runEdit(verifiedAddress) {
       orderType: "delivery",
       cart: [{ item: { id: 1, price: 10 }, qty: 1 }],
       sourceList: "all",
+      ...overrides.editModalState,
     },
     allOrdersList: [originalOrder],
     onlineOrdersList: [],
@@ -41,21 +45,23 @@ async function runEdit(verifiedAddress) {
     isValidEgyptianPhone: () => true,
     showCustomActionConfirm: async () => true,
     showGlobalLoader() {},
+    showEditModalCustomerForm() {},
     showToast: (message, kind) => toasts.push([message, kind]),
     printReceipt: (data) => prints.push(data),
     apiFetch: async (path, options) => {
       calls.push([path, options.method || "GET"]);
+      if (options.method === "PATCH") payloads.push(JSON.parse(options.body));
       return {
-        ok: true,
+        ok: !(patchError && options.method === "PATCH"),
         json: async () => options.method === "PATCH"
-          ? { ...originalOrder, customer_address: "New address" }
+          ? patchError || { ...originalOrder, customer_address: "New address" }
           : { ...originalOrder, customer_address: verifiedAddress },
       };
     },
   });
   vm.runInContext(addressHelper + saveFunction, context);
   await vm.runInContext("updateEditOrderConfirm()", context);
-  return { calls, toasts, prints };
+  return { calls, toasts, prints, payloads };
 }
 
 (async () => {
@@ -67,6 +73,30 @@ async function runEdit(verifiedAddress) {
   const notSaved = await runEdit("Old address");
   assert.equal(notSaved.toasts.at(-1)[1], "error");
   assert.equal(notSaved.prints.length, 0);
+
+  const converted = await runEdit("New address", {
+    originalOrder: { customer_id: null, customer_name: null, customer_phone: null, address_id: null },
+  });
+  assert.equal(converted.payloads[0].order_type, "delivery");
+  assert.equal(converted.payloads[0].customer_name, "Test Customer");
+  assert.equal(converted.payloads[0].customer_phone, "01000000001");
+  assert.equal(converted.payloads[0].customer_address, "New address");
+
+  const missingName = await runEdit("New address", {
+    originalOrder: { customer_id: null, customer_name: null, address_id: null },
+    editModalState: { customerName: "  " },
+  });
+  assert.equal(missingName.calls.length, 0);
+  assert.match(missingName.toasts.at(-1)[0], /اسم العميل/);
+
+  const missingAddress = await runEdit("New address", {
+    editModalState: { customerAddress: "  " },
+  });
+  assert.equal(missingAddress.calls.length, 0);
+  assert.match(missingAddress.toasts.at(-1)[0], /عنوان العميل/);
+
+  const serverRejected = await runEdit("New address", {}, { detail: "رسالة التحقق من السيرفر" });
+  assert.equal(serverRejected.toasts.at(-1)[0], "رسالة التحقق من السيرفر");
   console.log("Edited order save verification tests passed");
 })().catch((error) => {
   console.error(error);

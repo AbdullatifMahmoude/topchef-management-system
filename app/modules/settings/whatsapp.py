@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from app.core.config import settings as app_settings
 from app.core.database import AsyncSessionLocal
 from app.core.logging import logger
 from app.modules.settings.service import SettingsService
@@ -50,7 +51,8 @@ async def close_whatsapp_http_client() -> None:
 def whatsapp_config_ready(settings, *, template_name: str = "") -> bool:
     """One gate used by every WhatsApp-dependent feature."""
     return bool(
-        settings.enabled
+        not app_settings.WHATSAPP_INTEGRATION_PAUSED
+        and settings.enabled
         and settings.api_key_configured
         and settings.phone_number_id.strip()
         and settings.graph_api_version.strip()
@@ -62,7 +64,8 @@ def whatsapp_config_ready(settings, *, template_name: str = "") -> bool:
 def inbound_verification_config_ready(settings) -> bool:
     """Fail closed unless the complete direct Meta webhook integration is configured."""
     return bool(
-        settings.enabled
+        not app_settings.WHATSAPP_INTEGRATION_PAUSED
+        and settings.enabled
         and settings.api_key_configured
         and settings.phone_number_id.strip()
         and settings.business_phone_number.strip()

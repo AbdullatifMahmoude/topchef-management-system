@@ -17,6 +17,7 @@
 | Offers and totals | `app/modules/offer/router.py`; `app/modules/pricing/router.py` | offer service, `app/modules/pricing/service.py`, `domain.py` |
 | Orders and live updates | `app/modules/orders/router.py` | orders schemas/service/repository/models, `state_machine.py`, `notifications.py`, `app/core/events.py` |
 | Customer records/accounts | `app/modules/customer/router.py`; `account_router.py` | customer schemas/service/repository/models, `account_security.py` |
+| Customer points and redemption | `app/modules/settings/router.py`; `app/modules/customer/account_router.py` | `customer/loyalty.py`, order service reservation/confirmation/edit/cancellation hooks, point ledger and order redemption migrations; public selection in `../menu/js/app.js`, display in `account.js` and `profile.js`, cashier receipt in `print_agent/printer.py` |
 | Payments, menu controls, WhatsApp | `app/modules/settings/router.py`; `whatsapp_webhook.py` | settings schemas/service/repository/models and `whatsapp*` modules |
 | Shifts, expenses, reports | `app/modules/shifts/router.py`; `app/modules/report/router.py` | corresponding services/models and business calendar |
 | Reviews, AI menu, Meta integration | `app/modules/comments/router.py`; `ai_menu/router.py`; `meta_agent/router.py` | corresponding services; Meta routes register only when `META_AGENT_ENABLED` |

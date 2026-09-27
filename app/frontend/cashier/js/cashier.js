@@ -1332,7 +1332,6 @@ function clearOrderType() {
   selectedDeliveryFee = null;
   selectedDineInFee = null;
   orderType = null;
-  resetDeliveryCustomerInfo();
   const dcFormClear = document.getElementById("delivery_customer_form");
   if (dcFormClear) {
     dcFormClear.style.display = "none";
@@ -1630,7 +1629,6 @@ function showDeliveryFeeSelector(rider) {
       selectedDelivery = { id: rider.id, name: rider.name };
       selectedDeliveryFee = Number(fee);
       orderType = "delivery";
-      resetDeliveryCustomerInfo();
       closeDeliveryModal();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
@@ -3928,6 +3926,8 @@ function openOrderDetails(orderId, source) {
 
   const deliveryFee = parseFloat(order.delivery_fee || 0);
   const itemsTotal = parseFloat(order.subtotal || order.total_amount || 0);
+  const loyaltyDiscount = Number(order.loyalty_discount_amount || 0);
+  const otherDiscount = Math.max(0, Number(order.discount_amount || 0) - loyaltyDiscount);
 
   // Compute modification date display
   let modificationHtml = "";
@@ -4061,12 +4061,19 @@ function openOrderDetails(orderId, source) {
             <span>العرض: ${escapeOrderText(order.applied_offer.display_name || order.applied_offer.code)} (${escapeOrderText(order.applied_offer.code)})</span>
             <span>قيمة الخصم: ${Number(order.applied_offer.discount_amount || order.discount_amount || 0).toFixed(2)} ج.م</span>
           </div>` : ""}
+          ${loyaltyDiscount > 0 ? `
+          <div class="summary_row" style="color:#f1c75b;">
+            <span>${order.loyalty_reward_type === "free_product"
+              ? `صنف مجاني بالنقاط: ${escapeOrderText(order.loyalty_product_name || "صنف")} ${escapeOrderText(order.loyalty_variant_name || "")}`
+              : "خصم ثابت بالنقاط"} (${Number(order.loyalty_points_spent || 0)} نقطة، ${order.loyalty_status === "reserved" ? "محجوزة حتى تأكيد الطلب" : "مخصومة"})</span>
+            <span>- ${loyaltyDiscount.toFixed(2)} ج.م</span>
+          </div>` : ""}
           ${
-            order.discount_amount && parseFloat(order.discount_amount) > 0
+            otherDiscount > 0
               ? `
           <div class="summary_row" style="color: #e74c3c;">
             <span>الخصم${order.discount_reason ? ` (${order.discount_reason})` : ""}:</span>
-            <span>- ${parseFloat(order.discount_amount).toFixed(2)} ج.م</span>
+            <span>- ${otherDiscount.toFixed(2)} ج.م</span>
           </div>
               `
               : ""
@@ -5137,6 +5144,8 @@ function handleEditModalProductClick(product, defaultPrice) {
 // --------------------------- Edit Modal API Save Call ---------------------------
 async function updateEditOrderConfirm() {
   editModalState.customerPhone = normalizePhoneDigits(editModalState.customerPhone);
+  editModalState.customerName = String(editModalState.customerName || "").trim();
+  editModalState.customerAddress = String(editModalState.customerAddress || "").trim();
 
   if (editModalState.customerPhone && !isValidEgyptianPhone(editModalState.customerPhone)) {
     showToast("رقم التليفون يجب أن يكون 11 رقم", "error");
@@ -5145,6 +5154,18 @@ async function updateEditOrderConfirm() {
 
   if (editModalState.orderType === "delivery" && !editModalState.customerPhone) {
     showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
+    return;
+  }
+
+  if (editModalState.orderType === "delivery" && !editModalState.customerName) {
+    showEditModalCustomerForm();
+    showToast("يرجى إدخال اسم العميل قبل حفظ طلب الدليفري", "error");
+    return;
+  }
+
+  if (editModalState.orderType === "delivery" && !editModalState.customerAddress) {
+    showEditModalCustomerForm();
+    showToast("يرجى إدخال عنوان العميل قبل حفظ طلب الدليفري", "error");
     return;
   }
 
@@ -5224,7 +5245,7 @@ async function updateEditOrderConfirm() {
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       console.error("API Error during update:", errData);
-      throw new Error("فشل تحديث الطلب في الباك إند");
+      throw new Error(typeof errData.detail === "string" ? errData.detail : "فشل تحديث الطلب في الباك إند");
     }
 
     let updatedOrder = await res.json();

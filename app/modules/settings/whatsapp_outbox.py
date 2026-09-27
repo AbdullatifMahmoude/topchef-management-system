@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.core.enums import OrderStatus
 from app.core.logging import logger
@@ -123,6 +124,8 @@ class WhatsAppOutboxWorker:
                 await asyncio.sleep(min(60, self.poll_seconds * (2 ** min(self._failure_count, 5))))
 
     async def process_once(self) -> int:
+        if settings.WHATSAPP_INTEGRATION_PAUSED:
+            return 0
         now = datetime.now(UTC).replace(tzinfo=None)
         stale = now - timedelta(minutes=5)
         async with AsyncSessionLocal() as db:

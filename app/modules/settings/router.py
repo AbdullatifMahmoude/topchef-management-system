@@ -22,6 +22,19 @@ async def get_payment_settings(db: AsyncSession = Depends(get_db), redis=Depends
                                _current_user=Depends(require_role(UserRole.ADMIN))):
     return await service.SettingsService(db, redis).get_payment_settings()
 
+
+@router.get("/loyalty", response_model=schemas.LoyaltySettingsResponse)
+async def get_loyalty_settings(db: AsyncSession = Depends(get_db),
+                               _current_user=Depends(require_role(UserRole.ADMIN))):
+    return await service.SettingsService(db).get_loyalty_settings()
+
+
+@router.patch("/loyalty", response_model=schemas.LoyaltySettingsResponse)
+async def update_loyalty_settings(update_data: schemas.LoyaltySettingsUpdate,
+                                  db: AsyncSession = Depends(get_db),
+                                  _current_user=Depends(require_role(UserRole.ADMIN))):
+    return await service.SettingsService(db).update_loyalty_settings(update_data)
+
 @router.patch("/payments", response_model=schemas.PaymentSettingsResponse)
 async def update_payment_settings(update_data: schemas.PaymentSettingsUpdate,
                                   db: AsyncSession = Depends(get_db), redis=Depends(get_redis),

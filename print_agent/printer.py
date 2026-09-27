@@ -171,6 +171,17 @@ class PrinterManager:
             lines.append(f"رقم التحويل: {destination}")
         return lines
 
+    def _loyalty_lines(self, order: Dict[str, Any]) -> list[str]:
+        if self._number(order.get("loyalty_discount_amount")) <= 0:
+            return []
+        points = int(self._number(order.get("loyalty_points_spent")))
+        status = " (محجوزة)" if order.get("loyalty_status") == "reserved" else ""
+        if order.get("loyalty_reward_type") == "free_product":
+            name = str(order.get("loyalty_product_name") or "صنف مجاني")
+            variant = str(order.get("loyalty_variant_name") or "").strip()
+            return [f"نقاط: {name}{f' ({variant})' if variant else ''} — {points} نقطة{status}"]
+        return [f"خصم نقاط — {points} نقطة{status}"]
+
     def _format_date_parts(self, raw_value: Any) -> tuple[str, str]:
         if not raw_value:
             return "---", "---"
@@ -458,6 +469,8 @@ class PrinterManager:
             y += u(34)
 
         discount_amount = self._number(self._value(order, "discount_amount", "discountAmount", default=0))
+        loyalty_discount = self._number(self._value(order, "loyalty_discount_amount", default=0))
+        base_discount = max(0, discount_amount - loyalty_discount)
         discount_reason = self._value(order, "discount_reason", "discountReason", default="")
         
         for offer_line in self._offer_lines(order):
@@ -465,12 +478,21 @@ class PrinterManager:
                 draw.text((content_right, y), wrapped, fill="black", font=fonts["small"], anchor="ra")
                 y += u(34)
 
-        if discount_amount > 0:
+        if base_discount > 0:
             discount_label = "الخصم:"
             if discount_reason:
                 discount_label = f"الخصم ({discount_reason}):"
             draw_right(discount_label, y, fonts["small"])
-            draw_text(f"- {discount_amount:.2f}", margin, y, fonts["small"])
+            draw_text(f"- {base_discount:.2f}", margin, y, fonts["small"])
+            y += u(34)
+
+        if loyalty_discount > 0:
+            for detail in self._loyalty_lines(order):
+                for wrapped in wrap_text(detail, fonts["small"], self.CONTENT_WIDTH * scale):
+                    draw.text((content_right, y), wrapped, fill="black", font=fonts["small"], anchor="ra")
+                    y += u(34)
+            draw_right("قيمة مكافأة النقاط:", y, fonts["small"])
+            draw_text(f"- {loyalty_discount:.2f}", margin, y, fonts["small"])
             y += u(34)
 
         y += u(2)

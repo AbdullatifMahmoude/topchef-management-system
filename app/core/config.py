@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     META_AGENT_ENABLED: bool = False
     WHATSAPP_OUTBOX_ENABLED: bool = False
     WHATSAPP_VERIFICATION_ENABLED: bool = False
+    WHATSAPP_INTEGRATION_PAUSED: bool = True
     EMAIL_ENABLED: bool = False
     SMTP_HOST: str = "smtp.hostinger.com"
     SMTP_PORT: int = Field(default=465, ge=1, le=65535)

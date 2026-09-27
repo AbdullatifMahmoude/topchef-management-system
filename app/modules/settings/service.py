@@ -1,9 +1,15 @@
 import contextlib
+import json
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
+from app.core.exceptions import ValidationError
 from app.core.logging import logger
 from app.core.secrets import decrypt_secret, encrypt_secret
+from app.modules.menu.models import Product
 from app.modules.settings import schemas
 from app.modules.settings.repository import SettingsRepository
 
@@ -35,6 +41,7 @@ class SettingsService:
     WALLET_ENABLED = "wallet_enabled"
     WALLET_NUMBER = "wallet_number"
     PAYMENT_ACCOUNT_NAME = "payment_account_name"
+    LOYALTY_RULES = "loyalty_rules"
     def __init__(self, db: AsyncSession, redis=None):
         self.db = db
         self.redis = redis
@@ -117,6 +124,39 @@ class SettingsService:
             wallet_number=text(self.WALLET_NUMBER).strip() or DEFAULT_TRANSFER_NUMBER,
             payment_account_name=text(self.PAYMENT_ACCOUNT_NAME),
         )
+
+    async def get_loyalty_settings(self) -> schemas.LoyaltySettingsResponse:
+        row = await self.repo.get_setting(self.LOYALTY_RULES)
+        if not row or not row.value_text:
+            return schemas.LoyaltySettingsResponse()
+        try:
+            data = schemas.LoyaltySettingsUpdate.model_validate(json.loads(row.value_text))
+        except (ValueError, TypeError) as exc:
+            logger.error("Invalid loyalty rules stored in app_settings: %s", type(exc).__name__)
+            return schemas.LoyaltySettingsResponse()
+        return schemas.LoyaltySettingsResponse(
+            **data.model_dump(), configured=bool(data.tiers), active=data.enabled and bool(data.tiers),
+            redemption_active=data.redemption_enabled and bool(data.redemption_rules),
+        )
+
+    async def update_loyalty_settings(self, data: schemas.LoyaltySettingsUpdate) -> schemas.LoyaltySettingsResponse:
+        async with self._transaction_scope():
+            for rule in data.redemption_rules:
+                if rule.reward_type != "free_product":
+                    continue
+                product = await self.db.scalar(select(Product).where(Product.id == rule.product_id).options(
+                    selectinload(Product.variants), selectinload(Product.category),
+                ))
+                if not product or product.is_deleted or not product.is_available or not product.category \
+                        or not product.category.is_active or product.category.is_deleted \
+                        or not any(variant.id == rule.variant_id and not variant.is_deleted and variant.price > 0
+                                   for variant in product.variants):
+                    raise ValidationError("اختر صنفًا وحجمًا متاحين لقاعدة الصنف المجاني")
+            await self.repo.create_or_update_text_setting(
+                self.LOYALTY_RULES, data.model_dump_json(), "Customer loyalty earning rules",
+            )
+            await self.db.flush()
+        return await self.get_loyalty_settings()
 
     async def update_payment_settings(self, data: schemas.PaymentSettingsUpdate) -> schemas.PaymentSettingsResponse:
         async with self._transaction_scope():
@@ -209,7 +249,7 @@ class SettingsService:
             ),
             language_code=text(self.WHATSAPP_LANGUAGE_CODE, "ar"),
             graph_api_version=text(self.WHATSAPP_GRAPH_API_VERSION, "v23.0"),
-            enabled=text(self.WHATSAPP_ENABLED, "true").lower() == "true",
+            enabled=not settings.WHATSAPP_INTEGRATION_PAUSED and text(self.WHATSAPP_ENABLED, "true").lower() == "true",
             bulk_template_name=text(self.WHATSAPP_BULK_TEMPLATE_NAME, "topchef_bulk_message"),
             password_reset_template_name=text(self.WHATSAPP_PASSWORD_RESET_TEMPLATE_NAME, "topchef_password_reset"),
             reset_code_expiry_minutes=int(text(self.WHATSAPP_RESET_EXPIRY_MINUTES, "10")),

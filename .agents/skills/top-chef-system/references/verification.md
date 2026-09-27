@@ -13,6 +13,7 @@
 | --- | --- | --- |
 | Checkout, pricing, offers | `test_online_app.py`, `test_financial_business_rules.py`, `test_advanced_offer_logic.py`, `test_pricing_preview_authorization.py`, `test_menu_checkout_controls.py` | `../menu/js/app.js` payload and rendered response |
 | Customer identity/session | `test_customer_account_login.py`, `test_customer_session.py`, `test_customer_account_activation.py`, `test_customer_account_notifications.py` | `../menu/js/customer-session.js`, `account.js`, profile flows |
+| Customer points and redemption | `test_customer_loyalty.py`, `test_customer_redemption.py`, `test_print_agent_integration.py` | Admin rules, authenticated reservation, idempotency, confirmation/edit/cancellation, balance, receipt fields, source migration versus applied schema, `../menu` checkout/account/profile display |
 | Orders/status/live | `test_order_status_history.py`, `test_transaction_ownership.py`, `test_order_counter.py`, `test_websocket_auth.py`, `test_order_notification_port.py` | cashier/menu WebSocket consumers |
 | Shifts/reports/expenses | `test_shifts_business_date.py`, `test_shifts_overnight.py`, `test_financial_business_rules.py`, `test_admin_expenses.py` | admin/cashier UI and persistence |
 | WhatsApp/external integrations | `test_whatsapp_outbox.py`, `test_whatsapp_inbound_verification.py`, `test_whatsapp_notifications.py`, `test_meta_agent_gateway.py` | flags, retries, remote provider behavior |

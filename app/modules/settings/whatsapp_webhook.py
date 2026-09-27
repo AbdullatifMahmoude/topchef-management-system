@@ -109,6 +109,8 @@ async def receive_webhook(
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest() if secret else ""
     if not secret or not x_hub_signature_256 or not hmac.compare_digest(expected, x_hub_signature_256):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid webhook signature")
+    if settings.WHATSAPP_INTEGRATION_PAUSED:
+        return {"received": True}
     payload = await request.json()
     config = await SettingsService(db).get_whatsapp_settings()
     for entry in payload.get("entry", []):

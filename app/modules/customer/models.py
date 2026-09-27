@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -76,3 +77,16 @@ class CustomerNotification(Base):
     __table_args__ = (
         UniqueConstraint("customer_id", "event_key", name="uq_customer_notification_event"),
     )
+
+
+class CustomerPointLedger(Base):
+    __tablename__ = "customer_point_ledger"
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, unique=True)
+    points = Column(Integer, nullable=False)
+    eligible_amount = Column(Numeric(10, 2), nullable=False)
+    rules_snapshot = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    reversed_at = Column(DateTime, nullable=True)

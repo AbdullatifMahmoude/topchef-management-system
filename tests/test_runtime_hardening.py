@@ -154,7 +154,7 @@ def test_session_pooler_keeps_bounded_application_pool():
 
 def test_whatsapp_worker_is_started_only_by_leader_election():
     source = inspect.getsource(lifespan)
-    assert "if settings.WHATSAPP_OUTBOX_ENABLED:" in source
+    assert "if settings.WHATSAPP_OUTBOX_ENABLED and not settings.WHATSAPP_INTEGRATION_PAUSED:" in source
     assert "on_leader_elected(whatsapp_outbox_worker.start)" in source
     assert "on_leader_lost(whatsapp_outbox_worker.stop)" in source
     assert "await whatsapp_outbox_worker.start()" not in source

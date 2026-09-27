@@ -1,5 +1,7 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -102,3 +104,21 @@ class CustomerDeviceResponse(BaseModel):
 
 class CustomerOrdersResponse(BaseModel):
     orders: list[OrderResponse]
+
+
+class CustomerRedemptionOption(BaseModel):
+    id: UUID
+    reward_type: Literal["fixed_discount", "free_product"]
+    points_required: int
+    discount_amount: Decimal | None = None
+    product_id: int | None = None
+    variant_id: int | None = None
+    product_name: str | None = None
+    variant_name: str | None = None
+    variant_price: Decimal | None = None
+
+
+class CustomerPointsResponse(BaseModel):
+    balance: int
+    program_active: bool
+    redemption_options: list[CustomerRedemptionOption] = Field(default_factory=list)

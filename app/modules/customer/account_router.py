@@ -31,8 +31,10 @@ from app.modules.customer.account_schemas import (
     CustomerNotificationResponse,
     CustomerNotificationsResponse,
     CustomerOrdersResponse,
+    CustomerPointsResponse,
     CustomerProfile,
     CustomerProfileUpdate,
+    CustomerRedemptionOption,
     CustomerSessionResponse,
     CustomerTokenResponse,
 )
@@ -50,11 +52,14 @@ from app.modules.customer.email_verification import (
     normalize_email,
     verify_email_challenge,
 )
+from app.modules.customer.loyalty import customer_points_balance
 from app.modules.customer.phone import normalize_egyptian_phone
 from app.modules.customer.repository import CustomerRepository
 from app.modules.customer.schemas import CustomerAddressCreate, CustomerAddressResponse
+from app.modules.menu.models import Product
 from app.modules.offer.models import OfferUsage
 from app.modules.orders.models import Order, OrderItem
+from app.modules.settings.service import SettingsService
 
 router = APIRouter(prefix="/customer-auth", tags=["Customer Account"])
 bearer = HTTPBearer(auto_error=False)
@@ -375,3 +380,33 @@ async def my_orders(payload=Depends(current_customer_payload), db: AsyncSession 
         .order_by(desc(Order.created_at)).limit(50)
     )
     return CustomerOrdersResponse(orders=list(result.scalars().all()))
+
+
+@router.get("/me/points", response_model=CustomerPointsResponse)
+async def my_points(payload=Depends(current_customer_payload), db: AsyncSession = Depends(get_db)):
+    config = await SettingsService(db).get_loyalty_settings()
+    options = []
+    if config.redemption_active:
+        for rule in config.redemption_rules:
+            if rule.reward_type == "fixed_discount":
+                options.append(CustomerRedemptionOption.model_validate(rule.model_dump()))
+                continue
+            product = await db.scalar(select(Product).where(Product.id == rule.product_id).options(
+                selectinload(Product.variants), selectinload(Product.category),
+            ))
+            if not product or product.is_deleted or not product.is_available or not product.category \
+                    or not product.category.is_active or product.category.is_deleted:
+                continue
+            variant = next((item for item in product.variants if item.id == rule.variant_id and not item.is_deleted), None)
+            if not variant or variant.price <= 0:
+                continue
+            options.append(CustomerRedemptionOption(
+                id=rule.id, reward_type=rule.reward_type, points_required=rule.points_required,
+                product_id=product.id, variant_id=variant.id, product_name=product.product_name,
+                variant_name=variant.name, variant_price=variant.price,
+            ))
+    return CustomerPointsResponse(
+        balance=await customer_points_balance(db, payload["customer_id"]),
+        program_active=config.active,
+        redemption_options=options,
+    )
