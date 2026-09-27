@@ -2264,7 +2264,7 @@ function renderShiftExpenses() {
     <article class="expense_row${item._pending ? " is_pending" : ""}">
       <div><strong>${escapeExpenseText(item.title)}</strong><span>${escapeExpenseText(item.note || "بدون ملاحظة")}</span></div>
       <div><b>${expenseMoney(item.amount)}</b><small>${item._pending ? "جاري الحفظ..." : new Date(item.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</small></div>
-      <button type="button" ${item._pending ? "disabled" : `onclick="deleteShiftExpense(${item.id})"`} title="${item._pending ? "جاري الحفظ" : "حذف المصروف"}">${item._pending ? "…" : "×"}</button>
+      ${item.can_delete === false ? '<span class="expense_admin_label" title="مصروف أضافته الإدارة">الإدارة</span>' : `<button type="button" ${item._pending ? "disabled" : `onclick="deleteShiftExpense(${item.id})"`} title="${item._pending ? "جاري الحفظ" : "حذف المصروف"}">${item._pending ? "…" : "×"}</button>`}
     </article>`).join("") : '<div class="expenses_empty">لا توجد مصروفات مسجلة في الشيفت الحالي</div>';
 }
 
@@ -2296,6 +2296,7 @@ async function deleteShiftExpense(expenseId) {
   const itemIndex = currentShiftExpenses.findIndex((item) => Number(item.id) === Number(expenseId));
   if (itemIndex < 0) return;
   const removedItem = currentShiftExpenses[itemIndex];
+  if (removedItem.can_delete === false) return;
   currentShiftExpenses.splice(itemIndex, 1);
   currentShiftExpensesTotal = Math.max(0, currentShiftExpensesTotal - Number(removedItem.amount || 0));
   renderShiftExpenses();

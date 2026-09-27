@@ -1995,6 +1995,7 @@ nav.cashier_nav {
 .expense_row div:first-child,.expense_row div:nth-child(2) { display:flex; min-width:0; flex-direction:column; gap:2px; }.expense_row strong { overflow:hidden; color:#fff0d0; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }.expense_row span,.expense_row small { color:rgba(240,230,204,.4); font-size:8px; }.expense_row b { color:#ef8a75; font-size:12px; }.expense_row button { display:grid; width:30px; height:30px; place-items:center; border:1px solid rgba(239,106,103,.22); border-radius:8px; background:rgba(239,106,103,.08); color:#ef8a75; font-size:18px; cursor:pointer; }
 .expense_row button:not(:disabled) { padding:0!important; font-size:0; line-height:1; text-align:center; }
 .expense_row button:not(:disabled)::before { content:"×"; display:block; transform:translateY(1px); color:#ef8a75; font-family:Arial,sans-serif; font-size:18px; font-weight:500; line-height:1; }
+.expense_row .expense_admin_label { color:#d5b24e; font-size:8px; text-align:center; }
 .expenses_empty { display:grid; min-height:250px; place-items:center; color:rgba(240,230,204,.35); font-size:11px; }.expenses_empty.is_error { color:#ef8a75; }
 .expense_form>button:disabled,.expense_row button:disabled { cursor:wait; opacity:.58; }
 .expense_row.is_pending { border-color:rgba(201,168,76,.24); opacity:.72; animation:expensePendingPulse 1s ease-in-out infinite alternate; }

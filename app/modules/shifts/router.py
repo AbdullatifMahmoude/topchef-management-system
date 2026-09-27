@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.database import get_db
 from app.core.enums import UserRole
@@ -30,12 +31,14 @@ class ExpenseCreate(BaseModel):
 
 class AdminExpenseCreate(ExpenseCreate):
     target_date: date
+    shift_id: int = Field(gt=0)
 
 class AdminExpenseUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=120)
     amount: Decimal | None = Field(default=None, gt=0)
     note: str | None = Field(default=None, max_length=500)
     target_date: date | None = None
+    shift_id: int | None = Field(default=None, gt=0)
 
 class CashAdditionCreate(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
@@ -125,7 +128,7 @@ async def list_current_expenses(
     return {
         "shift_id": shift.id,
         "total": float(sum((row.amount or 0) for row in rows)),
-        "items": [{"id": row.id, "title": row.title, "amount": float(row.amount), "note": row.note, "created_at": row.created_at.isoformat()} for row in rows],
+        "items": [{"id": row.id, "title": row.title, "amount": float(row.amount), "note": row.note, "created_at": row.created_at.isoformat(), "can_delete": row.user_id == current_user.id} for row in rows],
     }
 
 @router.post("/current/expenses")
@@ -154,6 +157,7 @@ async def create_current_expense(
         "amount": float(expense.amount),
         "note": expense.note,
         "created_at": expense.created_at.isoformat(),
+        "can_delete": True,
         "shift_total": float(shift_total),
         "day_total": float(day_total),
     }
@@ -200,7 +204,17 @@ async def get_shift_business_date(
         raise AuthorizationError("Only admin can view shifts report")
     return {"business_date": get_business_date().isoformat()}
 
-def _admin_expense_payload(expense, recorder: User) -> dict:
+async def _validated_expense_shift(db: AsyncSession, shift_id: int, target_date: date):
+    from app.modules.shifts.models import CashierShift
+
+    shift = await db.get(CashierShift, shift_id)
+    owner = await db.get(User, shift.user_id) if shift else None
+    if not shift or shift.target_date != target_date or not owner or owner.role != UserRole.CASHIER:
+        raise ValidationError("اختر شيفت كاشير مسجل في يوم المصروف")
+    return shift, owner
+
+
+def _admin_expense_payload(expense, recorder: User, owner: User | None = None) -> dict:
     return {
         "id": expense.id,
         "title": expense.title,
@@ -209,9 +223,35 @@ def _admin_expense_payload(expense, recorder: User) -> dict:
         "target_date": expense.target_date.isoformat(),
         "created_at": expense.created_at.isoformat(),
         "recorded_by": recorder.full_name or recorder.username,
-        "source": "cashier" if expense.shift_id is not None else "admin",
+        "shift_id": expense.shift_id,
+        "shift_owner": (owner.full_name or owner.username) if owner else None,
+        "source": "admin" if recorder.role == UserRole.ADMIN else "cashier",
         "editable_date": expense.shift_id is None,
     }
+
+
+@router.get("/admin/expense-shifts")
+async def list_admin_expense_shifts(
+    target_date: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("Only admin can manage expenses")
+    from app.modules.shifts.models import CashierShift
+
+    rows = (await db.execute(
+        select(CashierShift, User)
+        .join(User, User.id == CashierShift.user_id)
+        .where(CashierShift.target_date == target_date, User.role == UserRole.CASHIER)
+        .order_by(CashierShift.start_time, CashierShift.id)
+    )).all()
+    return [{
+        "id": shift.id,
+        "cashier_name": owner.full_name or owner.username,
+        "start_time": shift.start_time.isoformat() if shift.start_time else None,
+        "end_time": shift.end_time.isoformat() if shift.end_time else None,
+    } for shift, owner in rows]
 
 @router.get("/admin/expenses")
 async def list_admin_expenses(
@@ -224,10 +264,13 @@ async def list_admin_expenses(
         raise AuthorizationError("Only admin can manage expenses")
     if start_date > end_date:
         raise ValidationError("تاريخ البداية يجب أن يسبق تاريخ النهاية")
-    from app.modules.shifts.models import ShiftExpense
+    from app.modules.shifts.models import CashierShift, ShiftExpense
+    shift_owner = aliased(User)
     rows = (await db.execute(
-        select(ShiftExpense, User)
+        select(ShiftExpense, User, shift_owner)
         .join(User, User.id == ShiftExpense.user_id)
+        .outerjoin(CashierShift, CashierShift.id == ShiftExpense.shift_id)
+        .outerjoin(shift_owner, shift_owner.id == CashierShift.user_id)
         .where(
             ShiftExpense.target_date >= start_date,
             ShiftExpense.target_date <= end_date,
@@ -235,8 +278,8 @@ async def list_admin_expenses(
         )
         .order_by(ShiftExpense.target_date.desc(), ShiftExpense.created_at.desc())
     )).all()
-    items = [_admin_expense_payload(expense, recorder) for expense, recorder in rows]
-    total = sum((expense.amount or Decimal(0)) for expense, _ in rows)
+    items = [_admin_expense_payload(expense, recorder, owner) for expense, recorder, owner in rows]
+    total = sum((expense.amount or Decimal(0)) for expense, _, _ in rows)
     return {"items": items, "count": len(items), "total": float(total)}
 
 @router.post("/admin/expenses")
@@ -251,8 +294,9 @@ async def create_admin_expense(
     title = payload.title.strip()
     if len(title) < 2:
         raise ValidationError("اسم بند المصروف مطلوب")
+    shift, owner = await _validated_expense_shift(db, payload.shift_id, payload.target_date)
     expense = ShiftExpense(
-        shift_id=None,
+        shift_id=shift.id,
         user_id=current_user.id,
         target_date=payload.target_date,
         title=title,
@@ -262,10 +306,10 @@ async def create_admin_expense(
     db.add(expense)
     await db.commit()
     await db.refresh(expense)
-    _, day_total = await _expense_totals(db, -1, expense.target_date)
+    shift_total, day_total = await _expense_totals(db, shift.id, expense.target_date)
     from app.core.events import order_events_manager
-    asyncio.create_task(order_events_manager.emit({"type": "EXPENSE_UPDATED", "data": {"shift_id": None, "target_date": expense.target_date.isoformat(), "day_total": float(day_total)}}))
-    return _admin_expense_payload(expense, current_user)
+    asyncio.create_task(order_events_manager.emit({"type": "EXPENSE_UPDATED", "data": {"shift_id": shift.id, "target_date": expense.target_date.isoformat(), "shift_total": float(shift_total), "day_total": float(day_total)}}))
+    return _admin_expense_payload(expense, current_user, owner)
 
 @router.patch("/admin/expenses/{expense_id}")
 async def update_admin_expense(
@@ -276,13 +320,23 @@ async def update_admin_expense(
 ) -> Any:
     if current_user.role != UserRole.ADMIN:
         raise AuthorizationError("Only admin can manage expenses")
-    from app.modules.shifts.models import ShiftExpense
+    from app.modules.shifts.models import CashierShift, ShiftExpense
     expense = await db.scalar(select(ShiftExpense).where(ShiftExpense.id == expense_id, ShiftExpense.is_deleted == False))
     if not expense:
         raise NotFoundError("Expense")
     changes = payload.model_dump(exclude_unset=True)
-    if expense.shift_id is not None and "target_date" in changes and changes["target_date"] != expense.target_date:
+    if "target_date" in changes and changes["target_date"] is None:
+        raise ValidationError("يوم المصروف مطلوب")
+    recorder = await db.get(User, expense.user_id)
+    if expense.shift_id is not None and "target_date" in changes and changes["target_date"] != expense.target_date and "shift_id" not in changes:
         raise ValidationError("لا يمكن تغيير يوم مصروف مرتبط بشيفت كاشير")
+    owner = None
+    if "shift_id" in changes:
+        if not recorder or recorder.role != UserRole.ADMIN or changes["shift_id"] is None:
+            raise ValidationError("لا يمكن تغيير شيفت مصروف الكاشير")
+        _, owner = await _validated_expense_shift(
+            db, changes["shift_id"], changes.get("target_date") or expense.target_date,
+        )
     if "title" in changes:
         changes["title"] = changes["title"].strip()
         if len(changes["title"]) < 2:
@@ -293,10 +347,12 @@ async def update_admin_expense(
         setattr(expense, field, value)
     await db.commit()
     await db.refresh(expense)
-    recorder = await db.get(User, expense.user_id)
+    if expense.shift_id is not None and owner is None:
+        shift = await db.get(CashierShift, expense.shift_id)
+        owner = await db.get(User, shift.user_id) if shift else None
     from app.core.events import order_events_manager
     asyncio.create_task(order_events_manager.emit({"type": "EXPENSE_UPDATED", "data": {"shift_id": expense.shift_id, "target_date": expense.target_date.isoformat()}}))
-    return _admin_expense_payload(expense, recorder)
+    return _admin_expense_payload(expense, recorder, owner)
 
 @router.delete("/admin/expenses/{expense_id}")
 async def delete_admin_expense(
