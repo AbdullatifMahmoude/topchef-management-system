@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.exceptions import (
     AccountAlreadyActiveError,
     AuthenticationError,
+    NotFoundError,
     ValidationError,
 )
 from app.core.redis import get_redis
@@ -284,7 +285,10 @@ async def customer_notifications(payload=Depends(current_customer_payload), db: 
     customer_id = payload["customer_id"]
     rows = list((await db.scalars(
         select(models.CustomerNotification)
-        .where(models.CustomerNotification.customer_id == customer_id)
+        .where(
+            models.CustomerNotification.customer_id == customer_id,
+            models.CustomerNotification.dismissed_at.is_(None),
+        )
         .order_by(desc(models.CustomerNotification.created_at))
         .limit(50)
     )).all())
@@ -300,6 +304,7 @@ async def read_customer_notifications(payload=Depends(current_customer_payload),
         select(models.CustomerNotification).where(
             models.CustomerNotification.customer_id == payload["customer_id"],
             models.CustomerNotification.is_read.is_(False),
+            models.CustomerNotification.dismissed_at.is_(None),
         )
     )).all())
     read_at = datetime.now(UTC).replace(tzinfo=None)
@@ -308,6 +313,21 @@ async def read_customer_notifications(payload=Depends(current_customer_payload),
         row.read_at = read_at
     await db.commit()
     return {"updated": len(rows)}
+
+
+@router.delete("/me/notifications/{notification_id}")
+async def dismiss_customer_notification(notification_id: int, payload=Depends(current_customer_payload),
+                                        db: AsyncSession = Depends(get_db)):
+    notification = await db.scalar(select(models.CustomerNotification).where(
+        models.CustomerNotification.id == notification_id,
+        models.CustomerNotification.customer_id == payload["customer_id"],
+        models.CustomerNotification.dismissed_at.is_(None),
+    ))
+    if notification is None:
+        raise NotFoundError("Notification")
+    notification.dismissed_at = datetime.now(UTC).replace(tzinfo=None)
+    await db.commit()
+    return {"message": "تم حذف الإشعار"}
 
 
 @router.patch("/me", response_model=CustomerProfile)

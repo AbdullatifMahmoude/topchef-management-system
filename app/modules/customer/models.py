@@ -73,6 +73,7 @@ class CustomerNotification(Base):
     is_read = Column(Boolean, nullable=False, default=False, server_default="false", index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     read_at = Column(DateTime, nullable=True)
+    dismissed_at = Column(DateTime, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("customer_id", "event_key", name="uq_customer_notification_event"),
