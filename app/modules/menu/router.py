@@ -260,3 +260,13 @@ async def toggle_product(
     products_service = service.ProductService(db, redis)
     toggle = await products_service.toggle_product(id, actor_id=_current_user.id)
     return toggle
+
+
+@router.patch("/products/{id}/daily-availability", response_model=schemas.ProductResponse)
+async def toggle_daily_product_availability(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+    current_user=Depends(require_capability(Capability.TOGGLE_DAILY_PRODUCT)),
+):
+    return await service.ProductService(db, redis).toggle_daily_availability(id, actor_id=current_user.id)

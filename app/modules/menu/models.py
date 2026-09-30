@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -46,6 +46,7 @@ class Product(Base):
     )
     description = Column(String(500), nullable=True)
     is_available = Column(Boolean, default=True, nullable=False)
+    temporary_unavailable_until = Column(DateTime, nullable=True)
     is_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow,
@@ -61,6 +62,13 @@ class Product(Base):
     def toggle_availability(self):
         self.is_available = not self.is_available
         return self.is_available
+
+    @property
+    def is_temporarily_unavailable(self) -> bool:
+        return bool(
+            self.temporary_unavailable_until
+            and self.temporary_unavailable_until > datetime.now(UTC).replace(tzinfo=None)
+        )
 
 
 class Variant(Base):

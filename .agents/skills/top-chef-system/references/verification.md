@@ -5,7 +5,7 @@
 - `pyproject.toml` sets `tests` as the Pytest path and configures Ruff. `docs/OPEN_QUALITY_GATE.md` records a 202-test, clean-Ruff result on 2026-09-22; that is a historical baseline, not today's result.
 - For Python changes, start with the relevant `tests/test_*.py` files. The maintained broad commands are `.\env\Scripts\python.exe -m pytest -q -p no:cacheprovider` and `.\env\Scripts\ruff.exe check app tests --statistics`. Use the broader checks when a shared boundary or release gate warrants them.
 - Browser-oriented Node tests live in `tests/test_browser_print.js`, `tests/test_order_edit_print.js`, and `tests/test_order_edit_save.js`; inspect their invocation and scope before using them. The public `../menu` repository has no checked-in automated tests in the inspected tree.
-- `alembic/versions` has source head `a93026loyaltymonth` as of 2026-09-30. Recompute the head before migration work and verify the actual target database before claiming an upgrade was applied.
+- `alembic/versions` has source head `a93026productdaily` as of 2026-09-30. Recompute the head before migration work and verify the actual target database before claiming an upgrade was applied.
 
 ## Task-specific paths
 

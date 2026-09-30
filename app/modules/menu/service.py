@@ -1,12 +1,26 @@
 import contextlib
 import json
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ProductType
+from app.core.business_calendar import (
+    BUSINESS_DAY_START_HOUR, EGYPT_TZ, get_current_business_date, is_weekly_holiday,
+)
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import logger
 from app.modules.menu import models, repository, schemas
+
+
+def next_daily_availability_deadline(now: datetime | None = None) -> datetime:
+    next_date = get_current_business_date(now) + timedelta(days=1)
+    while is_weekly_holiday(next_date):
+        next_date += timedelta(days=1)
+    next_start = datetime.combine(next_date, datetime.min.time()).replace(
+        hour=BUSINESS_DAY_START_HOUR, tzinfo=EGYPT_TZ,
+    )
+    return next_start.astimezone(UTC).replace(tzinfo=None)
 
 
 # ============== category ===============#
@@ -355,4 +369,31 @@ class ProductService:
         from app.core.events import order_events_manager
         await order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(toggle).model_dump(mode='json')})
         return schemas.ProductResponse.model_validate(toggle)
+
+    async def toggle_daily_availability(self, product_id: int, actor_id: int):
+        async with self._transaction_scope():
+            product = await self.get_product(product_id, check_cache=False)
+            if not product.is_available:
+                raise ValidationError("الصنف معطّل بشكل دائم؛ فعّله من إعدادات الأصناف أولًا")
+            old_until = product.temporary_unavailable_until
+            if product.is_temporarily_unavailable:
+                product.temporary_unavailable_until = None
+            else:
+                product.temporary_unavailable_until = next_daily_availability_deadline()
+            self.db.add(models.ProductChangeLog(
+                product_id=product_id, changed_by_user_id=actor_id,
+                change_type="temporary_availability",
+                old_value=old_until.isoformat() if old_until else "available",
+                new_value=product.temporary_unavailable_until.isoformat()
+                if product.temporary_unavailable_until else "available",
+            ))
+            await self.db.flush()
+
+        from app.core.events import order_events_manager
+        if self.db.in_transaction():
+            await self.db.commit()
+        await self._invalidate_cache()
+        response = schemas.ProductResponse.model_validate(product)
+        await order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": response.model_dump(mode="json")})
+        return response
 

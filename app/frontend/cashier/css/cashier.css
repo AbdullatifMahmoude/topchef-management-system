@@ -1754,7 +1754,15 @@ nav {
   #local_orders_layout .payment_method_picker + .footer_btns {
     margin-top: 16px;
   }
+
 }
+
+.item_card.daily_unavailable { opacity: .55; border-color: rgba(239,111,108,.45); }
+.item_card.daily_unavailable:hover { transform: none; box-shadow: none; }
+.daily_availability_toggle { align-self: flex-end; border: 1px solid var(--color-primary-border); border-radius: 16px; padding: 4px 9px; color: var(--color-text); background: rgba(201,168,76,.12); font: inherit; font-size: 11px; cursor: pointer; }
+.daily_availability_toggle[aria-pressed="true"] { color: #fff; background: #9b3936; }
+.daily_availability_toggle:disabled { opacity: .5; cursor: wait; }
+.daily_unavailable_badge { color: #ffaaa5; font-size: 12px; font-weight: 800; }
 
 /* Keep checkout actions visible on short tablet/desktop screens. */
 @media (min-width:769px) {

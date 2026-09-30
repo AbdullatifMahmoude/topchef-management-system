@@ -166,13 +166,16 @@
 
       const tr = document.createElement("tr");
       tr.classList.add("no_borer_bottom");
+      const temporarilyUnavailable = p.temporary_unavailable_until &&
+        Date.parse(`${p.temporary_unavailable_until.replace(/Z$|[+-]\d\d:\d\d$/, "")}Z`) > Date.now();
       tr.innerHTML =
         '<td><div class="item_identity"><strong>' + escapeItemsText(p.product_name) + '</strong><small>' + escapeItemsText(p.description || "بدون وصف") + '</small></div></td>' +
         '<td><span class="item_category_badge">' + escapeItemsText(catName) + "</span></td>" +
         '<td><span class="item_type_badge">' + ((p.variants || []).length > 1 ? `${p.variants.length} أحجام` : "حجم واحد") + "</span></td>" +
         "<td>" + priceCell + "</td>" +
         '<td class="switch_td">' +
-          '<span class="item_availability ' + (p.is_available ? "available" : "paused") + '">' + (p.is_available ? "متاح" : "موقوف") + '</span>' +
+          '<span class="item_availability ' + (p.is_available && !temporarilyUnavailable ? "available" : "paused") + '">' +
+          (p.is_available ? (temporarilyUnavailable ? "غير متاح اليوم" : "متاح") : "موقوف دائمًا") + '</span>' +
           '<div class="switch ' + (p.is_available ? "" : "active") + '" data-id="' + p.id + '">' +
             '<div class="circle"></div>' +
           '</div>' +
@@ -210,8 +213,11 @@
     document.getElementById("itemsTopSelling").innerHTML = ranked.length ? ranked.map((entry, index) => `<div class="items_top_row"><p><span><b>${index + 1}</b>${escapeItemsText(entry.product.product_name)}</span><strong>${Number(entry.units_sold).toLocaleString("ar-EG")} وحدة</strong></p><i><b style="width:${Number(entry.units_sold) / max * 100}%"></b></i><small>${Number(entry.sales || 0).toLocaleString("ar-EG", { maximumFractionDigits: 0 })} ج.م مبيعات</small></div>`).join("") : '<div class="items_empty_cell">لا توجد مبيعات خلال آخر 30 يوم</div>';
     document.getElementById("itemsChangeLog").innerHTML = productChanges.length ? productChanges.slice(0, 8).map((change) => {
       const availability = change.change_type === "availability";
-      const action = availability ? (change.new_value === "true" ? "فعّل الصنف" : "أوقف الصنف") : "عدّل الأسعار";
-      return `<div class="items_change_row"><i class="${availability ? "availability" : "price"}"></i><div><strong>${escapeItemsText(action)} — ${escapeItemsText(change.product_name)}</strong><span>${escapeItemsText(change.changed_by)} • ${new Date(change.created_at).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" })}</span></div></div>`;
+      const temporary = change.change_type === "temporary_availability";
+      const action = availability ? (change.new_value === "true" ? "فعّل الصنف" : "أوقف الصنف")
+        : temporary ? (change.new_value === "available" ? "أعاد الصنف متاحًا" : "أوقف الصنف لباقي يوم العمل")
+          : "عدّل الأسعار";
+      return `<div class="items_change_row"><i class="${availability || temporary ? "availability" : "price"}"></i><div><strong>${escapeItemsText(action)} — ${escapeItemsText(change.product_name)}</strong><span>${escapeItemsText(change.changed_by)} • ${new Date(change.created_at).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" })}</span></div></div>`;
     }).join("") : '<div class="items_empty_cell">لا توجد تغييرات مسجلة بعد</div>';
   }
 

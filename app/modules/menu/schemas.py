@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,6 +38,7 @@ class CreateProduct(ProductBase):
 class ProductResponse(ProductBase):
     id: int
     variants: list[VariantResponse]
+    temporary_unavailable_until: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 class UpdateProduct(BaseModel):

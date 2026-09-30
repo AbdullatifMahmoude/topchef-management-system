@@ -249,9 +249,40 @@ function renderTabs() {
 // ===================================================
 //  Items Grid
 // ===================================================
+let dailyAvailabilityRefreshTimer = null;
+function isDailyUnavailable(product) {
+  const until = product?.temporary_unavailable_until;
+  return Boolean(until && Date.parse(`${until.replace(/Z$|[+-]\d\d:\d\d$/, "")}Z`) > Date.now());
+}
+
+async function toggleDailyProduct(productId, button) {
+  button.disabled = true;
+  try {
+    const response = await apiFetch(`/menu/products/${productId}/daily-availability`, { method: "PATCH" });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "تعذر تحديث الصنف");
+    const updated = await response.json();
+    products = products.map((product) => product.id === updated.id ? updated : product);
+    renderItems();
+    renderPopularProducts();
+    showToast(isDailyUnavailable(updated) ? "الصنف غير متاح لباقي يوم العمل" : "الصنف متاح الآن", "success");
+  } catch (error) {
+    showToast(error.message || "تعذر تحديث الصنف", "error");
+    button.disabled = false;
+  }
+}
+
 function renderItems() {
   const grid = document.getElementById("items_grid");
   grid.innerHTML = "";
+  clearTimeout(dailyAvailabilityRefreshTimer);
+  const nextExpiry = products.map((product) => product.temporary_unavailable_until)
+    .filter(Boolean).map((value) => Date.parse(`${value.replace(/Z$|[+-]\d\d:\d\d$/, "")}Z`))
+    .filter((value) => value > Date.now()).sort((a, b) => a - b)[0];
+  if (nextExpiry) dailyAvailabilityRefreshTimer = setTimeout(() => {
+    renderItems();
+    renderPopularProducts();
+    renderEditModalItems();
+  }, Math.max(0, nextExpiry - Date.now() + 50));
 
   const searchTerm = String(window.localProductSearchTerm || "").trim().toLowerCase();
   const catProducts = products.filter(
@@ -285,7 +316,8 @@ function renderItems() {
       : "";
 
     const card = document.createElement("div");
-    card.className = "item_card";
+    const unavailable = isDailyUnavailable(product);
+    card.className = `item_card${unavailable ? " daily_unavailable" : ""}`;
     const productOffers = getActiveOffersForProduct(product.id);
     const offerBadge = productOffers.length
       ? `<div class="product_offer_badge" title="${productOffers.map((offer) => offer.display_name || offer.code).join("، ")}">
@@ -295,11 +327,20 @@ function renderItems() {
       : "";
     card.innerHTML = `
       ${offerBadge}
+      <button type="button" class="daily_availability_toggle" aria-pressed="${unavailable}">${unavailable ? "إتاحة" : "إيقاف اليوم"}</button>
+      ${unavailable ? '<span class="daily_unavailable_badge">غير متاح</span>' : ""}
       <h1>${product.product_name}</h1>
       ${descriptionHtml}
       <h2>${priceLabel}</h2>
     `;
-    card.onclick = () => handleProductClick(product, price);
+    card.querySelector(".daily_availability_toggle").onclick = (event) => {
+      event.stopPropagation();
+      toggleDailyProduct(product.id, event.currentTarget);
+    };
+    card.onclick = () => {
+      if (isDailyUnavailable(product)) return showToast("الصنف غير متاح لباقي يوم العمل", "error");
+      handleProductClick(product, price);
+    };
     grid.appendChild(card);
   });
 }
@@ -669,7 +710,7 @@ function renderPopularProducts() {
     .map((entry) => ({
       product: products.find((product) => Number(product.id) === Number(entry.product_id)),
     }))
-    .filter(({ product }) => product && product.is_available)
+    .filter(({ product }) => product && product.is_available && !isDailyUnavailable(product))
     .slice(0, 8);
 
   section.hidden = ranked.length === 0;
@@ -4958,13 +4999,18 @@ function renderEditModalItems() {
       : "";
 
     const card = document.createElement("div");
-    card.className = "item_card";
+    const unavailable = isDailyUnavailable(product);
+    card.className = `item_card${unavailable ? " daily_unavailable" : ""}`;
     card.innerHTML = `
+      ${unavailable ? '<span class="daily_unavailable_badge">غير متاح</span>' : ""}
       <h1>${product.product_name}</h1>
       ${descriptionHtml}
       <h2>${priceLabel}</h2>
     `;
-    card.onclick = () => handleEditModalProductClick(product, price);
+    card.onclick = () => {
+      if (isDailyUnavailable(product)) return showToast("الصنف غير متاح لباقي يوم العمل", "error");
+      handleEditModalProductClick(product, price);
+    };
     grid.appendChild(card);
   });
 }

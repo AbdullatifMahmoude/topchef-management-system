@@ -15,6 +15,7 @@ class Capability:
     # Menu capabilities
     VIEW_MENU = "view_menu"
     MANAGE_MENU = "manage_menu"           # create/update/delete categories & products
+    TOGGLE_DAILY_PRODUCT = "toggle_daily_product"
     MANAGE_PRICES = "manage_prices"
 
     # User capabilities
@@ -44,6 +45,7 @@ ROLE_CAPABILITIES: dict[UserRole, set[str]] = {
     },
     UserRole.CASHIER: {
         Capability.VIEW_MENU,
+        Capability.TOGGLE_DAILY_PRODUCT,
         Capability.CREATE_ORDER,
         Capability.VIEW_ORDERS,
         Capability.UPDATE_ORDER_STATUS,

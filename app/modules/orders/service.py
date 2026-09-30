@@ -76,6 +76,8 @@ class OrderService:
             product = products_by_id[item.product_id]
             if not product.is_available:
                 raise ValidationError(f"الصنف «{product.product_name}» غير متاح حاليًا")
+            if getattr(product, "is_temporarily_unavailable", False):
+                raise ValidationError(f"الصنف «{product.product_name}» غير متاح لباقي يوم العمل. احذفه من السلة وحاول تاني")
             if not product.category or not product.category.is_active or product.category.is_deleted:
                 raise ValidationError(f"قسم الصنف «{product.product_name}» غير متاح حاليًا")
 
