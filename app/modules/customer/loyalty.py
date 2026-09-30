@@ -3,8 +3,9 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,6 +22,21 @@ from app.modules.settings.schemas import (
 )
 from app.modules.settings.service import SettingsService
 
+CAIRO = ZoneInfo("Africa/Cairo")
+
+
+def points_month_bounds(now: datetime | None = None) -> tuple[datetime, datetime, datetime, datetime]:
+    """Return [start, end) in UTC and in local Cairo time for the current calendar month."""
+    instant = now or datetime.now(UTC)
+    if instant.tzinfo is None:
+        raise ValueError("points_month_bounds requires an aware datetime")
+    local = instant.astimezone(CAIRO)
+    start_local = local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end_local = start_local.replace(
+        year=start_local.year + 1, month=1,
+    ) if start_local.month == 12 else start_local.replace(month=start_local.month + 1)
+    return start_local.astimezone(UTC), end_local.astimezone(UTC), start_local, end_local
+
 
 @dataclass
 class RedemptionSelection:
@@ -28,6 +44,7 @@ class RedemptionSelection:
     reward_type: str
     points_required: int
     reward_value: Decimal
+    selected_at: datetime
     product_id: int | None = None
     product_name: str | None = None
     variant_name: str | None = None
@@ -36,6 +53,7 @@ class RedemptionSelection:
 async def select_redemption(db: AsyncSession, rule_id: str, payload: dict, phone: str | None) -> RedemptionSelection:
     customer_id = payload["customer_id"]
     customer = await db.scalar(select(Customer).where(Customer.id == customer_id).with_for_update())
+    selected_at = datetime.now(UTC)
     device = await db.get(CustomerDevice, payload.get("device_id")) if payload.get("device_id") else None
     if (
         not customer or customer.is_deleted or not customer.pin_hash or not customer.account_activated_at
@@ -48,10 +66,10 @@ async def select_redemption(db: AsyncSession, rule_id: str, payload: dict, phone
     rule = next((item for item in config.redemption_rules if str(item.id) == rule_id), None)
     if not config.redemption_active or not rule:
         raise ValidationError("مكافأة النقاط لم تعد متاحة")
-    if await customer_points_balance(db, customer_id) < rule.points_required:
-        raise ValidationError("رصيد النقاط غير كافٍ لهذه المكافأة")
+    if await customer_points_balance(db, customer_id, now=selected_at) < rule.points_required:
+        raise ValidationError("رصيد النقاط غير كافٍ لهذه المكافأة في الشهر الحالي. النقاط غير المستبدلة تنتهي أول كل شهر بتوقيت القاهرة")
     if rule.reward_type == "fixed_discount":
-        return RedemptionSelection(rule_id, rule.reward_type, rule.points_required, rule.discount_amount)
+        return RedemptionSelection(rule_id, rule.reward_type, rule.points_required, rule.discount_amount, selected_at)
     product = await db.scalar(select(Product).where(Product.id == rule.product_id).options(
         selectinload(Product.variants), selectinload(Product.category),
     ))
@@ -63,7 +81,7 @@ async def select_redemption(db: AsyncSession, rule_id: str, payload: dict, phone
         raise ValidationError("حجم الصنف المجاني لم يعد متاحًا")
     return RedemptionSelection(
         rule_id, rule.reward_type, rule.points_required, Decimal(variant.price),
-        product.id, product.product_name, variant.name,
+        selected_at, product.id, product.product_name, variant.name,
     )
 
 
@@ -99,7 +117,7 @@ async def award_order_points(db: AsyncSession, order: Order) -> bool:
         return False
     db.add(CustomerPointLedger(
         customer_id=customer.id, order_id=order.id, points=points, eligible_amount=amount,
-        rules_snapshot=config.model_dump_json(),
+        rules_snapshot=config.model_dump_json(), created_at=datetime.now(UTC).replace(tzinfo=None),
     ))
     await db.flush()
     return True
@@ -141,13 +159,23 @@ async def reverse_order_points(db: AsyncSession, order_id: int) -> bool:
     return True
 
 
-async def customer_points_balance(db: AsyncSession, customer_id: int) -> int:
+async def customer_points_balance(db: AsyncSession, customer_id: int, *, now: datetime | None = None) -> int:
+    start_utc, end_utc, start_local, end_local = points_month_bounds(now)
     value = await db.scalar(select(func.coalesce(func.sum(CustomerPointLedger.points), 0)).where(
         CustomerPointLedger.customer_id == customer_id,
         CustomerPointLedger.reversed_at.is_(None),
+        CustomerPointLedger.created_at >= start_utc.replace(tzinfo=None),
+        CustomerPointLedger.created_at < end_utc.replace(tzinfo=None),
     ))
     spent = await db.scalar(select(func.coalesce(func.sum(Order.loyalty_points_spent), 0)).where(
         Order.customer_id == customer_id,
         Order.loyalty_status.in_(("reserved", "consumed")),
+        or_(
+            and_(Order.loyalty_reserved_at >= start_utc.replace(tzinfo=None),
+                 Order.loyalty_reserved_at < end_utc.replace(tzinfo=None)),
+            and_(Order.loyalty_reserved_at.is_(None),
+                 Order.created_at >= start_local.replace(tzinfo=None),
+                 Order.created_at < end_local.replace(tzinfo=None)),
+        ),
     ))
-    return int(value or 0) - int(spent or 0)
+    return max(0, int(value or 0) - int(spent or 0))

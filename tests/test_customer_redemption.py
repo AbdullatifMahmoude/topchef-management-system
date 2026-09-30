@@ -124,6 +124,7 @@ async def test_redemption_reserves_consumes_and_returns_points(
             assert order.loyalty_discount_amount == discount
             assert order.total_amount == expected_total
             assert order.loyalty_status == "reserved"
+            assert order.loyalty_reserved_at is not None
             exposed = OrderResponse.model_validate(order)
             assert exposed.loyalty_discount_amount == discount
             assert exposed.loyalty_points_spent == points_cost

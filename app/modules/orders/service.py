@@ -63,7 +63,7 @@ class OrderService:
         
         product_ids = [item.product_id for item in items]
         if not product_ids:
-            raise ValidationError("Order must have at least one item")
+            raise ValidationError("أضف صنفًا واحدًا على الأقل قبل إرسال الطلب")
         
         menu_service = ProductService(self.db)
         products = await menu_service.get_products_by_ids(product_ids)
@@ -71,13 +71,13 @@ class OrderService:
         
         for item in items:
             if item.product_id not in products_by_id:
-                raise ValidationError(f"Product ID {item.product_id} not found")
+                raise ValidationError("أحد الأصناف لم يعد موجودًا. حدّث المنيو وحاول تاني")
             
             product = products_by_id[item.product_id]
             if not product.is_available:
-                raise ValidationError(f"'{product.product_name}' is currently unavailable")
+                raise ValidationError(f"الصنف «{product.product_name}» غير متاح حاليًا")
             if not product.category or not product.category.is_active or product.category.is_deleted:
-                raise ValidationError(f"Category for '{product.product_name}' is currently unavailable")
+                raise ValidationError(f"قسم الصنف «{product.product_name}» غير متاح حاليًا")
 
             requested_price = Decimal(str(item.unit_price)).quantize(Decimal("0.01"))
             allowed_prices = {
@@ -86,7 +86,7 @@ class OrderService:
                 if not variant.is_deleted
             }
             if requested_price not in allowed_prices:
-                raise ValidationError(f"Invalid price for '{product.product_name}'")
+                raise ValidationError(f"سعر الصنف «{product.product_name}» اتغير. حدّث المنيو واختاره من جديد")
 
     async def create_order(self, order_data: schemas.OrderCreate, current_user_id: int | None = None,
                            redeeming_customer: dict | None = None) -> models.Order:
@@ -112,12 +112,18 @@ class OrderService:
 
     async def _create_order_inner(self, order_data: schemas.OrderCreate, current_user_id: int | None = None,
                                   redeeming_customer: dict | None = None) -> models.Order:
+        # Linking a customer is server-owned state; never write it back into the caller's payload.
+        order_data = order_data.model_copy(deep=True)
         async with self._transaction_scope():
             if is_weekly_holiday(get_current_business_date()):
                 raise ValidationError("المطعم مغلق يوم الجمعة للإجازة الأسبوعية ولا يمكن إنشاء طلبات جديدة")
 
             # Check if online orders are enabled
             if order_data.source == models.OrderSource.ONLINE:
+                if order_data.manual_discount_type or order_data.manual_discount_value:
+                    raise ValidationError("الخصم اليدوي غير متاح لطلبات المنيو")
+                if order_data.customer_id is not None:
+                    raise ValidationError("بيانات الحساب يحددها النظام من بيانات العميل المسجل، ولا تقبل من الطلب مباشرة")
                 checkout = await self.settings_service.get_menu_checkout_settings()
                 if not checkout.ordering_enabled:
                     raise ValidationError(checkout.ordering_message)
@@ -273,6 +279,7 @@ class OrderService:
                 order.loyalty_product_name = redemption.product_name
                 order.loyalty_variant_name = redemption.variant_name
                 order.loyalty_status = "reserved"
+                order.loyalty_reserved_at = redemption.selected_at.replace(tzinfo=None)
             order.discount_amount = pricing_res.discount_amount + loyalty_discount
             order.discount_type = getattr(order_data, 'manual_discount_type', None)
             order.discount_value = getattr(order_data, 'manual_discount_value', None)
@@ -400,13 +407,13 @@ class OrderService:
             completed_order = await self.get_order(updated_order.id)
             completed_schema = schemas.OrderResponse.model_validate(completed_order)
             payload_data = completed_schema.model_dump(mode='json')
+            await self.notifications.enqueue(payload_data, "status_changed" if status_changed else "updated")
         
         await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
             "data": payload_data
         })
-        await self.notifications.enqueue(payload_data, "status_changed" if status_changed else "updated")
         return completed_order
 
     async def update_order(self, order_id: int, update_data: schemas.OrderUpdateFull, current_user_id: int | None = None) -> models.Order:
@@ -598,12 +605,12 @@ class OrderService:
             completed_order = await self.get_order(updated_order.id)
             completed_schema = schemas.OrderResponse.model_validate(completed_order)
             payload_data = completed_schema.model_dump(mode='json')
+            await self.notifications.enqueue(payload_data, "updated")
         await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
             "data": payload_data
         })
-        await self.notifications.enqueue(payload_data, "updated")
         return completed_order
 
     @staticmethod

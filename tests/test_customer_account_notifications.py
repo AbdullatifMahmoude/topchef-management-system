@@ -53,14 +53,15 @@ async def test_guest_order_does_not_create_account_notification():
 
 
 @pytest.mark.asyncio
-async def test_non_status_edits_do_not_spam_customer():
+async def test_order_edit_creates_a_customer_notification():
     db = RecordingSession()
     queued = await AccountOrderNotifications(db).enqueue(
         {"id": 12, "customer_id": 7, "order_number": "0042", "order_status": "confirmed"},
         "updated",
     )
-    assert queued is False
-    assert db.added == []
+    assert queued is True
+    assert len(db.added) == 1
+    assert "اتعدلت تفاصيل طلبك" in db.added[0].message
 
 
 @pytest.mark.asyncio

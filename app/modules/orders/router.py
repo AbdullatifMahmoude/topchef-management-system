@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.enums import OrderSource, OrderStatus, OrderType, UserRole
 from app.core.events import order_events_manager
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.core.logging import logger
 from app.core.security import decode_token
 from app.modules.auth.dependencies import get_current_user, get_optional_user
@@ -53,6 +53,10 @@ async def create_order(
     customer_credentials: HTTPAuthorizationCredentials | None = Depends(customer_bearer),
 ):
     user_id = current_user.id if current_user else None
+    if order_data.source == OrderSource.CASHIER and (
+        not current_user or current_user.role not in {UserRole.ADMIN, UserRole.CASHIER}
+    ):
+        raise AuthorizationError("إنشاء طلب كاشير يتطلب حساب كاشير أو أدمن")
     customer_payload = None
     if order_data.loyalty_rule_id:
         if not customer_credentials:

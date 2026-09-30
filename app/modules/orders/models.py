@@ -88,6 +88,7 @@ class Order(Base):
     loyalty_product_name = Column(String(255), nullable=True)
     loyalty_variant_name = Column(String(255), nullable=True)
     loyalty_status = Column(String(12), nullable=True)
+    loyalty_reserved_at = Column(DateTime, nullable=True)  # UTC; distinct from the order creation time
     
     customer_notes = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)

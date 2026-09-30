@@ -3,13 +3,14 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.core.enums import OrderSource, PaymentMethod
+from app.core.enums import OrderSource, OrderType, PaymentMethod
 from app.core.exceptions import ValidationError
 from app.modules.menu.models import Product  # noqa: F401 - register ORM relationship
 from app.modules.offer.models import (
     OfferUsage,  # noqa: F401 - register ORM relationship
 )
 from app.modules.orders.models import Order  # noqa: F401 - register ORM relationship
+from app.modules.orders.schemas import OrderCreate, OrderItemCreate
 from app.modules.orders.service import OrderService
 from app.modules.settings.schemas import PaymentSettingsResponse
 from app.modules.settings.service import SettingsService
@@ -116,6 +117,9 @@ async def test_online_order_cannot_bypass_disabled_payment_method(method, flag):
     checkout = SimpleNamespace(ordering_enabled=True, ordering_message="", instapay_enabled=True, wallet_enabled=True)
     setattr(checkout, flag, False)
     service.settings_service.get_menu_checkout_settings = AsyncMock(return_value=checkout)
-    order_data = SimpleNamespace(source=OrderSource.ONLINE, payment_method=method)
+    order_data = OrderCreate(
+        source=OrderSource.ONLINE, order_type=OrderType.TAKEAWAY, payment_method=method,
+        items=[OrderItemCreate(product_id=1, quantity=1, unit_price=100)],
+    )
     with pytest.raises(ValidationError):
         await service._create_order_inner(order_data)
