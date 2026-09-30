@@ -121,6 +121,53 @@ async def test_admin_cash_additions_adjust_difference_without_overwriting_cashie
 
 
 @pytest.mark.asyncio
+async def test_digital_payments_count_as_sales_but_not_drawer_cash():
+    target_date = get_current_business_date() - timedelta(days=1)
+    start_local = datetime.combine(target_date, datetime.min.time()).replace(hour=10)
+    shift = SimpleNamespace(
+        id=1, user_id=7, user=SimpleNamespace(full_name="Cashier", username="cashier"),
+        start_time=start_local - timedelta(hours=3),
+        end_time=start_local.replace(hour=18) - timedelta(hours=3),
+        target_date=target_date, opening_cash=50, actual_closing_cash=145,
+        closing_note=None,
+    )
+
+    def order(owner, method, amount, *, status=OrderStatus.COMPLETED):
+        return SimpleNamespace(
+            created_by_user_id=owner,
+            created_at=start_local.replace(hour=12),
+            order_status=status,
+            total_amount=amount,
+            delivery_fee=0,
+            discount_amount=0,
+            payment_method=method,
+            order_type=OrderType.HALL,
+        )
+
+    orders = [
+        order(7, PaymentMethod.CASH, 100),
+        order(7, PaymentMethod.WALLET, 200),
+        order(7, PaymentMethod.INSTAPAY, 300),
+        order(8, PaymentMethod.CASH, 400),
+        order(7, PaymentMethod.CASH, 500, status=OrderStatus.CANCELLED),
+    ]
+    expense = SimpleNamespace(shift_id=1, amount=20)
+    db = AsyncMock()
+    db.execute.side_effect = [_Result([shift]), _Result(orders), _Result([expense]), _Result([])]
+
+    report = (await ShiftsService(db).get_shifts_report(target_date))[0]
+
+    assert report["total_orders"] == 4
+    assert report["total_sales"] == 600
+    assert report["cash_sales"] == 100
+    assert report["wallet_sales"] == 200
+    assert report["instapay_sales"] == 300
+    assert report["cash_expenses"] == 20
+    assert report["expected_cash"] == 130  # Opening cash + cash sales - expenses.
+    assert report["cash_difference"] == 15  # Digital payments never enter the drawer.
+
+
+@pytest.mark.asyncio
 async def test_end_shift_finds_open_shift_without_target_date_restriction():
     shift = SimpleNamespace(end_time=None)
     db = AsyncMock()

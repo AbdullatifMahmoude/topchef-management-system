@@ -28,6 +28,15 @@ WS_CHANNEL_ROLES = {
 }
 
 
+async def authorize_cashier_order_access(service: OrderService, order_id: int, current_user: Any) -> Any:
+    order = await service.get_order(order_id)
+    if (current_user.role == UserRole.CASHIER
+            and order.order_source == OrderSource.CASHIER
+            and order.created_by_user_id != current_user.id):
+        raise AuthorizationError("لا يمكنك الوصول إلى طلب كاشير آخر")
+    return order
+
+
 def authorize_websocket_token(token: str | None, channel: str) -> dict | None:
     if not token or channel not in WS_CHANNEL_ROLES:
         return None
@@ -100,7 +109,7 @@ async def get_order_detail(
     service: OrderService = Depends(get_order_service),
     current_user: Any = Depends(get_current_user)
 ):
-    return await service.get_order(order_id)
+    return await authorize_cashier_order_access(service, order_id, current_user)
 
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
@@ -287,6 +296,7 @@ async def update_order(
     service: OrderService = Depends(get_order_service),
     current_user: Any = Depends(get_current_user)
 ):
+    await authorize_cashier_order_access(service, order_id, current_user)
     user_id = current_user.id if current_user else None
     return await service.update_order(order_id, update_data, current_user_id=user_id)
 
@@ -297,6 +307,7 @@ async def update_order_status(
     service: OrderService = Depends(get_order_service),
     current_user: Any = Depends(get_current_user)
 ):
+    await authorize_cashier_order_access(service, order_id, current_user)
     user_id = current_user.id if current_user else None
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)
 
