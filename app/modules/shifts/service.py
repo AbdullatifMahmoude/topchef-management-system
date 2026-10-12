@@ -60,16 +60,18 @@ class ShiftsService:
             active_shift.end_time = datetime.now(UTC).replace(tzinfo=None)
             await self.db.flush()
 
-        # Get the absolute last shift for today, regardless of who owns it
+        # Reopen this cashier's most recent shift for the business day even if
+        # another cashier opened and closed a shift after it.
         last_shift_query = select(CashierShift).where(
-            CashierShift.target_date == target_date
+            CashierShift.target_date == target_date,
+            CashierShift.user_id == user_id,
         ).order_by(desc(CashierShift.id))
         result = await self.db.execute(last_shift_query)
         last_shift = result.scalars().first()
-        
-        if last_shift and last_shift.user_id == user_id:
+
+        if last_shift:
             if last_shift.end_time is not None:
-                # Reopen the shift since no one else logged in between
+                # Reopen the existing shift instead of counting it twice.
                 last_shift.end_time = None
                 await self.db.commit()
 
@@ -81,7 +83,7 @@ class ShiftsService:
             return last_shift
 
         else:
-            # Create a new shift since the last one belongs to someone else, or no shifts exist today
+            # This cashier has not worked a shift on this business day yet.
             new_shift = CashierShift(
                 user_id=user_id,
                 target_date=target_date,

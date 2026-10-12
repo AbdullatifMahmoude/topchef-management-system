@@ -62,7 +62,12 @@
 
   function render() {
     const query = $("adminExpensesSearch").value.trim().toLowerCase();
-    const rows = expenses.filter((item) => !query || `${item.title} ${item.note || ""} ${item.shift_owner || ""} ${item.recorded_by || ""}`.toLowerCase().includes(query));
+    const selectedShift = $("adminExpensesShiftFilter").value || "all";
+    const rows = expenses.filter((item) => {
+      const matchesShift = selectedShift === "all"
+        || (selectedShift === "unassigned" ? item.shift_id == null : Number(item.shift_id) === Number(selectedShift));
+      return matchesShift && (!query || `${item.title} ${item.note || ""} ${item.shift_owner || ""} ${item.recorded_by || ""}`.toLowerCase().includes(query));
+    });
     $("adminExpensesCount").textContent = rows.length.toLocaleString("ar-EG");
     $("adminExpensesTotal").textContent = money(rows.reduce((sum, item) => sum + Number(item.amount || 0), 0));
     if (!rows.length) {
@@ -81,6 +86,22 @@
     </tr>`).join("");
   }
 
+  function updateShiftFilter() {
+    const picker = $("adminExpensesShiftFilter");
+    const selected = picker.value || "all";
+    const shifts = new Map();
+    expenses.forEach((item) => {
+      if (item.shift_id != null) {
+        shifts.set(Number(item.shift_id), `${item.shift_owner || "كاشير"} — ${item.target_date} (شيفت #${Number(item.shift_id)})`);
+      }
+    });
+    const hasUnassigned = expenses.some((item) => item.shift_id == null);
+    picker.innerHTML = '<option value="all">كل الشيفتات</option>'
+      + [...shifts].map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join("")
+      + (hasUnassigned ? '<option value="unassigned">مصروفات قديمة بلا شيفت</option>' : "");
+    picker.value = ((selected === "unassigned" && hasUnassigned) || shifts.has(Number(selected))) ? selected : "all";
+  }
+
   async function loadExpenses() {
     const start = $("adminExpensesStart").value;
     const end = $("adminExpensesEnd").value;
@@ -91,6 +112,7 @@
       if (!response.ok) throw new Error("تعذر تحميل المصاريف");
       const data = await response.json();
       expenses = Array.isArray(data.items) ? data.items : [];
+      updateShiftFilter();
       render();
     } catch (error) {
       tbody.innerHTML = `<tr><td colspan="8" class="admin_expenses_empty is_error">${escapeHtml(error.message)}</td></tr>`;
@@ -139,8 +161,13 @@
         const data = await response.json().catch(() => ({}));
         throw new Error(typeof data.detail === "string" ? data.detail : "تعذر حفظ المصروف");
       }
+      const saved = await response.json();
       resetForm();
       await loadExpenses();
+      if (saved.shift_id && !id && expenses.some((item) => Number(item.shift_id) === Number(saved.shift_id))) {
+        $("adminExpensesShiftFilter").value = String(saved.shift_id);
+        render();
+      }
     } catch (error) {
       alert(error.message);
     } finally {
@@ -181,6 +208,7 @@
   $("adminExpenseDate").addEventListener("change", () => { refreshDate($("adminExpenseDate")); loadShifts(); });
   $("adminExpensesApply").addEventListener("click", loadExpenses);
   $("adminExpensesSearch").addEventListener("input", render);
+  $("adminExpensesShiftFilter").addEventListener("change", render);
   window.refreshAdminExpenses = initialise;
   document.querySelector('[data-page="expenses"]')?.addEventListener("click", initialise);
 })();

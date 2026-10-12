@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -196,4 +196,31 @@ async def test_start_shift_closes_stale_shift_and_creates_current_day_shift(monk
     assert isinstance(created, CashierShift)
     assert created.target_date == current_date
     db.add.assert_called_once_with(created)
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reopening_cashier_shift_after_another_closed_shift_keeps_original_id():
+    target = get_current_business_date()
+    original = SimpleNamespace(
+        id=1, user_id=7, end_time=datetime.now(UTC), target_date=target,
+    )
+    other = SimpleNamespace(
+        id=2, user_id=8, end_time=datetime.now(UTC), target_date=target,
+    )
+    db = AsyncMock()
+    db.scalar.return_value = None
+    db.add = Mock()
+
+    async def execute(query):
+        sql = str(query.compile(compile_kwargs={"literal_binds": True}))
+        return _Result([original] if "cashier_shifts.user_id = 7" in sql else [other])
+
+    db.execute.side_effect = execute
+
+    reopened = await ShiftsService(db).start_shift(user_id=7)
+
+    assert reopened is original
+    assert reopened.end_time is None
+    db.add.assert_not_called()
     db.commit.assert_awaited_once()

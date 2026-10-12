@@ -327,7 +327,7 @@ function renderItems() {
       : "";
     card.innerHTML = `
       ${offerBadge}
-      <button type="button" class="daily_availability_toggle" aria-pressed="${unavailable}">${unavailable ? "إتاحة" : "إيقاف اليوم"}</button>
+      <button type="button" class="daily_availability_toggle" aria-label="${unavailable ? "إتاحة المنتج" : "إيقاف المنتج اليوم"}" title="${unavailable ? "إتاحة المنتج" : "إيقاف المنتج اليوم"}" aria-pressed="${unavailable}"><span class="daily_availability_dot" aria-hidden="true"></span></button>
       ${unavailable ? '<span class="daily_unavailable_badge">غير متاح</span>' : ""}
       <h1>${product.product_name}</h1>
       ${descriptionHtml}
