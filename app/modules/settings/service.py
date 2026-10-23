@@ -14,6 +14,7 @@ from app.modules.settings import schemas
 from app.modules.settings.repository import SettingsRepository
 
 DEFAULT_TRANSFER_NUMBER = "01009515031"
+DEFAULT_WALLET_NUMBER = "01212758001"
 
 
 class SettingsService:
@@ -121,7 +122,11 @@ class SettingsService:
             instapay_enabled=flag(self.INSTAPAY_ENABLED),
             instapay_account=text(self.INSTAPAY_ACCOUNT).strip() or DEFAULT_TRANSFER_NUMBER,
             wallet_enabled=flag(self.WALLET_ENABLED),
-            wallet_number=text(self.WALLET_NUMBER).strip() or DEFAULT_TRANSFER_NUMBER,
+            wallet_number=(
+                DEFAULT_WALLET_NUMBER
+                if text(self.WALLET_NUMBER).strip() in ("", DEFAULT_TRANSFER_NUMBER)
+                else text(self.WALLET_NUMBER).strip()
+            ),
             payment_account_name=text(self.PAYMENT_ACCOUNT_NAME),
         )
 

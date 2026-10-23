@@ -1,0 +1,14 @@
+# Local and development files are not needed by the FastAPI service.
+.env
+.agents/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage-baseline.json
+tests/
+tools/
+docs/
+print_agent/
+requirements-print-agent.txt
+build/

@@ -50,7 +50,7 @@ class PrintAgentIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             printer._payment_lines({"payment_method": "wallet"}),
-            ["طريقة الدفع: محفظة إلكترونية", "رقم التحويل: 01009515031"],
+            ["طريقة الدفع: محفظة إلكترونية", "رقم التحويل: 01212758001"],
         )
 
     def test_health_endpoint(self):

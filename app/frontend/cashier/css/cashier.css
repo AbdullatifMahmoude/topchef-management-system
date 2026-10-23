@@ -1743,6 +1743,10 @@ nav {
 .order_setup_body { display:flex; min-height:0; padding:12px; flex:1; flex-direction:column; gap:10px; overflow:auto; scrollbar-width:thin; scrollbar-color:rgba(201,168,76,.35) transparent; }
 .order_setup_section { padding:12px; border:1px solid rgba(255,255,255,.07); border-radius:12px; background:rgba(255,255,255,.02); }
 .order_setup_section_title { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; }.order_setup_section_title span { color:#f2dfad; font-size:11px; font-weight:800; }.order_setup_section_title small { color:rgba(240,230,204,.35); font-size:8px; }
+.order_notes_field { display:flex; flex-direction:column; gap:8px; color:#f2dfad; font-size:11px; font-weight:800; }
+.order_notes_field small { color:rgba(240,230,204,.45); font-size:9px; font-weight:400; }
+.order_notes_field textarea { box-sizing:border-box; width:100%; min-height:72px; padding:10px 11px; border:1px solid rgba(201,168,76,.24); border-radius:9px; background:rgba(6,5,3,.38); color:#fff3d8; font:inherit; font-size:12px; font-weight:400; resize:vertical; }
+.order_notes_field textarea:focus { outline:1px solid rgba(201,168,76,.65); }
 .order_setup_panel .order_type_badge { margin-top:8px; }.order_setup_panel .order_type_btn { height:44px; }
 .order_setup_panel #discount_form { margin:0!important; padding:12px!important; border:1px solid rgba(255,255,255,.07)!important; }
 .order_setup_panel .payment_method_picker { padding:12px; }

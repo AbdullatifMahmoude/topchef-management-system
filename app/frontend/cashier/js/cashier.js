@@ -5,7 +5,7 @@ const TOPCHEF_PRINT_AGENT_URL = "http://127.0.0.1:8199";
 async function printReceipt(orderData) {
   let printOrder = orderData;
   if (["instapay", "wallet"].includes(orderData.payment_method)) {
-    let destination = "01009515031";
+    let destination = orderData.payment_method === "wallet" ? "01212758001" : "01009515031";
     try {
       const response = await fetch(`${API_BASE}/settings/menu-checkout`, { cache: "no-store" });
       if (response.ok) {
@@ -971,12 +971,7 @@ function showConfirmModal(orderData) {
         }
       }
 
-      const customerNotes =
-        orderType === "delivery" &&
-        !deliveryCustomerInfo.selectedAddressId &&
-        deliveryCustomerInfo.newAddress
-          ? deliveryCustomerInfo.newAddress
-          : null;
+      const customerNotes = document.getElementById("order_customer_notes")?.value.trim() || null;
 
       const discountType = document.getElementById("discount_type")?.value || null;
       const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
@@ -1104,6 +1099,8 @@ function showConfirmModal(orderData) {
       if (discType) discType.value = "";
       if (discValue) discValue.value = "";
       if (discReason) discReason.value = "";
+      const orderNotes = document.getElementById("order_customer_notes");
+      if (orderNotes) orderNotes.value = "";
       renderCart();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
@@ -1210,6 +1207,8 @@ function showCancelModal() {
     selectedDeliveryFee = null;
     selectedDineInFee = null;
     resetDeliveryCustomerInfo();
+    const orderNotes = document.getElementById("order_customer_notes");
+    if (orderNotes) orderNotes.value = "";
     const dcFormCancel = document.getElementById("delivery_customer_form");
     if (dcFormCancel) {
       dcFormCancel.style.display = "none";
@@ -2666,7 +2665,7 @@ function renderOnlineOrders() {
           order.customer_notes
             ? `
         <div class="detail_row">
-          <span style="font-size:12px">ملاحظات: ${order.customer_notes}</span>
+          <span style="font-size:12px">ملاحظات: ${escapeOrderText(order.customer_notes)}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
         </div>`
             : ""
@@ -4067,7 +4066,7 @@ function openOrderDetails(orderId, source) {
               ? `
           <div class="info_group" style="grid-column: 1 / -1;">
             <h4>ملاحظات</h4>
-            <p>${order.customer_notes}</p>
+            <p>${escapeOrderText(order.customer_notes)}</p>
           </div>`
               : ""
           }

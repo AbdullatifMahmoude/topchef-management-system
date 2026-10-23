@@ -167,7 +167,8 @@ class PrinterManager:
             return []
         lines = [f"طريقة الدفع: {labels[method]}"]
         if method in ("instapay", "wallet"):
-            destination = self._value(order, "payment_destination", "paymentDestination", default="01009515031")
+            fallback = "01212758001" if method == "wallet" else "01009515031"
+            destination = self._value(order, "payment_destination", "paymentDestination", default=fallback)
             lines.append(f"رقم التحويل: {destination}")
         return lines
 
@@ -277,14 +278,7 @@ class PrinterManager:
         def u(value: int | float) -> int:
             return int(round(value * scale))
 
-        # Allocate enough vertical room for wrapped product names and addresses;
-        # the image is cropped to the actual drawn height before printing.
-        height = u(900 + (len(items) * 190))
-        if self._has_customer_info(order):
-            height += u(300)
-        image = Image.new("RGB", (width, height), "white")
-        draw = ImageDraw.Draw(image)
-        y = margin
+        measure_draw = ImageDraw.Draw(Image.new("RGB", (1, 1), "white"))
 
         def text_size(text: Any, font) -> tuple[int, int]:
             shaped = rtl(text)
@@ -325,7 +319,7 @@ class PrinterManager:
                 piece = ""
                 for char in chunk:
                     candidate = piece + char
-                    if piece and draw.textlength(rtl(candidate), font=font) > max_width:
+                    if piece and measure_draw.textlength(rtl(candidate), font=font) > max_width:
                         lines.append(rtl(piece))
                         piece = char
                     else:
@@ -335,13 +329,13 @@ class PrinterManager:
 
             for word in words:
                 candidate = f"{current} {word}".strip()
-                if draw.textlength(rtl(candidate), font=font) <= max_width:
+                if measure_draw.textlength(rtl(candidate), font=font) <= max_width:
                     current = candidate
                     continue
                 if current:
                     lines.append(rtl(current))
                     current = ""
-                if draw.textlength(rtl(word), font=font) <= max_width:
+                if measure_draw.textlength(rtl(word), font=font) <= max_width:
                     current = word
                 else:
                     append_fitted_chunk(word)
@@ -349,6 +343,32 @@ class PrinterManager:
             if current:
                 lines.append(rtl(current))
             return lines or [rtl(raw)]
+
+        item_name_width = u(235)
+        item_name_lines = [
+            wrap_text(
+                (cart_item.get("item") or cart_item).get("name")
+                or (cart_item.get("item") or cart_item).get("product_name")
+                or "---",
+                fonts["item"],
+                item_name_width,
+            )
+            for cart_item in items
+        ]
+        # Reserve the actual height of every wrapped item before drawing the receipt.
+        rows_height = sum(
+            max(u(190), max(u(44), len(lines) * u(34) + u(10)) + u(12))
+            for lines in item_name_lines
+        )
+        height = u(900) + rows_height
+        if self._has_customer_info(order):
+            height += u(300)
+        notes = self._value(order, "customerNotes", "customer_notes", default="")
+        if notes:
+            height += u(len(str(notes)) * 3)
+        image = Image.new("RGB", (width, height), "white")
+        draw = ImageDraw.Draw(image)
+        y = margin
 
         full_order_number = self._value(order, "orderNumber", "order_number", "id", default="---")
         order_number = str(full_order_number).split("-")[-1] if "-" in str(full_order_number) else str(full_order_number)
@@ -419,14 +439,12 @@ class PrinterManager:
         line(y)
         y += u(10)
 
-        for cart_item in items:
+        for cart_item, name_lines in zip(items, item_name_lines):
             item_data = cart_item.get("item") or cart_item
             qty = self._number(cart_item.get("qty") or cart_item.get("quantity") or 0)
             price = self._number(item_data.get("price") or cart_item.get("price") or item_data.get("unit_price") or 0)
-            name = item_data.get("name") or item_data.get("product_name") or "---"
             total = qty * price
 
-            name_lines = wrap_text(name, fonts["item"], u(235))
             row_start_y = y
             draw_right(f"{qty:g}", row_start_y, fonts["item"], qty_x)
             for line_index, line_text in enumerate(name_lines):
@@ -539,7 +557,8 @@ class PrinterManager:
         address = self._address_to_text(
             self._value(order, "customerAddress", "customer_address", "address", default="")
         )
-        if not any([customer_name, customer_phone, address, customer_notes]):
+        has_customer_info = any([customer_name, customer_phone, address])
+        if not has_customer_info and not customer_notes:
             return y
 
         def u(value: int | float) -> int:
@@ -556,7 +575,7 @@ class PrinterManager:
         def draw_right(text, y_pos, font):
             draw.text((x2 - u(12), y_pos), rtl(text), fill="black", font=font, anchor="ra")
 
-        draw_center("بيانات العميل", y, fonts["small"])
+        draw_center("بيانات العميل" if has_customer_info else "ملاحظات الطلب", y, fonts["small"])
         y += u(37)
         if customer_name:
             draw_right(f" اسم العميل :{customer_name}", y, fonts["customer"])
@@ -568,8 +587,32 @@ class PrinterManager:
             draw_right(f" العنوان :{address}", y, fonts["customer"])
             y += u(36)
         if customer_notes:
-            draw_right(f" ملاحظات :{customer_notes}", y, fonts["customer"])
-            y += u(36)
+            if has_customer_info:
+                draw_right("ملاحظات الطلب:", y, fonts["customer"])
+                y += u(36)
+            max_width = x2 - x1 - u(24)
+            lines = []
+            current = ""
+            for word in str(customer_notes).split():
+                candidate = f"{current} {word}".strip()
+                if draw.textlength(rtl(candidate), font=fonts["customer"]) <= max_width:
+                    current = candidate
+                    continue
+                if current:
+                    lines.append(current)
+                    current = ""
+                for char in word:
+                    candidate = current + char
+                    if current and draw.textlength(rtl(candidate), font=fonts["customer"]) > max_width:
+                        lines.append(current)
+                        current = char
+                    else:
+                        current = candidate
+            if current:
+                lines.append(current)
+            for note_line in lines:
+                draw_right(note_line, y, fonts["customer"])
+                y += u(36)
 
         draw.rounded_rectangle((x1, box_top, x2, y + u(10)), radius=u(4), outline="black", width=scale)
         return y + u(24)
