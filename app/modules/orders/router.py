@@ -103,6 +103,45 @@ async def list_orders(
         "orders": orders
     }
 
+
+@router.get("/cancellation-requests", response_model=list[schemas.CancellationRequestResponse])
+async def list_cancellation_requests(
+    service: OrderService = Depends(get_order_service),
+    current_user: Any = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("مراجعة طلبات الإلغاء متاحة للأدمن فقط")
+    return await service.list_pending_cancellations()
+
+
+@router.patch("/cancellation-requests/{request_id}")
+async def decide_cancellation_request(
+    request_id: int,
+    decision: schemas.CancellationDecision,
+    service: OrderService = Depends(get_order_service),
+    current_user: Any = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("تأكيد إلغاء الطلب متاح للأدمن فقط")
+    if decision.approve:
+        order = await service.approve_cancellation(request_id, current_user.id)
+        return {"status": "approved", "order_id": order.id}
+    await service.reject_cancellation(request_id, current_user.id)
+    return {"status": "rejected"}
+
+
+@router.post("/{order_id}/cancellation-request")
+async def request_order_cancellation(
+    order_id: int,
+    service: OrderService = Depends(get_order_service),
+    current_user: Any = Depends(get_current_user),
+):
+    if current_user.role != UserRole.CASHIER:
+        raise AuthorizationError("طلب الإلغاء متاح للكاشير فقط")
+    await authorize_cashier_order_access(service, order_id, current_user)
+    request = await service.request_cancellation(order_id, current_user.id)
+    return {"request_id": request.id, "status": request.status}
+
 @router.get("/{order_id}", response_model=schemas.OrderDetailResponse)
 async def get_order_detail(
     order_id: int,
@@ -308,6 +347,8 @@ async def update_order_status(
     current_user: Any = Depends(get_current_user)
 ):
     await authorize_cashier_order_access(service, order_id, current_user)
+    if update_data.order_status == OrderStatus.CANCELLED and current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("إلغاء الطلب يتطلب موافقة الأدمن؛ أرسل طلب إلغاء")
     user_id = current_user.id if current_user else None
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)
 

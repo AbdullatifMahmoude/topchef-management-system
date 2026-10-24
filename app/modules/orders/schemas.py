@@ -104,6 +104,19 @@ class OrderUpdate(BaseModel):
             return None
         return v
 
+
+class CancellationDecision(BaseModel):
+    approve: bool
+
+
+class CancellationRequestResponse(BaseModel):
+    id: int
+    order_id: int
+    order_number: str
+    requester_name: str
+    status: str
+    requested_at: datetime
+
 class OrderUpdateFull(BaseModel):
     """Comprehensive order update schema for patch endpoint."""
     order_type: OrderType | None = None

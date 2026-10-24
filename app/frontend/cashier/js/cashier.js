@@ -755,7 +755,7 @@ async function confirmOrder() {
   deliveryCustomerInfo.phone = phoneDigits;
 
   // التحقق من بيانات العميل في حالة الديليفري
-  if (orderType === "delivery" && !phoneDigits) {
+  if (["delivery", "phone_reservation"].includes(orderType) && !phoneDigits) {
     showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
     return;
   }
@@ -780,7 +780,7 @@ async function confirmOrder() {
       unit_price: entry.item.price,
     };
   });
-  const mappedOrderType = orderType === "delivery" ? "delivery" : orderType === "takeaway" ? "takeaway" : "hall";
+  const mappedOrderType = orderType === "dine_in" ? "hall" : orderType;
   const discountType = document.getElementById("discount_type")?.value || null;
   const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
   let pricing;
@@ -914,6 +914,7 @@ function showConfirmModal(orderData) {
       let mappedOrderType = "hall";
       if (orderType === "takeaway") mappedOrderType = "takeaway";
       else if (orderType === "delivery") mappedOrderType = "delivery";
+      else if (orderType === "phone_reservation") mappedOrderType = "phone_reservation";
 
       // معالجة بيانات العميل لجميع أنواع الطلبات
       const dcfNameInput = document.getElementById("dcf_name");
@@ -1304,6 +1305,7 @@ function showToast(message, type) {
 const ORDER_TYPES = [
   { key: "delivery", label: "دليفري" },
   { key: "takeaway", label: "تيك اواي" },
+  { key: "phone_reservation", label: "حجز تلفون" },
   { key: "dine_in", label: "صالة" },
 ];
 
@@ -1351,6 +1353,8 @@ function renderOrderTypeBadge() {
       <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">تيك اواي</span>
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
+  } else if (orderType === "phone_reservation") {
+    badge.innerHTML = `<span class="badge_icon"></span><span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">حجز تلفون</span><button class="badge_clear" onclick="clearOrderType()">✕</button>`;
   } else if (orderType === "dine_in") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
@@ -1455,9 +1459,10 @@ async function updatePricingPreview() {
       let mappedOrderType = "hall";
       if (orderType === "takeaway") mappedOrderType = "takeaway";
       else if (orderType === "delivery") mappedOrderType = "delivery";
+      else if (orderType === "phone_reservation") mappedOrderType = "phone_reservation";
 
       const currentFee =
-        (orderType === "delivery" ? selectedDeliveryFee : selectedDineInFee) ||
+        (orderType === "delivery" ? selectedDeliveryFee : orderType === "dine_in" ? selectedDineInFee : 0) ||
         0;
 
       const discountType = document.getElementById("discount_type")?.value || null;
@@ -1827,7 +1832,7 @@ function renderDeliveryCustomerForm() {
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          ${orderType === "delivery" ? "بيانات عميل الديليفري" : "بيانات العميل (اختياري)"}
+          ${orderType === "delivery" ? "بيانات عميل الديليفري" : orderType === "phone_reservation" ? "بيانات الحجز (رقم الهاتف مطلوب)" : "بيانات العميل (اختياري)"}
         </div>
         <button class="dcf_close_btn" onclick="hideDeliveryCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
       </div>
@@ -2765,6 +2770,19 @@ function renderOnlineOrders() {
   if (pagination) grid.appendChild(pagination);
 }
 
+async function requestOrderCancellation(orderId) {
+  try {
+    const response = await apiFetch(`/orders/${orderId}/cancellation-request`, { method: "POST" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(typeof error.detail === "string" ? error.detail : "تعذر إرسال طلب الإلغاء");
+    }
+    showToast("اترسل طلب الإلغاء للأدمن، والطلب لسه فعال لحد الموافقة", "success");
+  } catch (error) {
+    showToast(error.message || "تعذر إرسال طلب الإلغاء", "error");
+  }
+}
+
 async function updateOnlineStatus(orderId, newStatus) {
   const order = onlineOrdersList.find((o) => o.id === orderId);
   let msg = "هل أنت متأكد؟";
@@ -2775,6 +2793,10 @@ async function updateOnlineStatus(orderId, newStatus) {
 
   const confirmed = await showCustomActionConfirm(msg);
   if (!confirmed) return;
+  if (newStatus === "cancelled") {
+    await requestOrderCancellation(orderId);
+    return;
+  }
 
   try {
     const res = await apiFetch(`/orders/${orderId}/status`, {
@@ -3449,7 +3471,9 @@ function renderAllOrders() {
         ? "دليفري"
         : order.order_type === "takeaway"
           ? "تيك أواي"
-          : "صالة";
+          : order.order_type === "phone_reservation"
+            ? "حجز تلفون"
+            : "صالة";
 
     let statusObj = statusMap[order.order_status] || {
       label: order.order_status,
@@ -3744,6 +3768,10 @@ async function changeOrderStatus(orderId, status) {
     `هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`,
   );
   if (!confirmed) return;
+  if (status === "cancelled") {
+    await requestOrderCancellation(orderId);
+    return;
+  }
 
   try {
     const res = await apiFetch(`/orders/${orderId}/status`, {
@@ -3903,6 +3931,7 @@ function openOrderDetails(orderId, source) {
   const typeLabels = {
     delivery: "دليفري",
     takeaway: "تيك أواي",
+    phone_reservation: "حجز تلفون",
     dine_in: "صالة",
     hall: "صالة",
   };
@@ -4722,6 +4751,8 @@ function renderEditModalOrderTypeBadge() {
       <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">تيك اواي</span>
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
+  } else if (editModalState.orderType === "phone_reservation") {
+    badge.innerHTML = `<span class="badge_icon"></span><span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">حجز تلفون</span><button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>`;
   } else if (editModalState.orderType === "dine_in") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
@@ -4763,7 +4794,7 @@ function selectOrderTypeInEditModal(type) {
            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
            </svg>
-           <span>${type === "delivery" ? "تعديل بيانات عميل الديليفري" : "تعديل بيانات العميل (اختياري)"}</span>
+           <span>${type === "delivery" ? "تعديل بيانات عميل الديليفري" : type === "phone_reservation" ? "بيانات الحجز (رقم الهاتف مطلوب)" : "تعديل بيانات العميل (اختياري)"}</span>
          </div>
          <button class="dcf_close_btn" onclick="hideEditModalCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
        `;
@@ -5198,7 +5229,7 @@ async function updateEditOrderConfirm() {
     return;
   }
 
-  if (editModalState.orderType === "delivery" && !editModalState.customerPhone) {
+  if (["delivery", "phone_reservation"].includes(editModalState.orderType) && !editModalState.customerPhone) {
     showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
     return;
   }

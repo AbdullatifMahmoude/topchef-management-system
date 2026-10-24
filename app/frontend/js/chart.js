@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const errorBox = document.getElementById("reportsError");
   const startInput = document.getElementById("customStartDate");
   const endInput = document.getElementById("customEndDate");
+  const shiftSelect = document.getElementById("reportsShiftFilter");
   let hasLoaded = false;
   const pageSize = 50;
   let currentBaseUrl = "/reports/daily";
@@ -24,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentRange = { start: "", end: "" };
   let currentPageOrders = [];
   let currentBusinessDate = new Date();
+  let reportRequestId = 0;
   if (currentBusinessDate.getHours() < 7) currentBusinessDate.setDate(currentBusinessDate.getDate() - 1);
 
   const dateLabel = (value, options = { day: "numeric", month: "short" }) => value ? new Date(`${value}T12:00:00`).toLocaleDateString("ar-EG", options) : "—";
@@ -103,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderTable(orders, summary, offset, limit) {
-    const tbody = page.querySelector(".orders_table_reports tbody");
+    const tbody = page.querySelector(".reports_orders_section .orders_table_reports tbody");
     const total = Number(summary.total_orders || 0);
     const first = total ? offset + 1 : 0;
     const last = Math.min(offset + orders.length, total);
@@ -175,15 +177,33 @@ document.addEventListener("DOMContentLoaded", () => {
     renderExpenses(data.expenses, summary);
   }
 
+  async function loadReportShifts(start, end) {
+    const selected = shiftSelect.value;
+    const response = await window.apiFetch(`/reports/shifts?start_date=${start}&end_date=${end}`, { hideLoader: true });
+    if (!response.ok) throw new Error(`تعذر تحميل شيفتات الفترة (${response.status})`);
+    const shifts = await response.json();
+    shiftSelect.replaceChildren(new Option("كل الشيفتات", ""));
+    shifts.forEach((shift) => {
+      shiftSelect.add(new Option(`${shift.cashier_name} - ${dateLabel(shift.target_date)} - شيفت #${shift.id}`, String(shift.id)));
+    });
+    if ([...shiftSelect.options].some((option) => option.value === selected)) shiftSelect.value = selected;
+  }
+
+  const shiftQuery = () => shiftSelect.value ? `&shift_id=${encodeURIComponent(shiftSelect.value)}` : "";
+
   async function loadReport(baseUrl, type, offset = 0) {
+    const requestId = ++reportRequestId;
     currentBaseUrl = baseUrl; currentType = type; currentOffset = offset;
     const separator = baseUrl.includes("?") ? "&" : "?";
-    const url = `${baseUrl}${separator}limit=${pageSize}&offset=${offset}`;
+    const url = `${baseUrl}${separator}limit=${pageSize}&offset=${offset}${shiftQuery()}`;
     loading.hidden = false; errorBox.hidden = true;
     try {
       const response = await window.apiFetch(url);
       if (!response.ok) throw new Error(`تعذر تحميل التقرير (${response.status})`);
-      updateReport(await response.json(), type); hasLoaded = true;
+      const data = await response.json();
+      if (requestId !== reportRequestId) return;
+      updateReport(data, type); hasLoaded = true;
+      if (currentRange.start && currentRange.end) await loadReportShifts(currentRange.start, currentRange.end);
     } catch (error) { errorBox.textContent = error.message || "حدث خطأ أثناء تحميل التقرير"; errorBox.hidden = false; }
     finally { loading.hidden = true; }
   }
@@ -192,7 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentRange.start || !currentRange.end) return;
     loading.hidden = false; errorBox.hidden = true;
     try {
-      const url = `/reports/orders?start_date=${currentRange.start}&end_date=${currentRange.end}&limit=${pageSize}&offset=${offset}`;
+      const url = `/reports/orders?start_date=${currentRange.start}&end_date=${currentRange.end}&limit=${pageSize}&offset=${offset}${shiftQuery()}`;
       const response = await window.apiFetch(url);
       if (!response.ok) throw new Error(`تعذر تحميل صفحة الطلبات (${response.status})`);
       const data = await response.json();
@@ -214,8 +234,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const buttonTypes = { dailyBtn: "daily", weeklyBtn: "weekly", monthlyBtn: "monthly", yearlyBtn: "yearly" };
   filterBtns.forEach((button) => button.addEventListener("click", () => {
     filterBtns.forEach((item) => item.classList.remove("active_report")); button.classList.add("active_report");
+    shiftSelect.value = "";
     const type = buttonTypes[button.id]; loadReport(periodUrl(type), type, 0);
   }));
+  shiftSelect.addEventListener("change", () => loadReport(currentBaseUrl, currentType, 0));
   const localBusinessDate = `${currentBusinessDate.getFullYear()}-${String(currentBusinessDate.getMonth() + 1).padStart(2, "0")}-${String(currentBusinessDate.getDate()).padStart(2, "0")}`;
   startInput.value = localBusinessDate; endInput.value = localBusinessDate;
   window.apiFetch("/shifts/business-date", { hideLoader: true }).then(async (response) => {
@@ -232,6 +254,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("customDateBtn").addEventListener("click", () => {
     if (!startInput.value || !endInput.value) { errorBox.textContent = "اختر تاريخ البداية والنهاية"; errorBox.hidden = false; return; }
     filterBtns.forEach((item) => item.classList.remove("active_report"));
+    shiftSelect.value = "";
     loadReport(`/reports/custom?start_date=${startInput.value}&end_date=${endInput.value}`, "custom", 0);
   });
   document.getElementById("reportsPrevPage").addEventListener("click", () => loadOrdersPage(Math.max(0, currentOffset - pageSize)));
@@ -257,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const total = Number(currentSummary.total_orders || 0);
       const printBatchSize = 200;
       for (let offset = 0; offset < total; offset += printBatchSize) {
-        const url = `/reports/orders?start_date=${currentRange.start}&end_date=${currentRange.end}&limit=${printBatchSize}&offset=${offset}`;
+        const url = `/reports/orders?start_date=${currentRange.start}&end_date=${currentRange.end}&limit=${printBatchSize}&offset=${offset}${shiftQuery()}`;
         const response = await window.apiFetch(url);
         if (!response.ok) throw new Error(`تعذر تجهيز طلبات الطباعة (${response.status})`);
         const data = await response.json();

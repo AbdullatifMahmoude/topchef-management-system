@@ -36,7 +36,7 @@ class OrderStateMachine:
 
         # Logic for CONFIRMED
         elif current_status == OrderStatus.CONFIRMED:
-            if order_type in [OrderType.HALL, OrderType.TAKEAWAY]:
+            if order_type in [OrderType.HALL, OrderType.TAKEAWAY, OrderType.PHONE_RESERVATION]:
                 allowed.append(OrderStatus.COMPLETED)
             elif order_type in [OrderType.DELIVERY, OrderType.ONLINE]:
                 allowed.extend([OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED])

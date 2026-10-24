@@ -205,6 +205,8 @@ class PrinterManager:
             return "دليفري"
         if value == "takeaway":
             return "تيك اواي"
+        if value == "phone_reservation":
+            return "حجز تلفون"
         if value == "dine_in" or value == "hall":
             return "صالة"
         return "غير محدد"

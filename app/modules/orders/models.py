@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -171,6 +172,26 @@ class Order(Base):
             OrderStatus.CANCELLED: []
         }
         return new_status in allowed_transitions.get(self.order_status, [])
+
+
+class OrderCancellationRequest(Base):
+    __tablename__ = "order_cancellation_requests"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    requested_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(16), nullable=False, default="pending")
+    requested_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
+    decided_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    decided_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_order_pending_cancellation", "order_id", unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
 
 
 class OrderItem(Base):

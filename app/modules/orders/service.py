@@ -1,4 +1,5 @@
 import contextlib
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -122,6 +123,8 @@ class OrderService:
 
             # Check if online orders are enabled
             if order_data.source == models.OrderSource.ONLINE:
+                if order_data.order_type == OrderType.PHONE_RESERVATION:
+                    raise ValidationError("حجز التلفون متاح للكاشير فقط")
                 if order_data.manual_discount_type or order_data.manual_discount_value:
                     raise ValidationError("الخصم اليدوي غير متاح لطلبات المنيو")
                 if order_data.customer_id is not None:
@@ -133,6 +136,13 @@ class OrderService:
                     raise ValidationError("الدفع عن طريق InstaPay غير متاح حاليًا")
                 if order_data.payment_method == PaymentMethod.WALLET and not checkout.wallet_enabled:
                     raise ValidationError("الدفع عن طريق المحفظة غير متاح حاليًا")
+
+            if order_data.order_type == OrderType.PHONE_RESERVATION:
+                from app.modules.customer.phone import normalize_egyptian_phone
+                phone = normalize_egyptian_phone(order_data.customer_phone)
+                if len(phone) != 11 or not phone.startswith("01"):
+                    raise ValidationError("رقم تليفون العميل مطلوب لحجز التلفون ويجب أن يكون 11 رقمًا")
+                order_data.customer_phone = phone
 
             # A cashier-created delivery is operational immediately, so it
             # must never enter the database without an active delivery rider.
@@ -364,10 +374,87 @@ class OrderService:
             cashier_id=cashier_id,
         )
 
-    async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: int | None = None) -> models.Order:
+    async def request_cancellation(self, order_id: int, current_user_id: int) -> models.OrderCancellationRequest:
         async with self._transaction_scope():
             await self.db.scalar(select(models.Order.id).where(models.Order.id == order_id).with_for_update())
             order = await self.get_order(order_id)
+            if not order.can_transition_to(OrderStatus.CANCELLED):
+                raise ValidationError("لا يمكن إلغاء طلب بحالته الحالية")
+            pending = await self.db.scalar(select(models.OrderCancellationRequest).where(
+                models.OrderCancellationRequest.order_id == order_id,
+                models.OrderCancellationRequest.status == "pending",
+            ).with_for_update())
+            if pending:
+                return pending
+            request = models.OrderCancellationRequest(
+                order_id=order_id, requested_by_user_id=current_user_id, status="pending",
+            )
+            self.db.add(request)
+            await self.db.flush()
+        await self.db.commit()
+        await order_events_manager.emit({
+            "type": "CANCELLATION_REQUEST_UPDATED", "data": {"order_id": order_id},
+        }, channel="admin")
+        return request
+
+    async def list_pending_cancellations(self) -> list[dict]:
+        from app.modules.users.models import User
+
+        rows = (await self.db.execute(
+            select(models.OrderCancellationRequest, models.Order.order_number, User.full_name, User.username)
+            .join(models.Order, models.Order.id == models.OrderCancellationRequest.order_id)
+            .join(User, User.id == models.OrderCancellationRequest.requested_by_user_id)
+            .where(models.OrderCancellationRequest.status == "pending")
+            .order_by(models.OrderCancellationRequest.requested_at.desc())
+        )).all()
+        return [
+            {
+                "id": request.id, "order_id": request.order_id, "order_number": order_number,
+                "requester_name": full_name or username, "status": request.status,
+                "requested_at": request.requested_at,
+            }
+            for request, order_number, full_name, username in rows
+        ]
+
+    async def reject_cancellation(self, request_id: int, admin_id: int) -> None:
+        async with self._transaction_scope():
+            request = await self.db.scalar(select(models.OrderCancellationRequest).where(
+                models.OrderCancellationRequest.id == request_id,
+            ).with_for_update())
+            if not request or request.status != "pending":
+                raise ValidationError("طلب الإلغاء غير موجود أو تمت مراجعته")
+            request.status = "rejected"
+            request.decided_by_user_id = admin_id
+            request.decided_at = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+            await self.db.flush()
+        await self.db.commit()
+        await order_events_manager.emit({
+            "type": "CANCELLATION_REQUEST_UPDATED", "data": {"order_id": request.order_id},
+        })
+
+    async def approve_cancellation(self, request_id: int, admin_id: int) -> models.Order:
+        request = await self.db.get(models.OrderCancellationRequest, request_id)
+        if not request:
+            raise ValidationError("طلب الإلغاء غير موجود")
+        return await self.update_order_status(
+            request.order_id, schemas.OrderUpdate(order_status=OrderStatus.CANCELLED),
+            current_user_id=admin_id, cancellation_request_id=request_id,
+        )
+
+    async def update_order_status(self, order_id: int, update_data: schemas.OrderUpdate, current_user_id: int | None = None,
+                                  cancellation_request_id: int | None = None) -> models.Order:
+        async with self._transaction_scope():
+            await self.db.scalar(select(models.Order.id).where(models.Order.id == order_id).with_for_update())
+            order = await self.get_order(order_id)
+            pending_cancellation = await self.db.scalar(select(models.OrderCancellationRequest).where(
+                models.OrderCancellationRequest.order_id == order_id,
+                models.OrderCancellationRequest.status == "pending",
+            ).with_for_update())
+            if cancellation_request_id and (
+                not pending_cancellation or pending_cancellation.id != cancellation_request_id
+                or update_data.order_status != OrderStatus.CANCELLED
+            ):
+                raise ValidationError("طلب الإلغاء غير موجود أو تمت مراجعته")
             status_changed = bool(update_data.order_status and order.order_status != update_data.order_status)
             if update_data.order_status and order.order_status != update_data.order_status:
                 target_rider_id = update_data.delivery_person_id or order.delivery_person_id
@@ -397,6 +484,14 @@ class OrderService:
                     order.created_by_user_id = current_user_id
             
             updated_order = await self.repository.update(order, update_data, changed_by_user_id=current_user_id)
+            if status_changed and pending_cancellation:
+                if updated_order.order_status == OrderStatus.CANCELLED:
+                    pending_cancellation.status = "approved"
+                elif updated_order.order_status in (OrderStatus.COMPLETED, OrderStatus.DELIVERED):
+                    pending_cancellation.status = "rejected"
+                if pending_cancellation.status != "pending":
+                    pending_cancellation.decided_by_user_id = current_user_id
+                    pending_cancellation.decided_at = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
             await self.db.flush()
             if status_changed and updated_order.order_status == OrderStatus.CONFIRMED:
                 if updated_order.loyalty_status == "reserved":
@@ -410,12 +505,17 @@ class OrderService:
             completed_schema = schemas.OrderResponse.model_validate(completed_order)
             payload_data = completed_schema.model_dump(mode='json')
             await self.notifications.enqueue(payload_data, "status_changed" if status_changed else "updated")
-        
+        if pending_cancellation and pending_cancellation.status != "pending":
+            await self.db.commit()
         await order_events_manager.emit({
             "type": "ORDER_UPDATED",
             "event": "order.updated",
             "data": payload_data
         })
+        if pending_cancellation and pending_cancellation.status != "pending":
+            await order_events_manager.emit({
+                "type": "CANCELLATION_REQUEST_UPDATED", "data": {"order_id": order_id},
+            })
         return completed_order
 
     async def update_order(self, order_id: int, update_data: schemas.OrderUpdateFull, current_user_id: int | None = None) -> models.Order:
@@ -424,6 +524,13 @@ class OrderService:
             order = await self.get_order(order_id)
             if order.order_status in [models.OrderStatus.COMPLETED, models.OrderStatus.DELIVERED, models.OrderStatus.CANCELLED]:
                 raise ValidationError(f"Cannot update an order that is {order.order_status.value}")
+            target_type = update_data.order_type or order.order_type
+            if target_type == OrderType.PHONE_RESERVATION:
+                from app.modules.customer.phone import normalize_egyptian_phone
+                phone = normalize_egyptian_phone(update_data.customer_phone or order.customer_phone)
+                if len(phone) != 11 or not phone.startswith("01"):
+                    raise ValidationError("رقم تليفون العميل مطلوب لحجز التلفون ويجب أن يكون 11 رقمًا")
+                update_data.customer_phone = phone
             
             old_state = {
                 "total_amount": order.total_amount,

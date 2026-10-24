@@ -1,5 +1,5 @@
 import calendar
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import Integer, case, cast, func, select
@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.business_calendar import get_current_business_date
 from app.core.enums import OrderStatus, OrderType
+from app.core.exceptions import ValidationError
 from app.modules.menu.models import Product
 from app.modules.orders.models import Order, OrderItem
+from app.modules.shifts.models import CashierShift, ShiftExpense
+from app.modules.users.models import User
 
 from . import schemas
 
@@ -20,10 +23,54 @@ def get_business_date() -> date:
     return get_current_business_date()
 
 
+def shift_local_time(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(timezone(timedelta(hours=3))).replace(tzinfo=None)
+    return value + timedelta(hours=3)
+
+
+def order_shift_filter(shift: CashierShift | None):
+    if shift is None:
+        return ()
+    end = shift_local_time(shift.end_time) or datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+    return (
+        Order.created_by_user_id == shift.user_id,
+        Order.created_at >= shift_local_time(shift.start_time),
+        Order.created_at < end,
+    )
+
+
+async def get_shift_for_report(db: AsyncSession, shift_id: int | None, start_date: date, end_date: date):
+    if shift_id is None:
+        return None
+    shift = await db.get(CashierShift, shift_id)
+    if not shift or not start_date <= shift.target_date <= end_date:
+        raise ValidationError("الشيفت المختار خارج الفترة المحددة")
+    return shift
+
+
+async def list_report_shifts(db: AsyncSession, start_date: date, end_date: date) -> list[dict]:
+    rows = (await db.execute(
+        select(CashierShift.id, CashierShift.target_date, CashierShift.start_time,
+               CashierShift.end_time, User.full_name, User.username)
+        .join(User, User.id == CashierShift.user_id)
+        .where(CashierShift.target_date >= start_date, CashierShift.target_date <= end_date)
+        .order_by(CashierShift.target_date.desc(), CashierShift.start_time.desc())
+    )).all()
+    return [
+        {"id": row.id, "target_date": row.target_date, "start_time": row.start_time,
+         "end_time": row.end_time, "cashier_name": row.full_name or row.username}
+        for row in rows
+    ]
+
+
 # ─────────────────────────────────────────────────────────
 # الإحصائيات الإجمالية (query سريع بدون تحميل العلاقات)
 # ─────────────────────────────────────────────────────────
-async def get_report_summary(db: AsyncSession, start_date: date, end_date: date) -> schemas.ReportSummary:
+async def get_report_summary(db: AsyncSession, start_date: date, end_date: date,
+                             shift: CashierShift | None = None) -> schemas.ReportSummary:
     delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     hall_service_fee = case((Order.order_type == OrderType.HALL, Order.delivery_fee), else_=0)
     stmt = select(
@@ -53,7 +100,8 @@ async def get_report_summary(db: AsyncSession, start_date: date, end_date: date)
         )).label('total_delivery_fee'),
     ).filter(
         Order.order_date >= start_date,
-        Order.order_date <= end_date
+        Order.order_date <= end_date,
+        *order_shift_filter(shift),
     )
 
     result = await db.execute(stmt)
@@ -62,11 +110,11 @@ async def get_report_summary(db: AsyncSession, start_date: date, end_date: date)
     successful_orders = row.successful_orders or 0
     total_revenue = row.total_revenue or Decimal('0.00')
     average_order_value = (total_revenue / successful_orders) if successful_orders > 0 else Decimal('0.00')
-    from app.modules.shifts.models import ShiftExpense
     total_expenses = await db.scalar(select(func.sum(ShiftExpense.amount)).where(
         ShiftExpense.target_date >= start_date,
         ShiftExpense.target_date <= end_date,
         ShiftExpense.is_deleted == False,
+        *((ShiftExpense.shift_id == shift.id,) if shift else ()),
     )) or Decimal('0.00')
 
     return schemas.ReportSummary(
@@ -92,6 +140,8 @@ def normalize_order_type(value) -> str:
         return "صالة"
     if "TAKEAWAY" in otype or "TAKE_AWAY" in otype:
         return "تيك اوي"
+    if "PHONE_RESERVATION" in otype:
+        return "حجز تلفون"
     if "DELIVERY" in otype:
         return "دليفري"
     if "ONLINE" in otype:
@@ -100,7 +150,8 @@ def normalize_order_type(value) -> str:
 
 
 async def get_report_orders(
-    db: AsyncSession, start_date: date, end_date: date, limit: int = 50, offset: int = 0
+    db: AsyncSession, start_date: date, end_date: date, limit: int = 50, offset: int = 0,
+    shift: CashierShift | None = None,
 ) -> list[schemas.OrderReportItem]:
     delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     stmt = (
@@ -115,6 +166,7 @@ async def get_report_orders(
         .filter(
             Order.order_date >= start_date,
             Order.order_date <= end_date,
+            *order_shift_filter(shift),
         )
         .order_by(Order.created_at.desc())
         .offset(offset)
@@ -144,7 +196,8 @@ async def get_report_orders(
     return report_orders
 
 
-async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: date) -> list[schemas.TopSellingItem]:
+async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: date,
+                                shift: CashierShift | None = None) -> list[schemas.TopSellingItem]:
     # Allocate the order-level discount proportionally across its items. This
     # keeps item revenue consistent with net sales for offers and manual
     # discounts instead of reporting the undiscounted line total.
@@ -171,6 +224,7 @@ async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: da
             Order.order_date <= end_date,
             Order.order_status != OrderStatus.CANCELLED,
             OrderItem.is_deleted == False,
+            *order_shift_filter(shift),
         )
         .group_by(Product.id, Product.product_name)
         .order_by(func.sum(OrderItem.quantity).desc())
@@ -187,7 +241,8 @@ async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: da
     ]
 
 
-async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date) -> list[schemas.RevenueTrendPoint]:
+async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date,
+                            shift: CashierShift | None = None) -> list[schemas.RevenueTrendPoint]:
     delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     stmt = (
         select(
@@ -198,6 +253,7 @@ async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date) 
             Order.order_date >= start_date,
             Order.order_date <= end_date,
             Order.order_status != OrderStatus.CANCELLED,
+            *order_shift_filter(shift),
         )
         .group_by(Order.order_date)
         .order_by(Order.order_date)
@@ -206,7 +262,8 @@ async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date) 
     return [schemas.RevenueTrendPoint(period_date=row.period_date, revenue=row.revenue or Decimal("0.00")) for row in rows]
 
 
-async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: date) -> list[schemas.ActivityBreakdownPoint]:
+async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: date,
+                                 shift: CashierShift | None = None) -> list[schemas.ActivityBreakdownPoint]:
     hour_expr = cast(func.extract("hour", Order.created_at), Integer)
     stmt = (
         select(Order.order_type, hour_expr.label("hour"), func.count(Order.id).label("count"))
@@ -214,6 +271,7 @@ async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: d
             Order.order_date >= start_date,
             Order.order_date <= end_date,
             Order.order_status != OrderStatus.CANCELLED,
+            *order_shift_filter(shift),
         )
         .group_by(Order.order_type, hour_expr)
     )
@@ -228,10 +286,8 @@ async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: d
     ]
 
 
-async def get_report_expenses(db: AsyncSession, start_date: date, end_date: date) -> list[schemas.ExpenseReportItem]:
-    from app.modules.shifts.models import ShiftExpense
-    from app.modules.users.models import User
-
+async def get_report_expenses(db: AsyncSession, start_date: date, end_date: date,
+                              shift: CashierShift | None = None) -> list[schemas.ExpenseReportItem]:
     stmt = (
         select(
             ShiftExpense.id,
@@ -248,6 +304,7 @@ async def get_report_expenses(db: AsyncSession, start_date: date, end_date: date
             ShiftExpense.target_date >= start_date,
             ShiftExpense.target_date <= end_date,
             ShiftExpense.is_deleted == False,
+            *((ShiftExpense.shift_id == shift.id,) if shift else ()),
         )
         .order_by(ShiftExpense.target_date.desc(), ShiftExpense.created_at.desc())
     )
@@ -266,13 +323,15 @@ async def get_report_expenses(db: AsyncSession, start_date: date, end_date: date
     ]
 
 
-async def get_report_data(db: AsyncSession, start_date: date, end_date: date, limit: int, offset: int):
-    summary = await get_report_summary(db, start_date, end_date)
-    orders = await get_report_orders(db, start_date, end_date, limit=limit, offset=offset)
-    top_items = await get_top_selling_items(db, start_date, end_date)
-    revenue_trend = await get_revenue_trend(db, start_date, end_date)
-    activity_breakdown = await get_activity_breakdown(db, start_date, end_date)
-    expenses = await get_report_expenses(db, start_date, end_date)
+async def get_report_data(db: AsyncSession, start_date: date, end_date: date, limit: int, offset: int,
+                          shift_id: int | None = None):
+    shift = await get_shift_for_report(db, shift_id, start_date, end_date)
+    summary = await get_report_summary(db, start_date, end_date, shift)
+    orders = await get_report_orders(db, start_date, end_date, limit=limit, offset=offset, shift=shift)
+    top_items = await get_top_selling_items(db, start_date, end_date, shift)
+    revenue_trend = await get_revenue_trend(db, start_date, end_date, shift)
+    activity_breakdown = await get_activity_breakdown(db, start_date, end_date, shift)
+    expenses = await get_report_expenses(db, start_date, end_date, shift)
     return {
         "summary": summary,
         "orders": orders,
@@ -288,34 +347,39 @@ async def get_report_data(db: AsyncSession, start_date: date, end_date: date, li
 # ─────────────────────────────────────────────────────────
 # التقارير
 # ─────────────────────────────────────────────────────────
-async def get_daily_report(db: AsyncSession, target_date: date, limit: int = 50, offset: int = 0) -> schemas.DailyReportResponse:
+async def get_daily_report(db: AsyncSession, target_date: date, limit: int = 50, offset: int = 0,
+                           shift_id: int | None = None) -> schemas.DailyReportResponse:
     # التقرير اليومي بيستخدم يوم العمل (الشيفت من 7 صباحاً)
     business_date = target_date or get_business_date()
-    data = await get_report_data(db, business_date, business_date, limit, offset)
+    data = await get_report_data(db, business_date, business_date, limit, offset, shift_id)
     return schemas.DailyReportResponse(report_date=business_date, **data)
 
 
-async def get_weekly_report(db: AsyncSession, target_date: date, limit: int = 50, offset: int = 0) -> schemas.WeeklyReportResponse:
+async def get_weekly_report(db: AsyncSession, target_date: date, limit: int = 50, offset: int = 0,
+                            shift_id: int | None = None) -> schemas.WeeklyReportResponse:
     start_of_week = target_date - timedelta(days=target_date.weekday())
     end_of_week = start_of_week + timedelta(days=6)
-    data = await get_report_data(db, start_of_week, end_of_week, limit, offset)
+    data = await get_report_data(db, start_of_week, end_of_week, limit, offset, shift_id)
     return schemas.WeeklyReportResponse(start_date=start_of_week, end_date=end_of_week, **data)
 
 
-async def get_monthly_report(db: AsyncSession, year: int, month: int, limit: int = 50, offset: int = 0) -> schemas.MonthlyReportResponse:
+async def get_monthly_report(db: AsyncSession, year: int, month: int, limit: int = 50, offset: int = 0,
+                             shift_id: int | None = None) -> schemas.MonthlyReportResponse:
     _, last_day = calendar.monthrange(year, month)
     start_date = date(year, month, 1)
     end_date = date(year, month, last_day)
-    data = await get_report_data(db, start_date, end_date, limit, offset)
+    data = await get_report_data(db, start_date, end_date, limit, offset, shift_id)
     return schemas.MonthlyReportResponse(year=year, month=month, **data)
 
 
-async def get_yearly_report(db: AsyncSession, year: int, limit: int = 50, offset: int = 0) -> schemas.YearlyReportResponse:
+async def get_yearly_report(db: AsyncSession, year: int, limit: int = 50, offset: int = 0,
+                            shift_id: int | None = None) -> schemas.YearlyReportResponse:
     start_date = date(year, 1, 1)
     end_date = date(year, 12, 31)
-    data = await get_report_data(db, start_date, end_date, limit, offset)
+    data = await get_report_data(db, start_date, end_date, limit, offset, shift_id)
     return schemas.YearlyReportResponse(year=year, **data)
 
-async def get_custom_report(db: AsyncSession, start_date: date, end_date: date, limit: int = 50, offset: int = 0) -> schemas.CustomReportResponse:
-    data = await get_report_data(db, start_date, end_date, limit, offset)
+async def get_custom_report(db: AsyncSession, start_date: date, end_date: date, limit: int = 50, offset: int = 0,
+                            shift_id: int | None = None) -> schemas.CustomReportResponse:
+    data = await get_report_data(db, start_date, end_date, limit, offset, shift_id)
     return schemas.CustomReportResponse(start_date=start_date, end_date=end_date, **data)
