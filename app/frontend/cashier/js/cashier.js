@@ -860,26 +860,30 @@ function showConfirmModal(orderData) {
   const box = document.createElement("div");
   box.style.cssText = `
     background:rgba(15,12,6,0.97);border:1px solid var(--color-primary-border);
-    border-radius:16px;padding:24px;min-width:320px;display:flex;
+    border-radius:16px;padding:24px;width:min(540px,calc(100vw - 32px));min-width:0;display:flex;
     flex-direction:column;gap:16px;direction:rtl;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);
   `;
 
   box.innerHTML = `
-    <h2 style="color:var(--color-primary);font-size:18px;margin:0;">تأكيد وطباعة الطلب</h2>
-    <p style="color:var(--color-text);font-size:14px;margin:0;">هل أنت متأكد من تأكيد الطلب بقيمة الإجمالي أدناه؟</p>
+    <h2 style="color:var(--color-primary);font-size:18px;margin:0;">حفظ الطلب</h2>
+    <p style="color:var(--color-text);font-size:14px;margin:0;">اختر حفظ الطلب مع الطباعة أو الحفظ فقط.</p>
     <div style="font-size:24px;font-weight:900;color:var(--color-primary);padding:10px 0;border-top:1px dashed var(--color-primary-border);border-bottom:1px dashed var(--color-primary-border);">
       ${orderData.grandTotal.toFixed(2)} ج.م
     </div>
-    <div style="display:flex;gap:12px;margin-top:8px;">
+    <div style="display:flex;gap:10px;margin-top:8px;">
       <button id="btn_confirm_yes" style="
         flex:1;background:var(--color-primary);color:#000;border:none;border-radius:10px;
-        padding:12px;font-family:Cairo,sans-serif;font-size:14px;font-weight:900;cursor:pointer;
+        padding:12px 8px;font-family:Cairo,sans-serif;font-size:13px;font-weight:900;cursor:pointer;
         transition:opacity 0.2s;
-      " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">طباعة وتأكيد</button>
-      
+      " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">حفظ وطباعة</button>
+      <button id="btn_confirm_save" style="
+        flex:1;background:#26231d;color:var(--color-primary);border:1px solid var(--color-primary-border);border-radius:10px;
+        padding:12px 8px;font-family:Cairo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;
+        transition:opacity 0.2s;
+      " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">حفظ فقط</button>
       <button id="btn_confirm_no" style="
         flex:1;background:transparent;border:1px solid rgba(255,255,255,0.2);color:var(--color-subtext);
-        border-radius:10px;padding:12px;font-family:Cairo,sans-serif;font-size:14px;font-weight:600;cursor:pointer;
+        border-radius:10px;padding:12px 8px;font-family:Cairo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;
         transition:background 0.2s;
       " onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">إلغاء</button>
     </div>
@@ -888,13 +892,17 @@ function showConfirmModal(orderData) {
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
-  document.getElementById("btn_confirm_yes").onclick = async () => {
-    const btn = document.getElementById("btn_confirm_yes");
+  const submitOrder = async (shouldPrint) => {
+    const btn = document.getElementById(shouldPrint ? "btn_confirm_yes" : "btn_confirm_save");
     const originalText = btn.textContent;
-    btn.textContent = "جاري التأكيد...";
-    btn.disabled = true;
-    btn.style.opacity = "0.7";
-    btn.style.cursor = "not-allowed";
+    const actionButtons = ["btn_confirm_yes", "btn_confirm_save", "btn_confirm_no"]
+      .map((id) => document.getElementById(id));
+    actionButtons.forEach((button) => {
+      button.disabled = true;
+      button.style.opacity = "0.7";
+      button.style.cursor = "not-allowed";
+    });
+    btn.textContent = shouldPrint ? "جاري الحفظ والطباعة..." : "جاري الحفظ...";
 
     try {
       const items = cart.map((c) => {
@@ -1032,7 +1040,7 @@ function showConfirmModal(orderData) {
       overlay.remove();
 
       // الطباعة باستخدام بيانات السيرفر لضمان مطابقة رقم الطلب والوقت
-      if (typeof printReceipt === "function") {
+      if (shouldPrint && typeof printReceipt === "function") {
         // نقوم بتجهيز قائمة الأصناف بالأسماء بناءً على الـ IDS قبل الطباعة
         const cartMapped = (createdOrder.items || []).map((item) => {
           let prod = products.find((p) => p.id === item.product_id);
@@ -1061,6 +1069,8 @@ function showConfirmModal(orderData) {
         // نضيف بيانات العميل يدوياً كاحتياط لو السيرفر لم يعيدها
         const printData = {
           ...createdOrder,
+          order_type: createdOrder.order_type || orderData.orderType,
+          orderType: createdOrder.order_type || orderData.orderType,
           cart: cartMapped,
           customerPhone:
             createdOrder.customer_phone || deliveryCustomerInfo.phone || null,
@@ -1074,10 +1084,8 @@ function showConfirmModal(orderData) {
         };
 
         printReceipt(printData);
-      } else {
-        console.error(
-          "Print Agent bridge is unavailable.",
-        );
+      } else if (shouldPrint) {
+        console.error("Print Agent bridge is unavailable.");
       }
 
       // تصفية السلة وعودة الحالة للصفر
@@ -1107,7 +1115,7 @@ function showConfirmModal(orderData) {
       renderOrderTypeButtons();
       renderCashierOffersBoard();
 
-      showToast("تم تأكيد الطلب بنجاح", "success");
+      showToast(shouldPrint ? "تم حفظ الطلب وإرساله للطباعة" : "تم حفظ الطلب بنجاح", "success");
 
       // ✅ NEW: Update local memory lists immediately so the order appears without refresh
       if (isOnlineOrder(createdOrder)) {
@@ -1140,11 +1148,16 @@ function showConfirmModal(orderData) {
       console.error(err);
       showToast(err.message, "error");
       btn.textContent = originalText;
-      btn.disabled = false;
-      btn.style.opacity = "1";
-      btn.style.cursor = "pointer";
+      actionButtons.forEach((button) => {
+        button.disabled = false;
+        button.style.opacity = "1";
+        button.style.cursor = "pointer";
+      });
     }
   };
+
+  document.getElementById("btn_confirm_yes").onclick = () => submitOrder(true);
+  document.getElementById("btn_confirm_save").onclick = () => submitOrder(false);
 
   document.getElementById("btn_confirm_no").onclick = () => {
     overlay.remove();
@@ -2791,12 +2804,12 @@ async function updateOnlineStatus(orderId, newStatus) {
   else if (newStatus === "delivered") msg = "هل تم توصيل الطلب؟";
   else if (newStatus === "cancelled") msg = "إلغاء هذا الطلب؟";
 
-  const confirmed = await showCustomActionConfirm(msg);
-  if (!confirmed) return;
   if (newStatus === "cancelled") {
     await requestOrderCancellation(orderId);
     return;
   }
+  const confirmed = await showCustomActionConfirm(msg);
+  if (!confirmed) return;
 
   try {
     const res = await apiFetch(`/orders/${orderId}/status`, {
@@ -3388,6 +3401,8 @@ function printOrderFromOnline(orderId) {
 
   const printData = {
     ...order,
+    order_type: order.order_type || order.orderType,
+    orderType: order.order_type || order.orderType,
     cart: cartMapped,
     customerAddress: getOrderAddressText(order),
   };
@@ -3743,6 +3758,8 @@ function printOrderFromList(orderId) {
   // نمرر كائن الطلب بالكامل لضمان استخدام بيانات السيرفر (order_number, created_at, creator_name)
   const printData = {
     ...order,
+    order_type: order.order_type || order.orderType,
+    orderType: order.order_type || order.orderType,
     cart: cartMapped,
     customerAddress: getOrderAddressText(order),
   };
@@ -3764,14 +3781,14 @@ async function changeOrderStatus(orderId, status) {
     confirmed: "مؤكد",
     out_for_delivery: "خرج للتوصيل",
   };
-  const confirmed = await showCustomActionConfirm(
-    `هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`,
-  );
-  if (!confirmed) return;
   if (status === "cancelled") {
     await requestOrderCancellation(orderId);
     return;
   }
+  const confirmed = await showCustomActionConfirm(
+    `هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`,
+  );
+  if (!confirmed) return;
 
   try {
     const res = await apiFetch(`/orders/${orderId}/status`, {

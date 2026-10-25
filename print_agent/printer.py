@@ -200,12 +200,14 @@ class PrinterManager:
         return value, "---"
 
     def _order_type_label(self, order_type: Any) -> str:
-        value = str(order_type or "").lower()
+        value = getattr(order_type, "value", order_type)
+        value = str(value or "").strip().lower().rsplit(".", 1)[-1]
+        value = value.replace("-", "_").replace(" ", "_")
         if value == "delivery":
             return "دليفري"
         if value == "takeaway":
             return "تيك اواي"
-        if value == "phone_reservation":
+        if value in {"phone_reservation", "phonebooking", "phone_booking"}:
             return "حجز تلفون"
         if value == "dine_in" or value == "hall":
             return "صالة"
