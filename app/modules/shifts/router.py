@@ -2,6 +2,7 @@ import asyncio
 from datetime import date
 from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -16,6 +17,9 @@ from app.core.redis import get_redis
 from app.modules.auth.dependencies import get_current_user
 from app.modules.shifts.service import ShiftsService, get_business_date
 from app.modules.users.models import User
+from app.modules.shifts import cash_custody
+from app.modules.shifts.models import OrderCashMovement, ShiftCloseSnapshot
+from app.modules.orders.models import Order
 
 router = APIRouter(prefix="/shifts", tags=["shifts"])
 
@@ -28,10 +32,12 @@ class ExpenseCreate(BaseModel):
     title: str = Field(min_length=2, max_length=120)
     amount: Decimal = Field(gt=0)
     note: str | None = Field(default=None, max_length=500)
+    receipt_reference: str | None = Field(default=None, max_length=200)
 
 class AdminExpenseCreate(ExpenseCreate):
     target_date: date
     shift_id: int = Field(gt=0)
+    paid_from: str = Field(pattern="^(shift_cash|admin_cash)$")
 
 class AdminExpenseUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=120)
@@ -39,6 +45,90 @@ class AdminExpenseUpdate(BaseModel):
     note: str | None = Field(default=None, max_length=500)
     target_date: date | None = None
     shift_id: int | None = Field(default=None, gt=0)
+    paid_from: str | None = Field(default=None, pattern="^(shift_cash|admin_cash)$")
+    receipt_reference: str | None = Field(default=None, max_length=200)
+
+
+class CashCollectionCreate(BaseModel):
+    idempotency_key: str = Field(min_length=8, max_length=100)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class RiderHandoffCreate(CashCollectionCreate):
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+
+
+class CashReversalCreate(CashCollectionCreate):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ShiftCloseConfirmation(BaseModel):
+    admin_count: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    note: str | None = Field(default=None, max_length=500)
+
+
+def _cash_movement_payload(row: OrderCashMovement) -> dict:
+    return {
+        "id": row.id, "order_id": row.order_id, "shift_id": row.shift_id,
+        "rider_id": row.rider_id, "actor_id": row.actor_id,
+        "from_holder": row.from_holder, "to_holder": row.to_holder,
+        "amount": float(row.amount), "note": row.note,
+        "reversal_of_id": row.reversal_of_id, "created_at": row.created_at.isoformat(),
+    }
+
+
+@router.get("/cash/orders/{order_id}")
+async def get_order_cash_status(
+    order_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
+) -> Any:
+    order = await db.get(Order, order_id)
+    if not order:
+        raise NotFoundError("Order")
+    if current_user.role == UserRole.CASHIER and order.created_by_user_id != current_user.id:
+        raise AuthorizationError("لا يمكنك عرض تحصيل طلب كاشير آخر")
+    if current_user.role == UserRole.DELIVERY and order.delivery_person_id != current_user.id:
+        raise AuthorizationError("الطلب غير مسند لهذا المندوب")
+    summary = await cash_custody.movement_summary(db, order)
+    return {
+        **{key: float(value) if isinstance(value, Decimal) else value for key, value in summary.items() if key != "movements"},
+        "movements": [_cash_movement_payload(row) for row in summary["movements"]],
+    }
+
+
+@router.post("/cash/orders/{order_id}/customer-collection")
+async def confirm_customer_cash(
+    order_id: int, payload: CashCollectionCreate,
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
+) -> Any:
+    row = await cash_custody.record_customer_collection(
+        db, order_id, current_user, payload.idempotency_key, payload.note,
+    )
+    await db.commit()
+    return _cash_movement_payload(row)
+
+
+@router.post("/cash/orders/{order_id}/rider-handoff")
+async def confirm_rider_handoff(
+    order_id: int, payload: RiderHandoffCreate,
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
+) -> Any:
+    row = await cash_custody.record_rider_handoff(
+        db, order_id, current_user, payload.amount, payload.idempotency_key, payload.note,
+    )
+    await db.commit()
+    return _cash_movement_payload(row)
+
+
+@router.post("/cash/movements/{movement_id}/reverse")
+async def reverse_cash_movement(
+    movement_id: int, payload: CashReversalCreate,
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
+) -> Any:
+    row = await cash_custody.reverse_movement(
+        db, movement_id, current_user, payload.idempotency_key, payload.reason,
+    )
+    await db.commit()
+    return _cash_movement_payload(row)
 
 class CashAdditionCreate(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)

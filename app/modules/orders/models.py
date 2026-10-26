@@ -93,6 +93,7 @@ class Order(Base):
     
     customer_notes = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)
+    is_printed = Column(Boolean, nullable=False, default=False, server_default="false")
     is_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None))
@@ -153,6 +154,7 @@ class Order(Base):
         Index('idx_order_source', 'order_source'),
         Index('idx_order_payment_method', 'payment_method'),
         Index('idx_order_created', 'created_at'),
+        Index('idx_order_is_printed', 'is_printed'),
         Index('idx_order_number_date', 'order_number', 'order_date', unique=True),
         Index('idx_order_date_source', 'order_date', 'order_source'),
         Index('idx_order_date_created_at', 'order_date', 'created_at'),

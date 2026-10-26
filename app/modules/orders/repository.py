@@ -78,6 +78,7 @@ class OrderRepository:
         source: OrderSource | None = None,
         status: OrderStatus | None = None,
         order_type: OrderType | None = None,
+        is_printed: bool | None = None,
         page: int = 1,
         page_size: int = 50,
         cashier_id: int | None = None
@@ -99,6 +100,8 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
+        if is_printed is not None:
+            query = query.where(models.Order.is_printed == is_printed)
             
         if cashier_id:
             from sqlalchemy import and_, or_
@@ -121,6 +124,8 @@ class OrderRepository:
             count_query = count_query.where(models.Order.order_status == status)
         if order_type:
             count_query = count_query.where(models.Order.order_type == order_type)
+        if is_printed is not None:
+            count_query = count_query.where(models.Order.is_printed == is_printed)
             
         if cashier_id:
             count_query = count_query.where(
@@ -146,6 +151,7 @@ class OrderRepository:
         source: OrderSource | None = None,
         status: OrderStatus | None = None,
         order_type: OrderType | None = None,
+        is_printed: bool | None = None,
         cashier_id: int | None = None
     ) -> list[models.Order]:
         query = select(models.Order).options(
@@ -162,6 +168,8 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
+        if is_printed is not None:
+            query = query.where(models.Order.is_printed == is_printed)
 
         if cashier_id:
             from sqlalchemy import and_, or_
@@ -185,6 +193,7 @@ class OrderRepository:
         source: OrderSource | None = None,
         status: OrderStatus | None = None,
         order_type: OrderType | None = None,
+        is_printed: bool | None = None,
         cashier_id: int | None = None,
     ) -> list[models.Order]:
         """Load only relationships rendered by the operational dashboard."""
@@ -200,6 +209,8 @@ class OrderRepository:
             query = query.where(models.Order.order_status == status)
         if order_type:
             query = query.where(models.Order.order_type == order_type)
+        if is_printed is not None:
+            query = query.where(models.Order.is_printed == is_printed)
         if cashier_id:
             from sqlalchemy import and_, or_
             query = query.where(

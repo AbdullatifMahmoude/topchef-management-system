@@ -112,6 +112,10 @@
               <button type="button" class="payment_method_btn" data-payment-method="instapay">InstaPay</button>
               <button type="button" class="payment_method_btn" data-payment-method="wallet">محفظة</button>
             </div>
+            <label id="cashReceivedAtCheckoutLabel" style="display:block;margin-top:12px">
+              <input id="cashReceivedAtCheckout" type="checkbox">
+              استلمت النقد فعليًا من العميل الآن (للصالة والتيك أواي فقط)
+            </label>
           </section>
 
           <!-- بيانات العميل تظهر هنا عند اختيار الدليفري -->
@@ -288,6 +292,7 @@
             <button class="filter_btn" onclick="setAllOrdersFilter('delivery', this)">دليفري</button>
             <button class="filter_btn" onclick="setAllOrdersFilter('hall', this)">صاله</button>
             <button class="filter_btn" onclick="setAllOrdersFilter('takeaway', this)">تيك اواي</button>
+            <button class="filter_btn" onclick="setAllOrdersFilter('unprinted', this)">محفوظة بدون طباعة</button>
           </div>
 
           <div class="online_search_wrapper">

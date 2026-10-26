@@ -515,11 +515,20 @@ function renderCart() {
 
 let selectedPaymentMethod = "cash";
 
+function refreshCashReceiptControl() {
+  const label = document.getElementById("cashReceivedAtCheckoutLabel");
+  const checkbox = document.getElementById("cashReceivedAtCheckout");
+  const eligible = selectedPaymentMethod === "cash" && ["takeaway", "dine_in"].includes(orderType);
+  if (label) label.style.display = eligible ? "block" : "none";
+  if (!eligible && checkbox) checkbox.checked = false;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".payment_method_btn").forEach((button) => {
     button.addEventListener("click", () => {
       selectedPaymentMethod = button.dataset.paymentMethod || "cash";
       document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item === button));
+      refreshCashReceiptControl();
     });
   });
 });
@@ -993,6 +1002,7 @@ function showConfirmModal(orderData) {
         order_type: mappedOrderType,
         source: "cashier",
         payment_method: selectedPaymentMethod,
+        cash_received: selectedPaymentMethod === "cash" && ["hall", "takeaway"].includes(mappedOrderType) && Boolean(document.getElementById("cashReceivedAtCheckout")?.checked),
         customer_notes: customerNotes,
         internal_notes: null,
         items: items,
@@ -1009,6 +1019,7 @@ function showConfirmModal(orderData) {
         manual_discount_type: selectedOfferCode ? null : discountType,
         manual_discount_value: selectedOfferCode ? null : discountValue,
         discount_reason: discountReason,
+        is_printed: Boolean(shouldPrint),
       };
 
       const res = await apiFetch("/orders/", {
@@ -1034,7 +1045,10 @@ function showConfirmModal(orderData) {
       }
 
       const createdOrder = await res.json();
+      createdOrder.is_printed = Boolean(shouldPrint);
       selectedPaymentMethod = "cash";
+      const cashReceivedCheckbox = document.getElementById("cashReceivedAtCheckout");
+      if (cashReceivedCheckbox) cashReceivedCheckbox.checked = false;
       document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item.dataset.paymentMethod === "cash"));
 
       overlay.remove();
@@ -1323,6 +1337,7 @@ const ORDER_TYPES = [
 ];
 
 function renderOrderTypeButtons() {
+  refreshCashReceiptControl();
   const container = document.getElementById("order_type_btns");
   if (!container) return;
   container.innerHTML = "";
@@ -2459,7 +2474,10 @@ async function fetchAllOrdersServer(page = 1, silent = false) {
   allOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    const url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
+    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
+    if (allOrdersFilter === "unprinted") {
+      url += "&is_printed=false";
+    }
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch all orders");
     const data = await res.json();
@@ -3408,6 +3426,28 @@ function printOrderFromOnline(orderId) {
   };
   if (typeof printReceipt === "function") {
     printReceipt(printData);
+    markOrderAsPrinted(order.id);
+  }
+}
+
+async function markOrderAsPrinted(orderId) {
+  try {
+    const order = allOrdersList.find((o) => o.id === orderId);
+    if (order) {
+      order.is_printed = true;
+      if (allOrdersFilter === "unprinted") {
+        renderAllOrders();
+      } else if (typeof window.updateOrAddAllOrderDOM === "function") {
+        window.updateOrAddAllOrderDOM(order);
+      }
+    }
+    const onlineOrder = onlineOrdersList.find((o) => o.id === orderId);
+    if (onlineOrder) {
+      onlineOrder.is_printed = true;
+    }
+    await apiFetch(`/orders/${orderId}/mark-printed`, { method: "POST" });
+  } catch (err) {
+    console.warn("Could not mark order as printed on server:", err);
   }
 }
 
@@ -3446,7 +3486,11 @@ function renderAllOrders() {
 
   const term = (allOrdersSearchTerm || "").toLowerCase();
   const filteredList = allOrdersList.filter(o => {
-    if (allOrdersFilter !== "all" && o.order_type !== allOrdersFilter) return false;
+    if (allOrdersFilter === "unprinted") {
+      if (o.is_printed) return false;
+    } else if (allOrdersFilter !== "all" && o.order_type !== allOrdersFilter) {
+      return false;
+    }
     if (!term) return true;
     const oNum = String(o.order_number || o.id || "").toLowerCase();
     const phone = String(o.customer_phone || "").toLowerCase();
@@ -3591,6 +3635,7 @@ function renderAllOrders() {
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="display:flex; align-items:center; gap:8px;">
             ${badgeHtml}
+            ${!order.is_printed ? `<span style="font-size:10px; padding:2px 6px; background:rgba(228,4,17,0.15); color:#ff6b6b; border:1px solid rgba(228,4,17,0.3); border-radius:4px; font-weight:bold;">غير مطبوع</span>` : ""}
             <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${displayOrderNumber(order.order_number, order.id)}</span>
             <span style="font-size:11px; padding:2px 6px; background:rgba(255,255,255,0.05); border-radius:4px; color:var(--color-subtext);">${typeLabel}</span>
           </div>
@@ -3767,6 +3812,7 @@ function printOrderFromList(orderId) {
   if (typeof printReceipt === "function") {
     printReceipt(printData);
     showToast("جاري تجهيز الفاتورة للطباعة...", "success");
+    markOrderAsPrinted(order.id);
   } else {
     console.error("Function printReceipt not found.");
     showToast("خطأ: دالة الطباعة غير موجودة", "error");

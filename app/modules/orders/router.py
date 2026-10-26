@@ -78,6 +78,7 @@ async def list_orders(
     source: OrderSource | None = None,
     status: OrderStatus | None = None,
     order_type: OrderType | None = None,
+    is_printed: bool | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     service: OrderService = Depends(get_order_service),
@@ -91,6 +92,7 @@ async def list_orders(
         source=source,
         status=status,
         order_type=order_type,
+        is_printed=is_printed,
         page=page,
         page_size=page_size,
         cashier_id=cashier_id
@@ -351,6 +353,15 @@ async def update_order_status(
         raise AuthorizationError("إلغاء الطلب يتطلب موافقة الأدمن؛ أرسل طلب إلغاء")
     user_id = current_user.id if current_user else None
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)
+
+@router.post("/{order_id}/mark-printed", response_model=schemas.OrderResponse)
+async def mark_order_printed(
+    order_id: int,
+    service: OrderService = Depends(get_order_service),
+    current_user: Any = Depends(get_current_user),
+):
+    await authorize_cashier_order_access(service, order_id, current_user)
+    return await service.mark_order_printed(order_id)
 
 @router.websocket("/ws/online")
 async def websocket_online(websocket: WebSocket):

@@ -263,7 +263,7 @@ class OrderService:
             
             # 3. Create Order Object
             next_number = await self.repository.get_next_order_number()
-            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason', 'loyalty_rule_id', 'loyalty_expected_points', 'loyalty_expected_value'})
+            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason', 'loyalty_rule_id', 'loyalty_expected_points', 'loyalty_expected_value', 'cash_received'})
             order = models.Order(**order_dict)
             
             # 4. Fill calculated financials and metadata
@@ -321,6 +321,16 @@ class OrderService:
             
             # 7. Save and Refresh
             order = await self.repository.save_in_transaction(order)
+            if order_data.cash_received:
+                from app.modules.shifts.cash_custody import record_customer_collection
+                from app.modules.users.models import User
+
+                actor = await self.db.get(User, current_user_id)
+                if not actor:
+                    raise ValidationError("تعذر تحديد الكاشير الذي استلم النقد")
+                await record_customer_collection(
+                    self.db, order.id, actor, f"order:{order.id}:cash-on-create"
+                )
             order = await self.get_order(order.id)
             if order.order_status == OrderStatus.CONFIRMED:
                 await award_order_points(self.db, order)
@@ -350,6 +360,7 @@ class OrderService:
         source: str | None = None,
         status: str | None = None,
         order_type: str | None = None,
+        is_printed: bool | None = None,
         page: int = 1,
         page_size: int = 50,
         cashier_id: int | None = None
@@ -358,6 +369,7 @@ class OrderService:
             source=source,
             status=status,
             order_type=order_type,
+            is_printed=is_printed,
             page=page,
             page_size=page_size,
             cashier_id=cashier_id
@@ -373,6 +385,21 @@ class OrderService:
             order_type=order_type,
             cashier_id=cashier_id,
         )
+
+    async def mark_order_printed(self, order_id: int) -> models.Order:
+        async with self._transaction_scope():
+            order = await self.get_order(order_id)
+            order.is_printed = True
+            await self.repository.save(order)
+            completed_order = await self.get_order(order.id)
+            completed_schema = schemas.OrderResponse.model_validate(completed_order)
+            payload_data = completed_schema.model_dump(mode='json')
+            await order_events_manager.emit({
+                "type": "ORDER_UPDATED",
+                "event": "order.updated",
+                "data": payload_data
+            })
+            return completed_order
 
     async def request_cancellation(self, order_id: int, current_user_id: int) -> models.OrderCancellationRequest:
         async with self._transaction_scope():
@@ -446,6 +473,9 @@ class OrderService:
         async with self._transaction_scope():
             await self.db.scalar(select(models.Order.id).where(models.Order.id == order_id).with_for_update())
             order = await self.get_order(order_id)
+            if update_data.order_status == OrderStatus.CANCELLED:
+                from app.modules.shifts.cash_custody import assert_financial_change_clear
+                await assert_financial_change_clear(self.db, order)
             pending_cancellation = await self.db.scalar(select(models.OrderCancellationRequest).where(
                 models.OrderCancellationRequest.order_id == order_id,
                 models.OrderCancellationRequest.status == "pending",
@@ -534,6 +564,8 @@ class OrderService:
             
             old_state = {
                 "total_amount": order.total_amount,
+                "payment_method": order.payment_method,
+                "order_type": order.order_type,
                 "discount_amount": order.discount_amount,
                 "delivery_fee": order.delivery_fee,
                 "items_count": sum(i.quantity for i in order.items) if order.items else 0,
@@ -683,6 +715,11 @@ class OrderService:
             if 'discount_reason' in provided_fields:
                 order.discount_reason = update_data.discount_reason
 
+            if (old_state["total_amount"] != order.total_amount
+                    or old_state["payment_method"] != (update_data.payment_method or order.payment_method)
+                    or old_state["order_type"] != order.order_type):
+                from app.modules.shifts.cash_custody import assert_financial_change_clear
+                await assert_financial_change_clear(self.db, order)
             updated_order = await self.repository.update_order_full(order, update_data, changed_by_user_id=current_user_id)
             
             # Track changes
