@@ -48,6 +48,7 @@ from app.modules.shifts.cash_custody import (
 )
 from app.modules.shifts.models import (
     CashierShift,
+    OrderCashMovement,
     ShiftCloseSnapshot,
     ShiftExpense,
     ShiftExpenseAudit,
@@ -183,6 +184,31 @@ async def test_closed_shift_keeps_its_prechange_expected_cash_snapshot(cash_db):
     assert report["cash_sales"] == 80.0
     assert report["expected_cash"] == 300.0
     assert report["cash_difference"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_logout_close_handles_timezone_aware_cash_movement(cash_db):
+    cashier, _, _, _, shift, created_at = await seed(cash_db)
+    cash_order = await order(cash_db, "LOGOUT-TZ", cashier, created_at, "40.00")
+    movement = OrderCashMovement(
+        order_id=cash_order.id, shift_id=shift.id, actor_id=cashier.id,
+        from_holder="customer", to_holder="cashier", amount=Decimal("40.00"),
+        idempotency_key="logout-tz-collection", created_at=datetime.now(UTC),
+    )
+    shift.actual_closing_cash = Decimal("340.00")
+    cash_db.add(movement)
+    await cash_db.flush()
+
+    await ShiftsService(cash_db).end_shift(cashier.id)
+
+    snapshot = await cash_db.scalar(
+        select(ShiftCloseSnapshot).where(ShiftCloseSnapshot.shift_id == shift.id)
+    )
+    assert shift.end_time is not None and shift.end_time.tzinfo is None
+    assert movement.created_at.tzinfo is not None
+    assert snapshot is not None
+    assert snapshot.expected_cash == Decimal("340.00")
+    assert snapshot.difference == Decimal("0.00")
 
 
 @pytest.mark.asyncio
@@ -700,8 +726,8 @@ async def test_online_instapay_needs_cashier_verified_receipt_before_acceptance(
 
 
 @pytest.mark.asyncio
-async def test_next_shift_waits_for_all_cashier_counts_and_admin_signoffs(cash_db):
-    cashier, other, _, admin, _, _ = await seed(cash_db)
+async def test_cashier_shifts_can_overlap_and_new_shift_ignores_pending_signoffs(cash_db):
+    cashier, other, _, _, _, _ = await seed(cash_db)
     next_cashier = User(
         username="next-cashier", full_name="Next", role=UserRole.CASHIER,
         phone="01000003005", hashed_password="test",
@@ -709,8 +735,9 @@ async def test_next_shift_waits_for_all_cashier_counts_and_admin_signoffs(cash_d
     cash_db.add(next_cashier)
     await cash_db.flush()
     service = ShiftsService(cash_db)
-    with pytest.raises(ValidationError, match="ما زال مفتوحًا"):
-        await service.start_shift(next_cashier.id)
+    opened = await service.start_shift(next_cashier.id)
+    assert opened.user_id == next_cashier.id
+    assert opened.end_time is None
 
     shifts = (await cash_db.execute(select(CashierShift).where(
         CashierShift.user_id.in_([cashier.id, other.id])
@@ -721,14 +748,14 @@ async def test_next_shift_waits_for_all_cashier_counts_and_admin_signoffs(cash_d
         await cash_db.commit()
         await service.end_shift(owner.id)
 
-    with pytest.raises(ValidationError, match="لم تعتمد"):
-        await service.start_shift(next_cashier.id)
-    for closed in shifts:
-        await confirm_shift_close(
-            closed.id, ShiftCloseConfirmation(admin_count=Decimal("300.00")),
-            cash_db, admin,
-        )
-    opened = await service.start_shift(next_cashier.id)
-    assert opened.id not in {row.id for row in shifts}
-    assert opened.opening_cash == Decimal("300.00")
-    assert opened.cash_tracking_enabled
+    unapproved_cashier = User(
+        username="unapproved-cashier", full_name="Unapproved", role=UserRole.CASHIER,
+        phone="01000003006", hashed_password="test",
+    )
+    cash_db.add(unapproved_cashier)
+    await cash_db.flush()
+    opened_while_signoffs_pending = await service.start_shift(unapproved_cashier.id)
+    assert opened_while_signoffs_pending.user_id == unapproved_cashier.id
+    assert opened_while_signoffs_pending.end_time is None
+    assert opened_while_signoffs_pending.opening_cash == Decimal("300.00")
+    assert opened_while_signoffs_pending.cash_tracking_enabled

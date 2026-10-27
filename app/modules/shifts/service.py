@@ -31,6 +31,13 @@ def restaurant_sales_amount(order):
 def get_business_date() -> date:
     return get_current_business_date()
 
+
+def _utc_for_comparison(value: datetime) -> datetime:
+    """Normalize timestamps from legacy naive UTC columns and aware DB columns."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
 # The owner approved carrying this one mixed rollout shift across the next
 # business-day boundary. Closed historical shifts retain their original mode.
 MIXED_CUTOVER_SHIFT_ID = 135
@@ -104,8 +111,8 @@ class ShiftsService:
 
     async def start_shift(self, user_id: int, sync_web_orders: bool = False):
         target_date = get_business_date()
-        # Serialize starts across cashiers so two logins cannot both see an
-        # empty drawer and open overlapping shifts at the same time.
+        # Serialize shift creation so concurrent logins do not create duplicate
+        # active shifts for one cashier. Different cashiers may overlap.
         if getattr(getattr(self.db, "bind", None), "dialect", None) is not None and self.db.bind.dialect.name == "postgresql":
             await self.db.execute(text("SELECT pg_advisory_xact_lock(1901226)"))
         was_active = True
@@ -127,22 +134,6 @@ class ShiftsService:
             # Keep an overnight shift accessible to its cashier for count and
             # close. Never silently close it without a physical cash count.
             return active_shift
-
-        other_open = await self.db.scalar(select(CashierShift).where(
-            CashierShift.end_time.is_(None),
-        ).order_by(desc(CashierShift.id)))
-        if other_open:
-            raise ValidationError(f"شيفت #{other_open.id} ما زال مفتوحًا؛ أكمل تسويته قبل فتح شيفت جديد")
-
-        unsettled = await self.db.scalar(select(CashierShift).outerjoin(
-            ShiftCloseSnapshot, ShiftCloseSnapshot.shift_id == CashierShift.id,
-        ).where(
-            ShiftCloseSnapshot.id.is_not(None),
-            CashierShift.end_time.is_not(None),
-            ShiftCloseSnapshot.confirmed_at.is_(None),
-        ).order_by(CashierShift.id))
-        if unsettled:
-            raise ValidationError(f"إدارة المطعم لم تعتمد تسليم شيفت #{unsettled.id} بعد")
 
         new_shift = CashierShift(
             user_id=user_id,
@@ -367,7 +358,7 @@ class ShiftsService:
                     paid_to_cashier = sum(
                         (movement.amount if movement.to_holder == "cashier" else -movement.amount)
                         for movement in cash_movements if movement.order_id == order.id
-                        and (shift.end_time is None or movement.created_at <= shift.end_time)
+                        and (shift.end_time is None or _utc_for_comparison(movement.created_at) <= _utc_for_comparison(shift.end_time))
                         and "cashier" in (movement.from_holder, movement.to_holder)
                     )
                     unconfirmed = max(Decimal("0.00"), due - paid_to_cashier)
@@ -395,11 +386,12 @@ class ShiftsService:
                 late_expenses = [
                     expense for expense in day_expenses
                     if expense.shift_id == shift.id and expense.paid_from == "shift_cash"
-                    and expense.created_at > shift.end_time
+                    and _utc_for_comparison(expense.created_at) > _utc_for_comparison(shift.end_time)
                 ]
                 late_order_movements = [
                     movement for movement in cash_movements
-                    if movement.shift_id == shift.id and movement.created_at > shift.end_time
+                    if movement.shift_id == shift.id
+                    and _utc_for_comparison(movement.created_at) > _utc_for_comparison(shift.end_time)
                 ]
                 opening_cash = snapshot.opening_cash
                 confirmed_cash = snapshot.confirmed_cash

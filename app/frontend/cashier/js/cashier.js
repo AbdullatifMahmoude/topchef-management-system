@@ -4086,6 +4086,18 @@ async function logout() {
         "Content-Type": "application/json",
       },
     });
+    // Another device may already have revoked this token. The local session is
+    // already unusable, so clear it here instead of trapping the cashier.
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("token_type");
+      localStorage.removeItem("user_id");
+      localStorage.removeItem("username");
+      localStorage.removeItem("role");
+      localStorage.removeItem("user");
+      window.location.replace("../index.html");
+      return;
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (err) {
     console.warn("Logout API error:", err);
