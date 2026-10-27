@@ -53,7 +53,7 @@ async def test_checkout_reason_distinguishes_shift_and_manual_pause(monkeypatch,
 @pytest.mark.asyncio
 async def test_first_cashier_shift_opens_web_orders(monkeypatch):
     db = AsyncMock()
-    db.scalar.side_effect = [0, None]
+    db.scalar.side_effect = [0, None, None, None]
     db.execute.return_value = _Result([])
     db.add = Mock()
     toggle = AsyncMock()
@@ -64,11 +64,11 @@ async def test_first_cashier_shift_opens_web_orders(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_current_shift_rollover_syncs_web_orders(monkeypatch):
+async def test_current_shift_uses_start_shift_result(monkeypatch):
     db = AsyncMock()
     db.execute.return_value = _Result([SimpleNamespace(id=42)])
     redis = object()
-    start_shift = AsyncMock()
+    start_shift = AsyncMock(return_value=SimpleNamespace(id=42))
     dependencies = []
     monkeypatch.setattr(
         ShiftsService, "__init__",

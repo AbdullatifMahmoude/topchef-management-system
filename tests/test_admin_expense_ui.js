@@ -54,11 +54,15 @@ vm.runInContext(fs.readFileSync("app/frontend/js/expenses-admin.js", "utf8"), co
   element("adminExpenseTitle").value = "صيانة";
   element("adminExpenseAmount").value = "25";
   element("adminExpenseNote").value = "";
+  element("adminExpensePaidFrom").value = "shift_cash";
+  element("adminExpenseReceipt").value = "INV-25";
   await handlers["adminExpenseForm:submit"]({ preventDefault() {} });
   const saved = requests.find((request) => request.path === "/shifts/admin/expenses" && request.options.method === "POST");
   assert.ok(saved);
   assert.equal(JSON.parse(saved.options.body).shift_id, 4);
   assert.equal(JSON.parse(saved.options.body).target_date, "2026-09-21");
+  assert.equal(JSON.parse(saved.options.body).paid_from, "shift_cash");
+  assert.equal(JSON.parse(saved.options.body).receipt_reference, "INV-25");
   assert.equal(element("adminExpensesShiftFilter").value, "4");
   console.log("Admin expense selects and submits the day's shift");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -76,9 +76,8 @@ async def logout(
         user_id = payload.get("user_id")
         if not isinstance(exp, int):
             raise AuthenticationError("Token payload is malformed")
-        if not await TokenBlacklist().revoke_token(token, exp):
-            raise AuthenticationServiceUnavailable()
-        
+        # A cashier must be able to correct a missing cash count before the
+        # token is revoked; otherwise logout could strand an open shift.
         if user_id:
             from app.core.enums import UserRole
             if payload.get("role") == UserRole.CASHIER.value:
@@ -87,5 +86,7 @@ async def logout(
                 async with AsyncSessionLocal() as db:
                     shifts_service = ShiftsService(db, redis)
                     await shifts_service.end_shift(user_id, sync_web_orders=True)
+        if not await TokenBlacklist().revoke_token(token, exp):
+            raise AuthenticationServiceUnavailable()
     
     return {"message": "Logged out successfully"}

@@ -78,11 +78,11 @@
       <td>${escapeHtml(item.target_date)}</td>
       <td><strong>${escapeHtml(item.title)}</strong></td>
       <td class="admin_expense_amount">${escapeHtml(money(item.amount))}</td>
-      <td>${escapeHtml(item.note || "—")}</td>
+      <td>${escapeHtml(item.note || "—")}<small style="display:block">${item.paid_from === "shift_cash" ? "من درج الشيفت" : item.paid_from === "admin_cash" ? "من عهدة الإدارة" : "مصدر النقد غير موثق تاريخيًا"}${item.receipt_reference ? ` • إيصال ${escapeHtml(item.receipt_reference)}` : ""}</small></td>
       <td>${escapeHtml(item.shift_owner || "—")}</td>
       <td>${escapeHtml(item.recorded_by || "—")}</td>
       <td><span class="admin_expense_source ${item.source}">${item.source === "admin" ? "الإدارة" : "الكاشير"}</span></td>
-      <td><div class="admin_expense_actions"><button type="button" data-edit-expense="${item.id}">تعديل</button><button type="button" data-delete-expense="${item.id}">حذف</button></div></td>
+      <td><div class="admin_expense_actions"><button type="button" data-audit-expense="${item.id}">السجل</button><button type="button" data-edit-expense="${item.id}">تعديل</button><button type="button" data-delete-expense="${item.id}">حذف</button></div></td>
     </tr>`).join("");
   }
 
@@ -141,8 +141,14 @@
       title: $("adminExpenseTitle").value.trim(),
       amount: Number($("adminExpenseAmount").value),
       note: $("adminExpenseNote").value.trim() || null,
+      paid_from: $("adminExpensePaidFrom").value,
+      receipt_reference: $("adminExpenseReceipt").value.trim() || null,
       target_date: $("adminExpenseDate").value,
     };
+    if (!payload.paid_from) {
+      alert("حدد مصدر النقد الذي دُفع منه المصروف");
+      return;
+    }
     if (!id || editedItem?.source === "admin") {
       payload.shift_id = Number($("adminExpenseShift").value);
       if (!payload.shift_id) {
@@ -176,6 +182,13 @@
   });
 
   tbody.addEventListener("click", async (event) => {
+    const auditButton = event.target.closest("[data-audit-expense]");
+    if (auditButton) {
+      const response = await window.apiFetch(`/shifts/admin/expenses/${auditButton.dataset.auditExpense}/audit`);
+      if (!response.ok) return alert("تعذر عرض سجل المصروف");
+      const rows = await response.json();
+      return alert(rows.length ? rows.map((row) => `${new Date(row.created_at).toLocaleString("ar-EG")} • ${row.action} • مستخدم #${row.actor_id}\nقبل: ${JSON.stringify(row.before || {})}\nبعد: ${JSON.stringify(row.after || {})}`).join("\n\n") : "لا يوجد سجل تعديل لهذا المصروف القديم");
+    }
     const editButton = event.target.closest("[data-edit-expense]");
     const deleteButton = event.target.closest("[data-delete-expense]");
     const id = Number(editButton?.dataset.editExpense || deleteButton?.dataset.deleteExpense);
@@ -186,6 +199,8 @@
       $("adminExpenseTitle").value = item.title;
       $("adminExpenseAmount").value = item.amount;
       $("adminExpenseNote").value = item.note || "";
+      $("adminExpensePaidFrom").value = item.paid_from === "legacy_unverified" ? "" : (item.paid_from || "");
+      $("adminExpenseReceipt").value = item.receipt_reference || "";
       $("adminExpenseDate").value = item.target_date;
       $("adminExpenseDate").disabled = !item.editable_date;
       await loadShifts(item.shift_id);

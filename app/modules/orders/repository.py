@@ -1,19 +1,21 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
-from sqlalchemy import case, desc, func, select
+from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.business_calendar import (
+    EGYPT_TZ,
     business_day_start,
     get_current_business_date,
     holiday_name,
     is_weekly_holiday,
     previous_business_date,
 )
-from app.core.enums import OrderSource, OrderStatus, OrderType
+from app.core.enums import OrderSource, OrderStatus, OrderType, PaymentMethod
 from app.modules.offer.models import OfferUsage
 from app.modules.orders import models, schemas
+from app.modules.shifts.models import CashierShift
 
 
 def _offer_load_option():
@@ -81,7 +83,10 @@ class OrderRepository:
         is_printed: bool | None = None,
         page: int = 1,
         page_size: int = 50,
-        cashier_id: int | None = None
+        cashier_id: int | None = None,
+        shift: CashierShift | None = None,
+        payment_method: PaymentMethod | None = None,
+        search: str | None = None,
     ) -> tuple[int, list[models.Order]]:
 
         """Get paginated orders."""
@@ -92,50 +97,47 @@ class OrderRepository:
             selectinload(models.Order.address),
             selectinload(models.Order.modifications),
             _offer_load_option()
-        ).where(models.Order.is_deleted == False)
-        
+        )
+        filters = [models.Order.is_deleted == False]
         if source:
-            query = query.where(models.Order.order_source == source)
+            filters.append(models.Order.order_source == source)
         if status:
-            query = query.where(models.Order.order_status == status)
+            filters.append(models.Order.order_status == status)
         if order_type:
-            query = query.where(models.Order.order_type == order_type)
+            filters.append(models.Order.order_type == order_type)
         if is_printed is not None:
-            query = query.where(models.Order.is_printed == is_printed)
-            
+            filters.append(models.Order.is_printed == is_printed)
+        if payment_method:
+            filters.append(models.Order.payment_method == payment_method)
+        if search:
+            term = f"%{search.strip()}%"
+            filters.append(or_(
+                models.Order.order_number.ilike(term),
+                models.Order.customer_name.ilike(term),
+                models.Order.customer_phone.ilike(term),
+            ))
         if cashier_id:
-            from sqlalchemy import and_, or_
-            query = query.where(
+            filters.append(
                 or_(
                     and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
                     models.Order.order_source == OrderSource.ONLINE,
                 )
             )
+        if shift:
+            start = shift.start_time
+            end = shift.end_time
+            start_local = start.replace(tzinfo=start.tzinfo or UTC).astimezone(EGYPT_TZ).replace(tzinfo=None)
+            end_local = end.replace(tzinfo=end.tzinfo or UTC).astimezone(EGYPT_TZ).replace(tzinfo=None) if end else datetime.now(EGYPT_TZ).replace(tzinfo=None)
+            filters.extend((
+                models.Order.created_by_user_id == shift.user_id,
+                models.Order.created_at >= start_local,
+                models.Order.created_at < end_local,
+            ))
+        else:
+            filters.append(models.Order.order_date == self.get_business_date())
 
-        # Filter by the current business day.
-        query = query.where(models.Order.order_date == self.get_business_date())
-
-        
-        # Count total
-        count_query = select(func.count()).select_from(models.Order).where(models.Order.is_deleted == False)
-        if source:
-            count_query = count_query.where(models.Order.order_source == source)
-        if status:
-            count_query = count_query.where(models.Order.order_status == status)
-        if order_type:
-            count_query = count_query.where(models.Order.order_type == order_type)
-        if is_printed is not None:
-            count_query = count_query.where(models.Order.is_printed == is_printed)
-            
-        if cashier_id:
-            count_query = count_query.where(
-                or_(
-                    and_(models.Order.order_source == OrderSource.CASHIER, models.Order.created_by_user_id == cashier_id),
-                    models.Order.order_source == OrderSource.ONLINE,
-                )
-            )
-            
-        count_query = count_query.where(models.Order.order_date == self.get_business_date())
+        query = query.where(*filters)
+        count_query = select(func.count()).select_from(models.Order).where(*filters)
         
         total = await self.db.scalar(count_query) or 0
         
@@ -278,7 +280,7 @@ class OrderRepository:
         Does NOT commit - transaction management is handled by service layer.
         """
         old_status = order.order_status
-        update_dict = update_data.model_dump(exclude_unset=True)
+        update_dict = update_data.model_dump(exclude_unset=True, exclude={"digital_payment_verified"})
         new_status = update_dict.get('order_status')
         
         for field, value in update_dict.items():
@@ -305,7 +307,7 @@ class OrderRepository:
         Assumes all validation has been done in the service layer.
         Does NOT commit - transaction management is handled by service layer.
         """
-        update_dict = update_data.model_dump(exclude_unset=True, exclude={"items", "customer_address"})
+        update_dict = update_data.model_dump(exclude_unset=True, exclude={"items", "customer_address", "digital_payment_verified"})
         
         # Update all provided fields
         for field, value in update_dict.items():

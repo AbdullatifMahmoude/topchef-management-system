@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/cashier.css?v=20260930-daily-availability" />
+    <link rel="stylesheet" href="css/cashier.css?v=20261027-cash-filters" />
   </head>
   <body>
     <!-- ===== Navbar ===== -->
@@ -115,6 +115,10 @@
             <label id="cashReceivedAtCheckoutLabel" style="display:block;margin-top:12px">
               <input id="cashReceivedAtCheckout" type="checkbox">
               استلمت النقد فعليًا من العميل الآن (للصالة والتيك أواي فقط)
+            </label>
+            <label id="digitalPaymentVerifiedLabel" style="display:none;margin-top:12px">
+              <input id="digitalPaymentVerified" type="checkbox">
+              راجعت حساب المطعم وتأكدت إن مبلغ التحويل وصل بالفعل
             </label>
           </section>
 
@@ -276,14 +280,14 @@
     <div id="all_orders_layout" style="display: none; padding: 20px 40px; height: calc(100vh - 77px); overflow-y: auto;">
       <div class="online_orders_container">
         <header class="all_orders_page_header">
-          <div><p>سجل يوم العمل</p><h1>كل الطلبات</h1><span>متابعة طلبات الكاشير والبحث والتصفية من مكان واحد</span></div>
+          <div><p>سجل شيفتك الحالي</p><h1>كل الطلبات</h1><span>كل طلباتك خلال الشيفت، حتى لو بدأت قبل يوم العمل الحالي</span></div>
           <button class="all_orders_refresh" type="button" onclick="fetchAllOrders()">تحديث البيانات</button>
         </header>
 
         <div class="all_orders_kpis">
-          <article><span>إجمالي الطلبات</span><strong id="allOrdersTotalKpi">0</strong><small>طلبات يوم العمل</small></article>
-          <article><span>طلبات الدليفري</span><strong id="allOrdersDeliveryKpi">0</strong><small>المسجلة من الكاشير</small></article>
-          <article><span>مكتملة</span><strong id="allOrdersCompletedKpi">0</strong><small>تم إنهاؤها بنجاح</small></article>
+          <article><span>نتائج الفلترة</span><strong id="allOrdersTotalKpi">0</strong><small>من كل صفحات الشيفت</small></article>
+          <article><span>طلبات الدليفري</span><strong id="allOrdersDeliveryKpi">0</strong><small>في الصفحة الحالية</small></article>
+          <article><span>مكتملة</span><strong id="allOrdersCompletedKpi">0</strong><small>في الصفحة الحالية</small></article>
         </div>
         
         <div class="online_actions_row all_orders_actions" style="justify-content: space-between;">
@@ -295,12 +299,18 @@
             <button class="filter_btn" onclick="setAllOrdersFilter('unprinted', this)">محفوظة بدون طباعة</button>
           </div>
 
+          <label class="all_orders_payment_filter">طريقة الدفع
+            <select id="all_orders_payment" onchange="setAllOrdersPaymentFilter(this.value)">
+              <option value="">كل طرق الدفع</option><option value="cash">نقدي</option><option value="instapay">InstaPay</option><option value="wallet">محفظة</option>
+            </select>
+          </label>
+
           <div class="online_search_wrapper">
             <svg class="search_icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="text" id="all_orders_search" class="online_search_input" placeholder="بحث برقم الطلب او النوع..." oninput="handleAllOrdersSearch(this.value)" />
+            <input type="text" id="all_orders_search" class="online_search_input" placeholder="بحث برقم الطلب أو اسم العميل أو هاتفه" oninput="handleAllOrdersSearch(this.value)" />
           </div>
 
           <span class="all_orders_result_count" id="allOrdersResultCount">0 طلب</span>
@@ -341,7 +351,8 @@
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">الحالة</th>
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">طلبات نشطة</th>
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">تم التسليم</th>
-                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">نقدي</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">طلبات نقدية مسجلة</th>
+                <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">مع المندوب مؤكد — حصة المطعم</th>
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">تحويل</th>
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">رسوم التوصيل</th>
                 <th style="padding: 15px; border-bottom: 1px solid rgba(201, 168, 76, 0.3);">قيمة الطلبات</th>
@@ -368,6 +379,7 @@
             <div class="expense_form_heading"><strong>إضافة مصروف</strong><span>اكتب سبب الصرف والمبلغ بدقة</span></div>
             <label>بند المصروف<input name="title" maxlength="120" required placeholder="مثال: شراء أكياس أو مياه"></label>
             <label>المبلغ<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label>
+            <label>رقم إيصال أو مرجع <small>اختياري</small><input name="receipt_reference" maxlength="200" placeholder="رقم الفاتورة أو الإيصال"></label>
             <label>ملاحظة <small>اختياري</small><textarea name="note" rows="3" maxlength="500" placeholder="تفاصيل إضافية"></textarea></label>
             <button type="submit">حفظ المصروف</button>
           </form>
@@ -396,6 +408,6 @@
       </script>
     <script src="../js/custom-select.js?v=20260820-global-select"></script>
     <script src="js/cashier-live.js?v=20260825-live-socket"></script>
-    <script src="js/cashier.js?v=20261023-phone-reservation"></script>
+    <script src="js/cashier.js?v=20261027-cash-attestation-only"></script>
   </body>
 </html>

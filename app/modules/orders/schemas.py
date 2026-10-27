@@ -58,6 +58,7 @@ class OrderBase(BaseModel):
 class OrderCreate(OrderBase):
     items: list[OrderItemCreate]
     cash_received: bool = False
+    digital_payment_verified: bool = False
     idempotency_key: str | None = None
     address_id: int | None = None
     customer_address: str | None = None
@@ -88,6 +89,11 @@ class OrderCreate(OrderBase):
             or self.order_type not in (OrderType.HALL, OrderType.TAKEAWAY)
         ):
             raise ValueError("تأكيد النقد عند إنشاء الطلب متاح للصالة والتيك أواي النقدي فقط")
+        if self.digital_payment_verified and (
+            self.source != OrderSource.CASHIER
+            or self.payment_method not in (PaymentMethod.INSTAPAY, PaymentMethod.WALLET)
+        ):
+            raise ValueError("تأكيد التحويل متاح لطلب الكاشير الرقمي فقط")
         if (self.manual_discount_type is None) != (self.manual_discount_value is None):
             raise ValueError("Manual discount type and value must be provided together")
         if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value > Decimal(100):
@@ -102,6 +108,7 @@ class OrderCreate(OrderBase):
 
 class OrderUpdate(BaseModel):
     order_status: OrderStatus | None = None
+    digital_payment_verified: bool = False
     delivery_person_id: int | None = None
     internal_notes: str | None = None
     is_printed: bool | None = None
@@ -143,6 +150,7 @@ class OrderUpdateFull(BaseModel):
     manual_discount_value: Decimal | None = Field(default=None, gt=0)
     discount_reason: str | None = None
     payment_method: PaymentMethod | None = None
+    digital_payment_verified: bool = False
     is_printed: bool | None = None
 
     @field_validator('delivery_person_id', 'address_id', mode='before')
@@ -166,6 +174,8 @@ class OrderResponse(OrderBase):
     created_at: datetime
     updated_at: datetime | None = None
     order_status: OrderStatus
+    digital_payment_verified_at: datetime | None = None
+    digital_payment_verified_by_user_id: int | None = None
     subtotal: Decimal
     discount_amount: Decimal
     discount_type: DiscountType | None = None

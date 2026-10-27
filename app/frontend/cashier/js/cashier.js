@@ -79,7 +79,7 @@ async function apiFetch(path, options = {}) {
       );
       localStorage.clear();
       window.location.replace("../index.html");
-      return new Promise(() => {}); // إيقاف التنفيذ الحالي
+      return response;
     }
 
     return response;
@@ -521,6 +521,11 @@ function refreshCashReceiptControl() {
   const eligible = selectedPaymentMethod === "cash" && ["takeaway", "dine_in"].includes(orderType);
   if (label) label.style.display = eligible ? "block" : "none";
   if (!eligible && checkbox) checkbox.checked = false;
+  const digitalLabel = document.getElementById("digitalPaymentVerifiedLabel");
+  const digitalCheckbox = document.getElementById("digitalPaymentVerified");
+  const digital = ["instapay", "wallet"].includes(selectedPaymentMethod);
+  if (digitalLabel) digitalLabel.style.display = digital ? "block" : "none";
+  if (!digital && digitalCheckbox) digitalCheckbox.checked = false;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -542,10 +547,20 @@ async function openShiftCashModal() {
   } catch (error) {
     console.warn("Could not load saved shift cash data", error);
   }
+  let reconciliation = null;
+  try {
+    const response = await apiFetch("/shifts/current/reconciliation", { hideLoader: true });
+    if (response.ok) reconciliation = await response.json();
+  } catch (error) {
+    console.warn("Could not load current reconciliation", error);
+  }
   const modal = document.createElement("div");
   modal.id = "shift_cash_modal";
   modal.className = "shift_cash_modal";
-  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديلها ثم الحفظ مرة أخرى.</p><div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>رصيد بداية الشيفت<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00"></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
+  const currentCashSummary = reconciliation?.cash_tracking_enabled
+    ? `<div class="shift_saved_expenses"><span>سجل استلام النقد (للمراجعة فقط)</span><strong>${Number(reconciliation.confirmed_cash || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>نقد دليفري لم يثبت وصوله: ${Number(reconciliation.unconfirmed_delivery_cash || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م • التأكيد لا يغيّر النقد المتوقع أو فرق الشيفت${Number(reconciliation.legacy_expenses_unverified || 0) > 0 ? ` • مصروفات قبل النشر مصدرها يحتاج مراجعة: ${Number(reconciliation.legacy_expenses_unverified).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م` : ""}</small></div>`
+    : "";
+  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>${saved.stale_shift ? `شيفت يوم ${escapeExpenseText(saved.target_date)} ما زال مفتوحًا. سجّل العدّ الفعلي وأغلق الشيفت، ثم تعتمد الإدارة التسليم قبل بدء شيفت جديد.` : saved.cash_tracking_enabled && !saved.opening_confirmed ? `راجع عهدة البداية المسجلة (${Number(saved.opening_cash || 0).toLocaleString("ar-EG")} جنيه) وأكد مبلغها الفعلي بالحفظ قبل إغلاق الشيفت.` : "القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديل النقد الفعلي قبل إغلاق الشيفت."}</p>${currentCashSummary}<div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة من الدرج</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>عهدة بداية الشيفت من الإدارة<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00" ${saved.opening_confirmed ? "readonly" : ""}></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
   document.body.appendChild(modal);
   modal.querySelector(".shift_cash_cancel").onclick = () => modal.remove();
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
@@ -560,7 +575,10 @@ async function openShiftCashModal() {
     const note = String(form.get("closing_note") || "").trim();
     if (note) payload.closing_note = note;
     const response = await apiFetch("/shifts/current/cash", { method: "PATCH", body: JSON.stringify(payload) });
-    if (!response.ok) return showToast("تعذر حفظ تسوية الشيفت", "error");
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return showToast(typeof data.detail === "string" ? data.detail : "تعذر حفظ تسوية الشيفت", "error");
+    }
     modal.remove();
     showToast("تم حفظ تسوية الشيفت", "success");
   });
@@ -902,6 +920,10 @@ function showConfirmModal(orderData) {
   document.body.appendChild(overlay);
 
   const submitOrder = async (shouldPrint) => {
+    if (["instapay", "wallet"].includes(selectedPaymentMethod) && !document.getElementById("digitalPaymentVerified")?.checked) {
+      showToast("تأكد إن التحويل وصل لحساب المطعم وحدد خانة التأكيد", "error");
+      return;
+    }
     const btn = document.getElementById(shouldPrint ? "btn_confirm_yes" : "btn_confirm_save");
     const originalText = btn.textContent;
     const actionButtons = ["btn_confirm_yes", "btn_confirm_save", "btn_confirm_no"]
@@ -1003,6 +1025,7 @@ function showConfirmModal(orderData) {
         source: "cashier",
         payment_method: selectedPaymentMethod,
         cash_received: selectedPaymentMethod === "cash" && ["hall", "takeaway"].includes(mappedOrderType) && Boolean(document.getElementById("cashReceivedAtCheckout")?.checked),
+        digital_payment_verified: ["instapay", "wallet"].includes(selectedPaymentMethod) && Boolean(document.getElementById("digitalPaymentVerified")?.checked),
         customer_notes: customerNotes,
         internal_notes: null,
         items: items,
@@ -1049,6 +1072,8 @@ function showConfirmModal(orderData) {
       selectedPaymentMethod = "cash";
       const cashReceivedCheckbox = document.getElementById("cashReceivedAtCheckout");
       if (cashReceivedCheckbox) cashReceivedCheckbox.checked = false;
+      const digitalPaymentCheckbox = document.getElementById("digitalPaymentVerified");
+      if (digitalPaymentCheckbox) digitalPaymentCheckbox.checked = false;
       document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item.dataset.paymentMethod === "cash"));
 
       overlay.remove();
@@ -2080,16 +2105,31 @@ renderOrderTypeBadge();
 // ===================================================
 //  Delivery Riders Tab Logic
 // ===================================================
+let riderOutstandingCash = [];
+let riderPendingDirectCash = [];
+
 async function renderRidersTab() {
   const body = document.getElementById("riders_table_body");
   if (!body) return;
 
-  body.innerHTML = `<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
+  body.innerHTML = `<tr><td colspan="10" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
   try {
     const response = await apiFetch("/orders/riders/stats", { suppress401: true });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const riders = Array.isArray(data.stats) ? data.stats : [];
+    const outstandingResponse = await apiFetch("/shifts/cash/riders/outstanding", { hideLoader: true });
+    const pendingResponse = await apiFetch("/shifts/cash/riders/pending-direct-settlement", { hideLoader: true });
+    const outstandingAvailable = outstandingResponse.ok;
+    const outstanding = outstandingResponse.ok ? await outstandingResponse.json() : [];
+    const pendingAvailable = pendingResponse.ok;
+    const pending = pendingAvailable ? await pendingResponse.json() : [];
+    riderOutstandingCash = Array.isArray(outstanding) ? outstanding : [];
+    riderPendingDirectCash = Array.isArray(pending) ? pending : [];
+    const riderCash = new Map();
+    const riderPending = new Map();
+    outstanding.forEach((row) => riderCash.set(Number(row.rider_id), (riderCash.get(Number(row.rider_id)) || 0) + Number(row.restaurant_cash_due_from_rider || 0)));
+    pending.forEach((row) => riderPending.set(Number(row.rider_id), (riderPending.get(Number(row.rider_id)) || 0) + Number(row.restaurant_cash_due_from_rider || 0)));
     const summary = data.summary || {};
     const setRiderText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
     setRiderText("cashierRidersTotal", Number(summary.total_delivery_orders || 0).toLocaleString("ar-EG"));
@@ -2099,29 +2139,42 @@ async function renderRidersTab() {
     setRiderText("cashierRidersDelivered", Number(summary.delivered_orders || 0).toLocaleString("ar-EG"));
     setRiderText("cashierRidersValue", `${Number(summary.orders_value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`);
 
-    if (!riders.length) {
-      body.innerHTML = `<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
+    const riderRows = [...riders];
+    [...riderOutstandingCash, ...riderPendingDirectCash].forEach((row) => {
+      if (!riderRows.some((rider) => Number(rider.id) === Number(row.rider_id))) {
+        riderRows.push({ id: row.rider_id, name: row.rider_name || `مندوب #${row.rider_id}`, availability: "unknown", active_orders: 0, delivered_orders: 0, cash_amount: 0, digital_amount: 0, delivery_fees: 0, order_value: 0, total_orders: 0, order_numbers: [] });
+      }
+    });
+    if (!riderRows.length) {
+      body.innerHTML = `<tr><td colspan="10" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
       return;
     }
 
-    riders.sort((a, b) => b.total_orders - a.total_orders);
-    body.innerHTML = riders.map((r) => `
+    riderRows.sort((a, b) => b.total_orders - a.total_orders);
+    body.innerHTML = riderRows.map((r) => `
       <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-        <td style="padding:15px; font-weight:700; color:#fff;">${r.name}</td>
+        <td style="padding:15px; font-weight:700; color:#fff;">${escapeOrderText(r.name)}</td>
         <td style="padding:15px;"><span class="cashier_rider_state ${r.availability}">${r.availability === "busy" ? "مشغول" : "متاح"}</span></td>
         <td style="padding:15px; font-weight:800;">${r.active_orders || 0}</td>
         <td style="padding:15px; color:var(--color-accent); font-weight:800;">${r.delivered_orders || 0}</td>
         <td style="padding:15px; font-weight:800;">${Number(r.cash_amount || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px; font-weight:800;">${outstandingAvailable && pendingAvailable ? `<span>مؤكد: ${Number(riderCash.get(Number(r.id)) || 0).toFixed(2)} ج.م</span><small class="rider_cash_pending">بانتظار تسليم مباشر: ${Number(riderPending.get(Number(r.id)) || 0).toFixed(2)} ج.م</small>${Number(riderCash.get(Number(r.id)) || 0) + Number(riderPending.get(Number(r.id)) || 0) > 0 ? `<button type="button" class="cash_custody_button" onclick="showRiderCashOutstanding(${Number(r.id)})">تسوية النقد</button>` : ""}` : "تعذر تحميل عهدة المندوب"}</td>
         <td style="padding:15px; font-weight:800;">${Number(r.digital_amount || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px; font-weight:900; color:var(--color-primary);">${Number(r.delivery_fees || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px; font-weight:900; color:#fff0d0;">${Number(r.order_value || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px;">
-          <button onclick='showRiderOrdersPopup("${String(r.name).replace(/"/g, "&quot;")}", ${JSON.stringify(r.order_numbers || [])})'
+          <button type="button" data-rider-orders-id="${Number(r.id)}"
             style="background:rgba(61,158,107,.15); color:#3d9e6b; border:1px solid rgba(61,158,107,.3); padding:4px 12px; border-radius:6px; cursor:pointer; font-family:Cairo,sans-serif; font-weight:700;">
             ${r.total_orders} طلب
           </button>
         </td>
       </tr>`).join("");
+    body.querySelectorAll("[data-rider-orders-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const rider = riderRows.find((row) => Number(row.id) === Number(button.dataset.riderOrdersId));
+        if (rider) showRiderOrdersPopup(rider.name, rider.order_numbers || []);
+      });
+    });
     return;
   } catch (error) {
     console.error("Could not load rider statistics:", error);
@@ -2205,6 +2258,54 @@ async function renderRidersTab() {
     .join("");
 }
 
+function showRiderCashOutstanding(riderId) {
+  document.getElementById("riderCashHandoffOverlay")?.remove();
+  const rows = [
+    ...riderOutstandingCash.filter((row) => Number(row.rider_id) === Number(riderId)).map((row) => ({ ...row, mode: "confirmed" })),
+    ...riderPendingDirectCash.filter((row) => Number(row.rider_id) === Number(riderId)).map((row) => ({ ...row, mode: "direct" })),
+  ];
+  const overlay = document.createElement("div");
+  overlay.id = "riderCashHandoffOverlay";
+  overlay.className = "rider_cash_overlay";
+  overlay.innerHTML = `<section class="rider_cash_dialog" role="dialog" aria-modal="true" aria-label="تسوية نقد المندوب"><div class="rider_cash_dialog_header"><div><small>عهدة الدليفري</small><h2>تسوية نقد المندوب</h2></div><button type="button" id="closeRiderCashHandoff" aria-label="إغلاق">×</button></div><p>تظهر حصة المطعم لكل طلب. سجّل الاستلام بعد عدّ النقد الذي سلّمه المندوب فعليًا.</p><div class="rider_cash_orders">${rows.map((row) => `<div class="rider_cash_order"><div><strong>طلب #${escapeOrderText(row.order_number)}</strong><small>${row.mode === "direct" ? (row.rider_id == null ? "مندوب غير مسند في النظام — إقرار استلام من الكاشير" : "المندوب لم يؤكد التحصيل بالتطبيق — إقرار مباشر من الكاشير") : "تحصيل المندوب مؤكد"}</small></div><label>حصة المطعم<input type="number" min="0.01" max="${Number(row.restaurant_cash_due_from_rider)}" step="0.01" value="${Number(row.restaurant_cash_due_from_rider).toFixed(2)}" ${row.mode === "direct" ? "readonly" : ""}></label><button type="button" class="cash_custody_button" data-handoff-order="${Number(row.order_id)}" data-mode="${row.mode}">${row.mode === "direct" ? "استلام مباشر" : "استلام"}</button></div>`).join("")}</div></section>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#closeRiderCashHandoff").onclick = () => overlay.remove();
+  overlay.addEventListener("click", (event) => { if (event.target === overlay) overlay.remove(); });
+  overlay.querySelectorAll("[data-handoff-order]").forEach((button) => button.addEventListener("click", async () => {
+    const row = rows.find((item) => Number(item.order_id) === Number(button.dataset.handoffOrder) && item.mode === button.dataset.mode);
+    if (!row || button.disabled) return;
+    const amount = Number(button.closest(".rider_cash_order")?.querySelector("input")?.value);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > Number(row.restaurant_cash_due_from_rider)) return showToast("راجع المبلغ المستلم", "error");
+    const direct = row.mode === "direct";
+    const approved = await showCustomActionConfirm(direct
+      ? `هل عديت واستلمت من المندوب كامل حصة المطعم، ${amount.toFixed(2)} جنيه؟ هيُسجل إقرارك بدل تأكيد المندوب.`
+      : `هل عديت واستلمت من المندوب ${amount.toFixed(2)} جنيه فعلًا؟`);
+    if (!approved) return;
+    button.disabled = true;
+    const originalLabel = button.textContent;
+    button.textContent = "جاري التسجيل...";
+    try {
+      const key = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const route = direct ? "direct-rider-settlement" : "rider-handoff";
+      const response = await apiFetch(`/shifts/cash/orders/${row.order_id}/${route}`, {
+        method: "POST", body: JSON.stringify({ amount, idempotency_key: key }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(typeof data.detail === "string" ? data.detail : "تعذر تسجيل التسوية");
+      }
+      overlay.remove();
+      await renderRidersTab();
+      showToast("تم تسجيل استلام النقد من المندوب", "success");
+    } catch (error) {
+      showToast(error.name === "TimeoutError" ? "تأخر الرد؛ حدّث التسوية قبل إعادة التسجيل" : error.message, "error");
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }));
+}
+
 function showRiderOrdersPopup(riderName, orderNumbers) {
   const old = document.getElementById("rider_orders_popup");
   if (old) old.remove();
@@ -2219,7 +2320,7 @@ function showRiderOrdersPopup(riderName, orderNumbers) {
   overlay.innerHTML = `
     <div style="background: var(--color-bg); border: 1px solid var(--color-primary); border-radius: 16px; padding: 24px; width: 400px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(201, 168, 76, 0.2); padding-bottom: 12px;">
-        <h3 style="margin: 0; color: var(--color-primary); font-size: 18px;">طلبات المندوب: ${riderName}</h3>
+        <h3 style="margin: 0; color: var(--color-primary); font-size: 18px;">طلبات المندوب: ${escapeOrderText(riderName)}</h3>
         <button onclick="document.getElementById('rider_orders_popup').remove()" style="background: none; border: none; color: var(--color-subtext); font-size: 24px; cursor: pointer;">&times;</button>
       </div>
       
@@ -2229,7 +2330,7 @@ function showRiderOrdersPopup(riderName, orderNumbers) {
           ${orderNumbers
             .map(
               (num) => `
-            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; text-align: center; color: #fff; font-weight: 700;">#${num}</div>
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; text-align: center; color: #fff; font-weight: 700;">#${escapeOrderText(num)}</div>
           `,
             )
             .join("")}
@@ -2398,7 +2499,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const submitButton = expenseForm.querySelector('button[type="submit"]');
     if (submitButton?.disabled) return;
     const form = new FormData(expenseForm);
-    const payload = { title: String(form.get("title") || "").trim(), amount: Number(form.get("amount")), note: String(form.get("note") || "").trim() || null };
+    const payload = { title: String(form.get("title") || "").trim(), amount: Number(form.get("amount")), note: String(form.get("note") || "").trim() || null, receipt_reference: String(form.get("receipt_reference") || "").trim() || null };
     if (payload.title.length < 2 || !Number.isFinite(payload.amount) || payload.amount <= 0) {
       return showToast("راجع بند المصروف والمبلغ", "error");
     }
@@ -2471,16 +2572,29 @@ async function fetchOnlineOrdersServer(page = 1, silent = false) {
 }
 
 async function fetchAllOrdersServer(page = 1, silent = false) {
+  const requestId = ++allOrdersRequestId;
   allOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
+    const shiftResponse = await apiFetch("/shifts/current/cash", { hideLoader: true });
+    if (!shiftResponse.ok) {
+      const error = await shiftResponse.json().catch(() => ({}));
+      throw new Error(error.detail || "تعذر تحديد الشيفت الحالي");
+    }
+    const shift = await shiftResponse.json();
+    if (!shift.active || !shift.shift_id) throw new Error("لا يوجد شيفت مفتوح لهذا الكاشير");
+    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier&shift_id=${shift.shift_id}`;
     if (allOrdersFilter === "unprinted") {
       url += "&is_printed=false";
+    } else if (allOrdersFilter !== "all") {
+      url += `&order_type=${encodeURIComponent(allOrdersFilter)}`;
     }
+    if (allOrdersPaymentFilter) url += `&payment_method=${encodeURIComponent(allOrdersPaymentFilter)}`;
+    if (allOrdersSearchTerm) url += `&search=${encodeURIComponent(allOrdersSearchTerm)}`;
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch all orders");
     const data = await res.json();
+    if (requestId !== allOrdersRequestId) return;
     allOrdersList = data.orders || [];
     allOrdersTotal = data.total || 0;
 
@@ -2492,8 +2606,9 @@ async function fetchAllOrdersServer(page = 1, silent = false) {
 
     renderAllOrders();
   } catch (err) {
+    if (requestId !== allOrdersRequestId) return;
     console.error(err);
-    if (!silent) showToast("فشل تحميل طلبات الكاشير", "error");
+    if (!silent) showToast(err.message || "فشل تحميل طلبات الكاشير", "error");
   } finally {
     if (!silent) showGlobalLoader(false);
   }
@@ -2511,6 +2626,7 @@ async function fetchAllOrders(skipSync = false) {
 
     ordersSnapshotLoaded = true;
     updateOnlineStats();
+    renderAllOrders();
     renderRidersTab();
 
     showToast("تم تحديث البيانات بنجاح", "success");
@@ -2830,9 +2946,11 @@ async function updateOnlineStatus(orderId, newStatus) {
   if (!confirmed) return;
 
   try {
+    const digitalPaymentVerified = newStatus === "confirmed" ? await confirmDigitalPaymentForOrder(orderId) : false;
+    if (digitalPaymentVerified === null) return;
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ order_status: newStatus }),
+      body: JSON.stringify({ order_status: newStatus, digital_payment_verified: digitalPaymentVerified }),
     });
 
     if (res.ok) {
@@ -3457,6 +3575,9 @@ async function markOrderAsPrinted(orderId) {
 let allOrdersList = [];
 let allOrdersFilter = "all";
 let allOrdersSearchTerm = "";
+let allOrdersPaymentFilter = "";
+let allOrdersSearchTimer = null;
+let allOrdersRequestId = 0;
 let allOrdersCurrentPage = 1;
 let allOrdersTotal = 0;
 
@@ -3472,7 +3593,14 @@ function setAllOrdersFilter(filter, btn) {
 function handleAllOrdersSearch(term) {
   allOrdersSearchTerm = term.trim().toLowerCase();
   allOrdersCurrentPage = 1;
-  renderAllOrders();
+  clearTimeout(allOrdersSearchTimer);
+  allOrdersSearchTimer = setTimeout(() => fetchAllOrdersServer(1), 250);
+}
+
+function setAllOrdersPaymentFilter(method) {
+  allOrdersPaymentFilter = method;
+  allOrdersCurrentPage = 1;
+  fetchAllOrdersServer(1);
 }
 
 function renderAllOrders() {
@@ -3484,29 +3612,17 @@ function renderAllOrders() {
     return;
   }
 
-  const term = (allOrdersSearchTerm || "").toLowerCase();
-  const filteredList = allOrdersList.filter(o => {
-    if (allOrdersFilter === "unprinted") {
-      if (o.is_printed) return false;
-    } else if (allOrdersFilter !== "all" && o.order_type !== allOrdersFilter) {
-      return false;
-    }
-    if (!term) return true;
-    const oNum = String(o.order_number || o.id || "").toLowerCase();
-    const phone = String(o.customer_phone || "").toLowerCase();
-    const name = String(o.customer_name || "").toLowerCase();
-    return oNum.includes(term) || phone.includes(term) || name.includes(term);
-  });
+  const filteredList = allOrdersList;
 
   const completedOrders = allOrdersList.filter((order) => ["completed", "delivered"].includes(order.order_status));
   const kpis = {
-    allOrdersTotalKpi: allOrdersList.length.toLocaleString("ar-EG"),
+    allOrdersTotalKpi: allOrdersTotal.toLocaleString("ar-EG"),
     allOrdersDeliveryKpi: allOrdersList.filter((order) => order.order_type === "delivery").length.toLocaleString("ar-EG"),
     allOrdersCompletedKpi: completedOrders.length.toLocaleString("ar-EG"),
   };
   Object.entries(kpis).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.textContent = value; });
   const resultCount = document.getElementById("allOrdersResultCount");
-  if (resultCount) resultCount.textContent = `${filteredList.length.toLocaleString("ar-EG")} طلب`;
+  if (resultCount) resultCount.textContent = `${allOrdersTotal.toLocaleString("ar-EG")} طلب`;
 
   if (filteredList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات</p>`;
@@ -3837,10 +3953,13 @@ async function changeOrderStatus(orderId, status) {
   if (!confirmed) return;
 
   try {
+    const digitalPaymentVerified = status === "confirmed" ? await confirmDigitalPaymentForOrder(orderId) : false;
+    if (digitalPaymentVerified === null) return;
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
       body: JSON.stringify({
         order_status: status,
+        digital_payment_verified: digitalPaymentVerified,
         delivery_person_id: null,
         internal_notes: null,
       }),
@@ -3970,7 +4089,12 @@ async function logout() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (err) {
     console.warn("Logout API error:", err);
-    showToast("تعذر إغلاق الشيفت. تأكد من الاتصال وحاول تسجيل الخروج مرة أخرى", "error");
+    if (String(err.message).includes("400")) {
+      showToast("سجل عدّ النقد الفعلي ثم أعد محاولة الخروج", "error");
+      openShiftCashModal();
+    } else {
+      showToast("تعذر إغلاق الشيفت. تأكد من الاتصال وحاول تسجيل الخروج مرة أخرى", "error");
+    }
     return;
   }
 
@@ -4133,6 +4257,11 @@ function openOrderDetails(orderId, source) {
           <div class="info_group">
             <h4>طريقة الدفع</h4>
             <p>${paymentMethodLabels[order.payment_method] || "غير محددة"}</p>
+            ${["instapay", "wallet"].includes(order.payment_method)
+              ? `<small>${order.digital_payment_verified_at
+                ? `الكاشير #${Number(order.digital_payment_verified_by_user_id)} أكد وصول التحويل ${new Date(order.digital_payment_verified_at).toLocaleString("ar-EG")}`
+                : "التحويل لم يؤكد الكاشير وصوله بعد"}</small>`
+              : ""}
           </div>
           <div class="info_group">
             <h4>العنوان</h4>
@@ -4216,6 +4345,7 @@ function openOrderDetails(orderId, source) {
             <span id="od_grand_total">${parseFloat(order.total_amount).toFixed(2)} ج.م</span>
           </div>
         </div>
+        ${order.payment_method === "cash" ? '<section id="order_cash_custody" aria-live="polite" style="margin-top:18px;padding:15px;border:1px solid rgba(201,168,76,.3);border-radius:10px">جاري تحميل حركة النقد...</section>' : ""}
         
         ${
           order.modifications && order.modifications.length > 0
@@ -4277,14 +4407,92 @@ function openOrderDetails(orderId, source) {
   if (isOnlineDelivery) {
     loadDeliveryRidersForModal(order);
   }
+  if (order.payment_method === "cash") loadOrderCashCustody(order.id);
+}
+
+async function loadOrderCashCustody(orderId) {
+  const target = document.getElementById("order_cash_custody");
+  if (!target) return;
+  target.textContent = "جاري مراجعة عهدة النقد...";
+  try {
+    const response = await apiFetch(`/shifts/cash/orders/${orderId}`, { hideLoader: true });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(typeof error.detail === "string" ? error.detail : "تعذر تحميل حركة النقد");
+    }
+    const data = await response.json();
+    const format = (value) => Number(value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+    const order = [...onlineOrdersList, ...allOrdersList].find((item) => Number(item.id) === Number(orderId));
+    if (!data.cash_collection_available && !data.cash_tracking_enabled) {
+      target.innerHTML = `<strong>عهدة النقد لهذا الطلب</strong><p>الطلب قديم وسابق لسجل التحصيل الجديد. راجع نقده مع الإدارة يدويًا؛ لا يمكن إنشاء حركة تحصيل جديدة عليه.</p>`;
+      return;
+    }
+    const canCollect = order && order.order_type !== "delivery" && order.order_status !== "cancelled" && Number(data.uncollected) > 0;
+    const canHandoff = order && order.order_type === "delivery" && Number(data.rider_holding) > 0;
+    const canDirect = order && order.order_type === "delivery" && (order.delivery_person_id || (data.legacy_same_shift && order.order_status === "delivered")) && !["new", "cancelled"].includes(order.order_status) && Number(data.restaurant_due) > 0 && Number(data.customer_paid) === 0 && Number(data.cashier_received) === 0 && Number(data.rider_holding) === 0;
+    target.innerHTML = `<strong>عهدة النقد لهذا الطلب</strong>${data.legacy_same_shift ? '<p>الطلب اتسجل قبل النشر في نفس الشيفت. تحصيله غير مؤكد لحد ما تسجل الاستلام الفعلي.</p>' : ""}<p>حصة المطعم: ${format(data.restaurant_due)} ج.م • وصل للصندوق: ${format(data.cashier_received)} ج.م • مع المندوب مؤكد: ${format(data.rider_holding)} ج.م • لم يؤكد تحصيله: ${format(data.uncollected)} ج.م</p><div class="cash_custody_actions">${canCollect ? '<button type="button" class="cash_custody_button" data-cash-action="collect">أؤكد استلام النقد من العميل</button>' : ""}${canHandoff ? '<button type="button" class="cash_custody_button" data-cash-action="handoff">أؤكد استلام النقد من المندوب</button>' : ""}${canDirect ? '<button type="button" class="cash_custody_button" data-cash-action="direct">تسوية مباشرة من المندوب</button>' : ""}</div><small>كل تأكيد يُحفظ باسم المستخدم ووقت العملية. عند وجود فرق في المبلغ راجع الإدارة.</small>`;
+    target.querySelector("[data-cash-action='collect']")?.addEventListener("click", () => recordOrderCash(orderId, "collect", data.uncollected));
+    target.querySelector("[data-cash-action='handoff']")?.addEventListener("click", () => recordOrderCash(orderId, "handoff", data.rider_holding));
+    target.querySelector("[data-cash-action='direct']")?.addEventListener("click", () => recordOrderCash(orderId, "direct", data.restaurant_due));
+  } catch (error) {
+    target.textContent = error.message;
+  }
+}
+
+async function recordOrderCash(orderId, action, availableAmount) {
+  const target = document.getElementById("order_cash_custody");
+  const button = target?.querySelector(`[data-cash-action='${action}']`);
+  if (!button || button.disabled) return;
+  const amount = Number(availableAmount);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > Number(availableAmount)) return;
+  const confirmed = await showCustomActionConfirm(action === "collect"
+    ? `هل استلمت من العميل ${amount.toFixed(2)} جنيه نقدًا بالفعل؟`
+    : action === "direct"
+      ? `هل عديت واستلمت كامل حصة المطعم ${amount.toFixed(2)} جنيه من المندوب؟ هيُحفظ إقرارك بدل تأكيد المندوب.`
+      : `هل عديت واستلمت ${amount.toFixed(2)} جنيه من المندوب فعلًا؟`);
+  if (!confirmed) return;
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = "جاري التسجيل...";
+  try {
+    const key = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const url = action === "direct" ? `/shifts/cash/orders/${orderId}/direct-rider-settlement` : action === "handoff" ? `/shifts/cash/orders/${orderId}/rider-handoff` : `/shifts/cash/orders/${orderId}/customer-collection`;
+    const response = await apiFetch(url, {
+      method: "POST",
+      body: JSON.stringify({ idempotency_key: key, ...(action !== "collect" ? { amount } : {}) }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(typeof data.detail === "string" ? data.detail : "تعذر تسجيل التحصيل");
+    }
+    await loadOrderCashCustody(orderId);
+    showToast("تم تسجيل حركة النقد", "success");
+  } catch (error) {
+    showToast(error.name === "TimeoutError" ? "تأخر الرد؛ حدّث الطلب قبل إعادة التسجيل" : error.message, "error");
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
 }
 
 // ===================================================
 //  Accept Order from Modal (new → confirmed)
 // ===================================================
+async function confirmDigitalPaymentForOrder(orderId) {
+  const response = await apiFetch(`/orders/${orderId}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("تعذر مراجعة وسيلة دفع الطلب");
+  const order = await response.json();
+  if (!["instapay", "wallet"].includes(order.payment_method)) return false;
+  const confirmed = await showCustomActionConfirm(
+    `هل راجعت حساب المطعم وتأكدت إن تحويل ${Number(order.total_amount).toFixed(2)} جنيه وصل بالفعل؟`
+  );
+  return confirmed ? true : null;
+}
+
 async function acceptOrderFromModal(orderId, source) {
   const btn = document.getElementById("od_accept_btn");
   if (!btn) return;
+  const originalButtonHtml = btn.innerHTML;
 
   // حالة تحميل
   btn.disabled = true;
@@ -4299,9 +4507,17 @@ async function acceptOrderFromModal(orderId, source) {
   `;
 
   try {
+    const digitalPaymentVerified = await confirmDigitalPaymentForOrder(orderId);
+    if (digitalPaymentVerified === null) {
+      btn.disabled = false;
+      btn.style.opacity = "1";
+      btn.style.cursor = "pointer";
+      btn.innerHTML = originalButtonHtml;
+      return;
+    }
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ order_status: "confirmed" }),
+      body: JSON.stringify({ order_status: "confirmed", digital_payment_verified: digitalPaymentVerified }),
     });
 
     if (!res.ok) {
@@ -4498,10 +4714,21 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
     });
     if (!resFull.ok) throw new Error("فشل تحديث بيانات التوصيل");
 
+    // Confirm the bank receipt against the final amount after delivery fees
+    // have been saved, never against the customer's earlier checkout total.
+    const digitalPaymentVerified = await confirmDigitalPaymentForOrder(orderId);
+    if (digitalPaymentVerified === null) {
+      await fetchOnlineOrdersServer(onlineOrdersCurrentPage, true);
+      openOrderDetails(orderId, "online");
+      showToast("تم حفظ رسوم التوصيل؛ الطلب ما زال جديدًا حتى تأكيد وصول المبلغ النهائي", "error");
+      return;
+    }
+
     const resStatus = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
       body: JSON.stringify({
         order_status: "confirmed",
+        digital_payment_verified: digitalPaymentVerified,
       }),
     });
     if (!resStatus.ok) throw new Error("فشل تحديث الحالة");
@@ -5314,6 +5541,12 @@ async function updateEditOrderConfirm() {
     return;
   }
 
+  let digitalPaymentVerified = false;
+  if (["instapay", "wallet"].includes(editModalState.originalOrder?.payment_method)) {
+    digitalPaymentVerified = await showCustomActionConfirm("هل راجعت حساب المطعم وتأكدت إن مبلغ التحويل بعد التعديل وصل بالفعل؟");
+    if (!digitalPaymentVerified) return;
+  }
+
   const confirmed = await showCustomActionConfirm(
     "هل أنت متأكد من حفظ التعديلات على هذا الطلب؟",
   );
@@ -5374,6 +5607,7 @@ async function updateEditOrderConfirm() {
       manual_discount_type: editModalState.discountType || null,
       manual_discount_value: editModalState.discountValue || null,
       discount_reason: editModalState.discountReason || null,
+      digital_payment_verified: digitalPaymentVerified,
     };
 
     // إرسال طلب التحديث (PATCH)

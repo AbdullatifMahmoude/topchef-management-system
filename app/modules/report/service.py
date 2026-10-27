@@ -2,14 +2,14 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import Integer, case, cast, func, select
+from sqlalchemy import Date, Integer, case, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.business_calendar import get_current_business_date
-from app.core.enums import OrderStatus, OrderType
+from app.core.enums import OrderSource, OrderStatus, OrderType
 from app.core.exceptions import ValidationError
 from app.modules.menu.models import Product
-from app.modules.orders.models import Order, OrderItem
+from app.modules.orders.models import Order, OrderItem, OrderStatusHistory
 from app.modules.shifts.models import CashierShift, ShiftExpense
 from app.modules.users.models import User
 
@@ -35,11 +35,28 @@ def order_shift_filter(shift: CashierShift | None):
     if shift is None:
         return ()
     end = shift_local_time(shift.end_time) or datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+    confirmed_at = select(func.min(OrderStatusHistory.changed_at)).where(
+        OrderStatusHistory.order_id == Order.id,
+        OrderStatusHistory.status == OrderStatus.CONFIRMED,
+        OrderStatusHistory.is_deleted == False,
+    ).scalar_subquery()
+    effective_time = case(
+        (Order.order_source == OrderSource.ONLINE, func.coalesce(confirmed_at, Order.created_at)),
+        else_=Order.created_at,
+    )
     return (
         Order.created_by_user_id == shift.user_id,
-        Order.created_at >= shift_local_time(shift.start_time),
-        Order.created_at < end,
+        effective_time >= shift_local_time(shift.start_time),
+        effective_time < end,
     )
+
+
+def order_report_date_filter(start_date: date, end_date: date, shift: CashierShift | None):
+    # A shift can accept an online order that the customer created on an older
+    # business date. The selected shift's date was already checked above.
+    if shift is not None:
+        return ()
+    return (Order.order_date >= start_date, Order.order_date <= end_date)
 
 
 async def get_shift_for_report(db: AsyncSession, shift_id: int | None, start_date: date, end_date: date):
@@ -99,8 +116,8 @@ async def get_report_summary(db: AsyncSession, start_date: date, end_date: date,
             else_=0,
         )).label('total_delivery_fee'),
     ).filter(
-        Order.order_date >= start_date,
-        Order.order_date <= end_date,
+        *order_report_date_filter(start_date, end_date, shift),
+        Order.is_deleted == False,
         *order_shift_filter(shift),
     )
 
@@ -156,6 +173,7 @@ async def get_report_orders(
     delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
     stmt = (
         select(
+            Order.id,
             Order.order_number,
             Order.order_type,
             (Order.total_amount - delivery_fee_only).label("total_amount"),
@@ -164,11 +182,11 @@ async def get_report_orders(
             Order.order_status,
         )
         .filter(
-            Order.order_date >= start_date,
-            Order.order_date <= end_date,
+            *order_report_date_filter(start_date, end_date, shift),
+            Order.is_deleted == False,
             *order_shift_filter(shift),
         )
-        .order_by(Order.created_at.desc())
+        .order_by(Order.created_at.asc(), Order.id.asc())
         .offset(offset)
         .limit(limit)
     )
@@ -185,6 +203,7 @@ async def get_report_orders(
             otype += " (ملغي)"
 
         report_orders.append(schemas.OrderReportItem(
+            id=row.id,
             order_number=row.order_number,
             order_type=otype,
             items_summary="",
@@ -220,8 +239,8 @@ async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: da
         .join(OrderItem, OrderItem.order_id == Order.id)
         .join(Product, Product.id == OrderItem.product_id)
         .filter(
-            Order.order_date >= start_date,
-            Order.order_date <= end_date,
+            *order_report_date_filter(start_date, end_date, shift),
+            Order.is_deleted == False,
             Order.order_status != OrderStatus.CANCELLED,
             OrderItem.is_deleted == False,
             *order_shift_filter(shift),
@@ -244,19 +263,20 @@ async def get_top_selling_items(db: AsyncSession, start_date: date, end_date: da
 async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date,
                             shift: CashierShift | None = None) -> list[schemas.RevenueTrendPoint]:
     delivery_fee_only = case((Order.order_type == OrderType.DELIVERY, Order.delivery_fee), else_=0)
+    period_date = literal(shift.target_date, type_=Date) if shift else Order.order_date
     stmt = (
         select(
-            Order.order_date.label("period_date"),
+            period_date.label("period_date"),
             func.sum(Order.total_amount - delivery_fee_only).label("revenue"),
         )
         .filter(
-            Order.order_date >= start_date,
-            Order.order_date <= end_date,
+            *order_report_date_filter(start_date, end_date, shift),
+            Order.is_deleted == False,
             Order.order_status != OrderStatus.CANCELLED,
             *order_shift_filter(shift),
         )
-        .group_by(Order.order_date)
-        .order_by(Order.order_date)
+        .group_by(period_date)
+        .order_by(period_date)
     )
     rows = (await db.execute(stmt)).all()
     return [schemas.RevenueTrendPoint(period_date=row.period_date, revenue=row.revenue or Decimal("0.00")) for row in rows]
@@ -268,8 +288,8 @@ async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: d
     stmt = (
         select(Order.order_type, hour_expr.label("hour"), func.count(Order.id).label("count"))
         .filter(
-            Order.order_date >= start_date,
-            Order.order_date <= end_date,
+            *order_report_date_filter(start_date, end_date, shift),
+            Order.is_deleted == False,
             Order.order_status != OrderStatus.CANCELLED,
             *order_shift_filter(shift),
         )

@@ -73,6 +73,9 @@ class Order(Base):
         default=PaymentMethod.CASH,
         server_default="CASH",
     )
+    cash_tracking_enabled = Column(Boolean, nullable=False, default=True, server_default="false")
+    digital_payment_verified_at = Column(DateTime(timezone=True), nullable=True)
+    digital_payment_verified_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
     subtotal = Column(Numeric(10, 2), nullable=False, default=0)
     discount_amount = Column(Numeric(10, 2), nullable=False, default=0)

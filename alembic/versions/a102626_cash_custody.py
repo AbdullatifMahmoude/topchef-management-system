@@ -14,8 +14,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.create_index("ix_order_status_history_status_changed_at", "order_status_history", ["status", "changed_at"])
     op.add_column("cashier_shifts", sa.Column("cash_tracking_enabled", sa.Boolean, nullable=False, server_default=sa.false()))
     op.add_column("cashier_shifts", sa.Column("opening_confirmed_at", sa.DateTime(timezone=True)))
+    op.add_column("orders", sa.Column("cash_tracking_enabled", sa.Boolean, nullable=False, server_default=sa.false()))
+    op.add_column("orders", sa.Column("digital_payment_verified_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("orders", sa.Column("digital_payment_verified_by_user_id", sa.Integer, sa.ForeignKey("users.id"), nullable=True))
     op.add_column("shift_expenses", sa.Column("paid_from", sa.String(20), nullable=False, server_default="legacy_unverified"))
     op.add_column("shift_expenses", sa.Column("receipt_reference", sa.String(200), nullable=True))
     op.create_table(
@@ -62,13 +66,28 @@ def upgrade() -> None:
         sa.Column("actor_id", sa.Integer, sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("amount", sa.Numeric(12, 2), nullable=False),
         sa.Column("reason", sa.String(500), nullable=False),
+        sa.Column("idempotency_key", sa.String(100), nullable=False, unique=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.CheckConstraint("amount <> 0", name="ck_shift_cash_adjustments_nonzero"),
     )
     op.create_index("ix_shift_cash_adjustments_shift_id", "shift_cash_adjustments", ["shift_id"])
+    op.create_table(
+        "shift_expense_audit",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("expense_id", sa.Integer, sa.ForeignKey("shift_expenses.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("actor_id", sa.Integer, sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("action", sa.String(16), nullable=False),
+        sa.Column("before_values", sa.JSON),
+        sa.Column("after_values", sa.JSON),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+    )
+    op.create_index("ix_shift_expense_audit_expense_id", "shift_expense_audit", ["expense_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_order_status_history_status_changed_at", table_name="order_status_history")
+    op.drop_index("ix_shift_expense_audit_expense_id", table_name="shift_expense_audit")
+    op.drop_table("shift_expense_audit")
     op.drop_index("ix_shift_cash_adjustments_shift_id", table_name="shift_cash_adjustments")
     op.drop_table("shift_cash_adjustments")
     op.drop_table("shift_close_snapshots")
@@ -80,3 +99,6 @@ def downgrade() -> None:
     op.drop_column("shift_expenses", "paid_from")
     op.drop_column("cashier_shifts", "cash_tracking_enabled")
     op.drop_column("cashier_shifts", "opening_confirmed_at")
+    op.drop_column("orders", "cash_tracking_enabled")
+    op.drop_column("orders", "digital_payment_verified_by_user_id")
+    op.drop_column("orders", "digital_payment_verified_at")

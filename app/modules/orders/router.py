@@ -6,9 +6,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.enums import OrderSource, OrderStatus, OrderType, UserRole
+from app.core.enums import OrderSource, OrderStatus, OrderType, PaymentMethod, UserRole
 from app.core.events import order_events_manager
-from app.core.exceptions import AuthenticationError, AuthorizationError
+from app.core.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.logging import logger
 from app.core.security import decode_token
 from app.modules.auth.dependencies import get_current_user, get_optional_user
@@ -79,6 +84,9 @@ async def list_orders(
     status: OrderStatus | None = None,
     order_type: OrderType | None = None,
     is_printed: bool | None = None,
+    payment_method: PaymentMethod | None = None,
+    shift_id: int | None = Query(default=None, ge=1),
+    search: str | None = Query(default=None, max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     service: OrderService = Depends(get_order_service),
@@ -88,6 +96,18 @@ async def list_orders(
     if current_user and hasattr(current_user, 'role') and current_user.role == UserRole.CASHIER:
         cashier_id = current_user.id
 
+    shift = None
+    if shift_id is not None:
+        from app.modules.shifts.models import CashierShift
+
+        if source != OrderSource.CASHIER:
+            raise ValidationError("فلتر الشيفت مخصص لطلبات الكاشير")
+        shift = await service.db.get(CashierShift, shift_id)
+        if not shift:
+            raise NotFoundError("Shift")
+        if current_user.role == UserRole.CASHIER and shift.user_id != current_user.id:
+            raise AuthorizationError("لا يمكنك عرض طلبات شيفت كاشير آخر")
+
     total, orders = await service.list_orders_paginated(
         source=source,
         status=status,
@@ -95,7 +115,10 @@ async def list_orders(
         is_printed=is_printed,
         page=page,
         page_size=page_size,
-        cashier_id=cashier_id
+        cashier_id=cashier_id,
+        shift=shift,
+        payment_method=payment_method,
+        search=search,
     )
 
     return {

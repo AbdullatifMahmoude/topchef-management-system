@@ -17,6 +17,7 @@ class ReportSummary(BaseModel):
     net_profit: Decimal
 
 class OrderReportItem(BaseModel):
+    id: int
     order_number: str
     order_type: str
     items_summary: str

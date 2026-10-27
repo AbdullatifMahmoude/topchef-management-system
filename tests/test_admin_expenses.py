@@ -75,6 +75,8 @@ def expense(*, shift_id=None, amount="25.50"):
         title="صيانة",
         amount=Decimal(amount),
         note="إصلاح بسيط",
+        paid_from="legacy_unverified",
+        receipt_reference=None,
         created_at=datetime(2026, 9, 21, 10, 0, tzinfo=UTC),
         is_deleted=False,
     )
@@ -147,6 +149,7 @@ async def test_admin_created_expense_is_charged_to_selected_cashier_shift(monkey
             amount=Decimal("75.00"),
             target_date=date(2026, 9, 21),
             shift_id=4,
+            paid_from="shift_cash",
         ),
         db=db,
         current_user=user(),
@@ -169,7 +172,7 @@ async def test_admin_expense_rejects_shift_from_other_day_or_non_cashier(wrong_d
         db.owner.role = UserRole.DELIVERY
     with pytest.raises(ValidationError):
         await router.create_admin_expense(
-            router.AdminExpenseCreate(title="صيانة", amount=Decimal(75), target_date=date(2026, 9, 21), shift_id=4),
+                router.AdminExpenseCreate(title="صيانة", amount=Decimal(75), target_date=date(2026, 9, 21), shift_id=4, paid_from="shift_cash"),
             db=db,
             current_user=user(),
         )
@@ -212,7 +215,7 @@ async def test_admin_expense_reduces_only_selected_shifts_expected_cash(monkeypa
             assert options[0]["end_time"] is not None
             assert options[1]["end_time"] is None
             saved = await router.create_admin_expense(
-                router.AdminExpenseCreate(title="صيانة", amount=Decimal(25), target_date=target, shift_id=first_id),
+                    router.AdminExpenseCreate(title="صيانة", amount=Decimal(25), target_date=target, shift_id=first_id, paid_from="shift_cash"),
                 db=db, current_user=admin,
             )
             assert saved["shift_owner"] == "Ahmed"

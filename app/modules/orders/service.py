@@ -1,5 +1,5 @@
 import contextlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -166,6 +166,21 @@ class OrderService:
                             or (order_data.loyalty_rule_id and existing.customer_id != redeeming_customer["customer_id"]):
                         raise ValidationError("مفتاح تكرار الطلب مستخدم لطلب مختلف")
                     return existing
+
+            if order_data.source == OrderSource.CASHIER:
+                from app.modules.shifts.cash_custody import active_shift
+                from app.modules.users.models import User
+
+                actor = await self.db.get(User, current_user_id) if current_user_id else None
+                if not actor or actor.role not in (UserRole.CASHIER, UserRole.ADMIN):
+                    raise ValidationError("إنشاء طلب الكاشير يتطلب حساب كاشير أو أدمن")
+                if actor.role == UserRole.CASHIER:
+                    await active_shift(self.db, actor.id)
+            if order_data.digital_payment_verified:
+                if not actor or actor.role != UserRole.CASHIER:
+                    raise ValidationError("الكاشير فقط يؤكد وصول التحويل")
+            elif order_data.source == OrderSource.CASHIER and order_data.payment_method in (PaymentMethod.INSTAPAY, PaymentMethod.WALLET):
+                raise ValidationError("تأكد من وصول تحويل إنستا أو المحفظة قبل تسجيل الطلب")
             
             # Auto-create or link customer
             if order_data.customer_phone and order_data.customer_name:
@@ -263,13 +278,17 @@ class OrderService:
             
             # 3. Create Order Object
             next_number = await self.repository.get_next_order_number()
-            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason', 'loyalty_rule_id', 'loyalty_expected_points', 'loyalty_expected_value', 'cash_received'})
+            order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason', 'loyalty_rule_id', 'loyalty_expected_points', 'loyalty_expected_value', 'cash_received', 'digital_payment_verified'})
             order = models.Order(**order_dict)
+            if order_data.digital_payment_verified:
+                order.digital_payment_verified_at = datetime.now(UTC)
+                order.digital_payment_verified_by_user_id = current_user_id
             
             # 4. Fill calculated financials and metadata
             order.order_number = getattr(order_data, 'order_number', None) or next_number
             order.order_date = getattr(order_data, 'order_date', None) or self.repository.get_business_date()
             order.order_source = order_data.source
+            order.cash_tracking_enabled = True
             order.created_by_user_id = current_user_id
             
             if order_data.source == models.OrderSource.CASHIER:
@@ -363,7 +382,10 @@ class OrderService:
         is_printed: bool | None = None,
         page: int = 1,
         page_size: int = 50,
-        cashier_id: int | None = None
+        cashier_id: int | None = None,
+        shift=None,
+        payment_method: PaymentMethod | None = None,
+        search: str | None = None,
     ) -> tuple[int, list[models.Order]]:
         return await self.repository.list_orders_paginated(
             source=source,
@@ -372,7 +394,10 @@ class OrderService:
             is_printed=is_printed,
             page=page,
             page_size=page_size,
-            cashier_id=cashier_id
+            cashier_id=cashier_id,
+            shift=shift,
+            payment_method=payment_method,
+            search=search,
         )
 
     async def list_orders(self, cashier_id: int | None = None, **kwargs) -> list[models.Order]:
@@ -473,8 +498,21 @@ class OrderService:
         async with self._transaction_scope():
             await self.db.scalar(select(models.Order.id).where(models.Order.id == order_id).with_for_update())
             order = await self.get_order(order_id)
+            if update_data.digital_payment_verified and not (
+                update_data.order_status == OrderStatus.CONFIRMED
+                and order.order_status == OrderStatus.NEW
+                and order.payment_method in (PaymentMethod.INSTAPAY, PaymentMethod.WALLET)
+            ):
+                raise ValidationError("تأكيد التحويل متاح عند قبول طلب رقمي جديد فقط")
             if update_data.order_status == OrderStatus.CANCELLED:
-                from app.modules.shifts.cash_custody import assert_financial_change_clear
+                from app.modules.shifts.cash_custody import (
+                    assert_financial_change_clear,
+                )
+                await assert_financial_change_clear(self.db, order)
+            if "delivery_person_id" in update_data.model_fields_set and update_data.delivery_person_id != order.delivery_person_id:
+                from app.modules.shifts.cash_custody import (
+                    assert_financial_change_clear,
+                )
                 await assert_financial_change_clear(self.db, order)
             pending_cancellation = await self.db.scalar(select(models.OrderCancellationRequest).where(
                 models.OrderCancellationRequest.order_id == order_id,
@@ -487,6 +525,18 @@ class OrderService:
                 raise ValidationError("طلب الإلغاء غير موجود أو تمت مراجعته")
             status_changed = bool(update_data.order_status and order.order_status != update_data.order_status)
             if update_data.order_status and order.order_status != update_data.order_status:
+                if update_data.order_status == OrderStatus.CONFIRMED and order.order_source == OrderSource.ONLINE:
+                    from app.modules.shifts.cash_custody import active_shift
+                    from app.modules.users.models import User
+
+                    actor = await self.db.get(User, current_user_id) if current_user_id else None
+                    if actor and actor.role == UserRole.CASHIER:
+                        await active_shift(self.db, actor.id)
+                    if order.payment_method in (PaymentMethod.INSTAPAY, PaymentMethod.WALLET):
+                        if not update_data.digital_payment_verified or not actor or actor.role != UserRole.CASHIER:
+                            raise ValidationError("الكاشير لازم يتأكد إن التحويل وصل قبل قبول الطلب")
+                        order.digital_payment_verified_at = datetime.now(UTC)
+                        order.digital_payment_verified_by_user_id = actor.id
                 target_rider_id = update_data.delivery_person_id or order.delivery_person_id
                 if (
                     update_data.order_status == OrderStatus.CONFIRMED
@@ -566,6 +616,7 @@ class OrderService:
                 "total_amount": order.total_amount,
                 "payment_method": order.payment_method,
                 "order_type": order.order_type,
+                "delivery_person_id": order.delivery_person_id,
                 "discount_amount": order.discount_amount,
                 "delivery_fee": order.delivery_fee,
                 "items_count": sum(i.quantity for i in order.items) if order.items else 0,
@@ -717,9 +768,47 @@ class OrderService:
 
             if (old_state["total_amount"] != order.total_amount
                     or old_state["payment_method"] != (update_data.payment_method or order.payment_method)
-                    or old_state["order_type"] != order.order_type):
-                from app.modules.shifts.cash_custody import assert_financial_change_clear
+                    or old_state["order_type"] != order.order_type
+                    or ("delivery_person_id" in provided_fields and old_state["delivery_person_id"] != update_data.delivery_person_id)):
+                from app.modules.shifts.cash_custody import (
+                    assert_financial_change_clear,
+                )
                 await assert_financial_change_clear(self.db, order)
+            target_method = update_data.payment_method or order.payment_method
+            digital_changed = (
+                old_state["payment_method"] != target_method
+                or old_state["total_amount"] != order.total_amount
+            )
+            if update_data.digital_payment_verified and target_method not in (PaymentMethod.INSTAPAY, PaymentMethod.WALLET):
+                raise ValidationError("تأكيد التحويل متاح للطلب الرقمي فقط")
+            if update_data.digital_payment_verified and order.order_status == OrderStatus.NEW:
+                raise ValidationError("أكد وصول التحويل عند قبول الطلب، بعد اكتمال بياناته")
+            if digital_changed:
+                if target_method in (PaymentMethod.INSTAPAY, PaymentMethod.WALLET) and order.order_status != OrderStatus.NEW:
+                    if not update_data.digital_payment_verified:
+                        raise ValidationError("تأكد من وصول مبلغ التحويل الجديد قبل حفظ التعديل")
+                    from app.modules.shifts.cash_custody import active_shift
+                    from app.modules.users.models import User
+
+                    actor = await self.db.get(User, current_user_id) if current_user_id else None
+                    if not actor or actor.role != UserRole.CASHIER:
+                        raise ValidationError("الكاشير فقط يؤكد وصول التحويل")
+                    await active_shift(self.db, actor.id)
+                    order.digital_payment_verified_at = datetime.now(UTC)
+                    order.digital_payment_verified_by_user_id = actor.id
+                else:
+                    order.digital_payment_verified_at = None
+                    order.digital_payment_verified_by_user_id = None
+            elif update_data.digital_payment_verified:
+                from app.modules.shifts.cash_custody import active_shift
+                from app.modules.users.models import User
+
+                actor = await self.db.get(User, current_user_id) if current_user_id else None
+                if not actor or actor.role != UserRole.CASHIER:
+                    raise ValidationError("الكاشير فقط يؤكد وصول التحويل")
+                await active_shift(self.db, actor.id)
+                order.digital_payment_verified_at = datetime.now(UTC)
+                order.digital_payment_verified_by_user_id = actor.id
             updated_order = await self.repository.update_order_full(order, update_data, changed_by_user_id=current_user_id)
             
             # Track changes
@@ -730,6 +819,13 @@ class OrderService:
                 changes.append(f"تعديل الخصم من {float(old_state['discount_amount']):.2f} إلى {float(updated_order.discount_amount):.2f}")
             if old_state["delivery_fee"] != updated_order.delivery_fee:
                 changes.append(f"تعديل خدمة التوصيل من {float(old_state['delivery_fee']):.2f} إلى {float(updated_order.delivery_fee):.2f}")
+            if old_state["payment_method"] != updated_order.payment_method:
+                changes.append(
+                    f"تعديل وسيلة الدفع من {old_state['payment_method'].value} "
+                    f"إلى {updated_order.payment_method.value}"
+                )
+            if update_data.digital_payment_verified:
+                changes.append("الكاشير أكد وصول مبلغ التحويل بعد تعديل الطلب")
             new_items_count = sum(i.quantity for i in updated_order.items) if updated_order.items else 0
             if old_state["items_count"] != new_items_count:
                 changes.append(f"تعديل الأصناف (من {old_state['items_count']} صنف إلى {new_items_count} صنف)")
