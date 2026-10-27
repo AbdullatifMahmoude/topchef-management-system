@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import desc, func, select
@@ -87,7 +88,9 @@ class ShiftsService:
             new_shift = CashierShift(
                 user_id=user_id,
                 target_date=target_date,
-                start_time=datetime.now(UTC).replace(tzinfo=None)
+                start_time=datetime.now(UTC).replace(tzinfo=None),
+                opening_cash=Decimal("300.00"),
+                cash_tracking_enabled=True,
             )
             self.db.add(new_shift)
             await self.db.flush() # To get the ID

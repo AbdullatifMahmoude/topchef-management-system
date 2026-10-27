@@ -15,6 +15,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("cashier_shifts", sa.Column("cash_tracking_enabled", sa.Boolean, nullable=False, server_default=sa.false()))
+    op.add_column("cashier_shifts", sa.Column("opening_confirmed_at", sa.DateTime(timezone=True)))
     op.add_column("shift_expenses", sa.Column("paid_from", sa.String(20), nullable=False, server_default="legacy_unverified"))
     op.add_column("shift_expenses", sa.Column("receipt_reference", sa.String(200), nullable=True))
     op.create_table(
@@ -78,3 +79,4 @@ def downgrade() -> None:
     op.drop_column("shift_expenses", "receipt_reference")
     op.drop_column("shift_expenses", "paid_from")
     op.drop_column("cashier_shifts", "cash_tracking_enabled")
+    op.drop_column("cashier_shifts", "opening_confirmed_at")

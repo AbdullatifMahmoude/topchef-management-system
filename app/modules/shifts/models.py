@@ -28,6 +28,7 @@ class CashierShift(Base):
     target_date: Mapped[date] = mapped_column(Date, index=True)
     cash_tracking_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     opening_cash: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    opening_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cash_expenses: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0, server_default="0")
     actual_closing_cash: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     closing_note: Mapped[str | None] = mapped_column(Text, nullable=True)

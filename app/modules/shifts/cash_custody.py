@@ -55,6 +55,8 @@ async def active_shift(db: AsyncSession, cashier_id: int) -> CashierShift:
     )
     if not shift:
         raise ValidationError("لا يوجد شيفت مفتوح للكاشير")
+    if getattr(shift, "cash_tracking_enabled", False) and getattr(shift, "opening_confirmed_at", None) is None:
+        raise ValidationError("أكد عدّ عهدة بداية الشيفت قبل تسجيل التحصيل")
     return shift
 
 
