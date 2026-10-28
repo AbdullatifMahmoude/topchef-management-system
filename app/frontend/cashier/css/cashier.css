@@ -1950,7 +1950,7 @@ nav.cashier_nav {
   .cashier_nav .nav_logo { grid-column:1; grid-row:1; }
   .cashier_nav .nav_account { grid-column:2; grid-row:1; }
   .cashier_nav .nav_tabs { grid-column:1/-1; grid-row:2; justify-self:stretch; order:initial; }
-  .cashier_identity,.cashier_nav .shift_cash_btn { display:none; }
+  .cashier_identity { display:none; }
   .cashier_nav .nav_tab { min-height:34px; padding-inline:10px; }
 }
 @media (max-width:430px) {

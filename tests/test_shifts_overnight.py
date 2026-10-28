@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -212,3 +213,42 @@ async def test_closed_cashier_shift_is_not_reopened_for_new_float():
     assert created.opening_cash == 300
     db.add.assert_called_once_with(created)
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_admin_close_shift_endpoint():
+    from app.modules.shifts.router import AdminForceCloseShift, admin_close_shift
+    from app.modules.users.models import User
+    from app.core.enums import UserRole
+
+    admin = User(id=1, username="admin", role=UserRole.ADMIN)
+    shift = SimpleNamespace(
+        id=5, end_time=None, actual_closing_cash=None, closing_note=None,
+        opening_confirmed_at=None, target_date=date(2026, 10, 27), cash_tracking_enabled=True,
+    )
+    db = AsyncMock()
+    db.scalar.return_value = shift
+    payload = AdminForceCloseShift(actual_closing_cash=Decimal("450.00"), closing_note="Closed by admin")
+
+    res = await admin_close_shift(shift_id=5, payload=payload, db=db, current_user=admin, redis=None)
+    assert res["shift_id"] == 5
+    assert shift.end_time is not None
+    assert shift.actual_closing_cash == Decimal("450.00")
+    assert shift.closing_note.startswith("إغلاق إداري بواسطة admin")
+    assert "Closed by admin" in shift.closing_note
+    db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admin_close_rejected_for_cashier():
+    from app.core.exceptions import AuthorizationError
+    from app.modules.shifts.router import AdminForceCloseShift, admin_close_shift
+    from app.modules.users.models import User
+    from app.core.enums import UserRole
+
+    cashier = User(id=2, username="c", role=UserRole.CASHIER)
+    db = AsyncMock()
+    with pytest.raises(AuthorizationError):
+        await admin_close_shift(shift_id=5, payload=AdminForceCloseShift(actual_closing_cash=Decimal("1")),
+                                db=db, current_user=cashier, redis=None)
+    db.commit.assert_not_awaited()

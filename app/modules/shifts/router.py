@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.core.database import get_db
-from app.core.enums import OrderStatus, OrderType, PaymentMethod, UserRole
+from app.core.enums import OrderSource, OrderStatus, OrderType, PaymentMethod, UserRole
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.core.redis import get_redis
 from app.modules.auth.dependencies import get_current_user
@@ -80,6 +80,11 @@ class ShiftCashAdjustmentCreate(BaseModel):
     amount: Decimal = Field(max_digits=12, decimal_places=2)
     reason: str = Field(min_length=3, max_length=500)
     idempotency_key: str = Field(min_length=8, max_length=100)
+
+
+class AdminForceCloseShift(BaseModel):
+    actual_closing_cash: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    closing_note: str | None = Field(default=None, max_length=500)
 
 
 def _cash_movement_payload(row: OrderCashMovement) -> dict:
@@ -279,6 +284,41 @@ async def confirm_shift_close(
         "count_difference": float(snapshot.admin_count - snapshot.cashier_count),
         "confirmed_at": snapshot.confirmed_at.isoformat(),
     }
+
+
+@router.post("/{shift_id}/admin-close")
+async def admin_close_shift(
+    shift_id: int, payload: AdminForceCloseShift,
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user),
+    redis = Depends(get_redis),
+) -> Any:
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("الإدارة فقط يمكنها إغلاق شيفت الكاشير")
+    shift = await db.scalar(select(CashierShift).where(CashierShift.id == shift_id).with_for_update())
+    if not shift:
+        raise NotFoundError("Shift")
+    if shift.end_time is not None:
+        raise ValidationError("الشيفت مغلق بالفعل")
+    admin_name = current_user.full_name or current_user.username
+    note = (payload.closing_note or "").strip()
+    shift.actual_closing_cash = payload.actual_closing_cash
+    # The count was made by the admin, not the cashier; keep that visible on the shift.
+    shift.closing_note = f"إغلاق إداري بواسطة {admin_name} — العدّ من الإدارة" + (f": {note}" if note else "")
+    if not shift.opening_confirmed_at:
+        shift.opening_confirmed_at = datetime.now(UTC)
+    uses_ledger = await ShiftsService(db).shift_uses_cash_ledger(shift)
+    if uses_ledger:
+        shift.cash_tracking_enabled = True
+    shift.end_time = datetime.now(UTC).replace(tzinfo=None)
+    await db.flush()
+    await ShiftsService(db, redis)._freeze_shift(shift)
+    await db.commit()
+    remaining = await db.scalar(select(func.count(CashierShift.id)).where(CashierShift.end_time.is_(None))) or 0
+    if not remaining:
+        from app.modules.settings.service import SettingsService
+        await SettingsService(db, redis).toggle_web_orders(False)
+        await db.commit()
+    return {"message": "Shift closed successfully by admin", "shift_id": shift.id}
 
 
 @router.post("/{shift_id}/post-close-adjustments")
