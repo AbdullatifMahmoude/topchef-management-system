@@ -201,13 +201,7 @@ function openShiftDrawer(id) {
       </form>`
     : "";
 
-  const confirmation = selectedShift.status !== "active" && selectedShift.close_snapshot_at
-    ? selectedShift.admin_confirmed_at
-      ? `<section class="shift_close_approved" role="status"><div><span>حالة التسليم</span><strong>تم اعتماد استلام الشيفت من الإدارة</strong><small>${shiftTime(selectedShift.admin_confirmed_at)}</small></div><div class="shift_close_approved_counts"><p><span>عدّ الكاشير</span><strong>${shiftMoney(selectedShift.actual_closing_cash)}</strong></p><p><span>عدّ الإدارة</span><strong>${shiftMoney(selectedShift.admin_count)}</strong></p></div></section>`
-      : selectedShift.actual_closing_cash == null
-        ? `<p class="shift_close_pending">الإقفال غير مكتمل: الكاشير لم يسجل عدّ النقد بعد.</p>`
-        : `<form class="shift_close_confirmation" id="shiftCloseConfirmationForm"><header><span class="shift_close_badge">مطلوب مراجعة الإدارة</span><h3>اعتماد استلام الشيفت</h3></header><p class="shift_close_intro">أعدّ النقد بنفسك، ثم سجّل نتيجة العدّ هنا. الرقم المسجل من الكاشير ظاهر للمقارنة فقط.</p><div class="shift_close_counts"><div class="shift_close_cashier_count"><span>عدّ الكاشير</span><strong>${shiftMoney(selectedShift.actual_closing_cash)}</strong><small>المبلغ الذي سجله عند الإقفال</small></div><label class="shift_close_admin_count">عدّ الإدارة<input name="admin_count" type="number" min="0" step="0.01" inputmode="decimal" placeholder="اكتب المبلغ بعد العدّ" required></label></div><label class="shift_close_note">سبب اختلاف العدّ <small>مطلوب فقط لو عدّ الإدارة مختلف عن عدّ الكاشير</small><textarea name="note" maxlength="500" rows="2" placeholder="اكتب سبب الفرق باختصار"></textarea></label><p class="shift_close_help">لو العدّين متطابقين، اكتب نفس المبلغ في خانة الإدارة واترك الملاحظة فارغة.</p><button type="submit">اعتماد بعد المراجعة</button></form>`
-    : "";
+
 
   document.getElementById("shiftDrawerContent").innerHTML = `
     <div class="drawer_shift_status">
@@ -249,11 +243,9 @@ function openShiftDrawer(id) {
 
     ${selectedShift.closing_note ? `<p class="shift_closing_note">ملاحظة التسليم: ${shiftEscape(selectedShift.closing_note)}</p>` : ""}
     ${adminForceCloseSection}
-    ${confirmation}
     ${selectedShift.status !== "active" ? `<section class="shift_additions"><h3>تسويات ما بعد الإقفال</h3><ul>${additionHistory}</ul>${additionForm}</section>` : ""}`;
 
   document.getElementById("shiftCashAdditionForm")?.addEventListener("submit", submitShiftCashAddition);
-  document.getElementById("shiftCloseConfirmationForm")?.addEventListener("submit", submitShiftCloseConfirmation);
   document.getElementById("adminForceCloseForm")?.addEventListener("submit", submitAdminForceClose);
   const drawer = document.getElementById("shiftDetailsDrawer");
   drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
