@@ -11,7 +11,7 @@ from hashlib import sha256
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.business_calendar import EGYPT_TZ, get_current_business_date
+from app.core.business_calendar import ORDER_STORAGE_TZ, get_current_business_date
 from app.core.enums import OrderSource, OrderStatus, OrderType, PaymentMethod, UserRole
 from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from app.modules.orders.models import Order
@@ -66,7 +66,7 @@ async def active_shift(db: AsyncSession, cashier_id: int) -> CashierShift:
 
 
 def shift_local_time(value: datetime) -> datetime:
-    return value.replace(tzinfo=value.tzinfo or UTC).astimezone(EGYPT_TZ).replace(tzinfo=None)
+    return value.replace(tzinfo=value.tzinfo or UTC).astimezone(ORDER_STORAGE_TZ).replace(tzinfo=None)
 
 
 async def legacy_order_in_current_shift(db: AsyncSession, order: Order) -> bool:
@@ -85,7 +85,7 @@ async def legacy_order_in_current_shift(db: AsyncSession, order: Order) -> bool:
                      and not is_approved_cutover_shift(shift)):
         return False
     start_local = shift_local_time(shift.start_time)
-    now_local = datetime.now(EGYPT_TZ).replace(tzinfo=None)
+    now_local = datetime.now(ORDER_STORAGE_TZ).replace(tzinfo=None)
     if not start_local <= order.created_at < now_local:
         return False
     mixed_order_id = await db.scalar(select(Order.id).where(

@@ -5,7 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import Date, Integer, case, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.business_calendar import get_current_business_date
+from app.core.business_calendar import get_current_business_date, order_time_in_cairo
 from app.core.enums import OrderSource, OrderStatus, OrderType
 from app.core.exceptions import ValidationError
 from app.modules.menu.models import Product
@@ -209,7 +209,7 @@ async def get_report_orders(
             items_summary="",
             total_amount=row.total_amount,
             order_date=row.order_date,
-            created_at_time=row.created_at.strftime("%I:%M %p") if row.created_at else "",
+            created_at_time=order_time_in_cairo(row.created_at).strftime("%I:%M %p") if row.created_at else "",
             status="cancelled" if "CANCELLED" in status else "completed",
         ))
     return report_orders
@@ -284,26 +284,29 @@ async def get_revenue_trend(db: AsyncSession, start_date: date, end_date: date,
 
 async def get_activity_breakdown(db: AsyncSession, start_date: date, end_date: date,
                                  shift: CashierShift | None = None) -> list[schemas.ActivityBreakdownPoint]:
+    # Group by storage date and hour before converting; that keeps the query
+    # bounded by days × 24 while retaining the offset for DST transitions.
+    day_expr = func.date(Order.created_at)
     hour_expr = cast(func.extract("hour", Order.created_at), Integer)
     stmt = (
-        select(Order.order_type, hour_expr.label("hour"), func.count(Order.id).label("count"))
+        select(Order.order_type, day_expr.label("day"), hour_expr.label("hour"), func.count(Order.id).label("count"))
         .filter(
             *order_report_date_filter(start_date, end_date, shift),
             Order.is_deleted == False,
             Order.order_status != OrderStatus.CANCELLED,
             *order_shift_filter(shift),
         )
-        .group_by(Order.order_type, hour_expr)
+        .group_by(Order.order_type, day_expr, hour_expr)
     )
-    rows = (await db.execute(stmt)).all()
-    return [
-        schemas.ActivityBreakdownPoint(
-            order_type=normalize_order_type(row.order_type),
-            hour=int(row.hour or 0),
-            count=row.count or 0,
-        )
-        for row in rows
-    ]
+    totals = {}
+    for row in (await db.execute(stmt)).all():
+        storage_day = date.fromisoformat(row.day) if isinstance(row.day, str) else row.day
+        storage_time = datetime.combine(storage_day, datetime.min.time()).replace(hour=int(row.hour or 0))
+        hour = order_time_in_cairo(storage_time).hour
+        key = (normalize_order_type(row.order_type), hour)
+        totals[key] = totals.get(key, 0) + (row.count or 0)
+    return [schemas.ActivityBreakdownPoint(order_type=kind, hour=hour, count=count)
+            for (kind, hour), count in totals.items()]
 
 
 async def get_report_expenses(db: AsyncSession, start_date: date, end_date: date,

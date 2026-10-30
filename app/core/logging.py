@@ -1,7 +1,19 @@
 import logging
 import sys
+import time
 
 from pythonjsonlogger import json
+
+
+def make_json_formatter():
+    formatter = json.JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%SZ",
+        rename_fields={"asctime": "timestamp", "levelname": "level"},
+        json_ensure_ascii=False # Support Arabic in logs
+    )
+    formatter.converter = time.gmtime
+    return formatter
 
 
 def setup_logging():
@@ -12,12 +24,7 @@ def setup_logging():
     else:
         loghandler = logging.StreamHandler(stream)
     
-    formatter = json.JsonFormatter(
-        "%(asctime)s %(levelname)s %(name)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        rename_fields={"asctime": "timestamp", "levelname": "level"},
-        json_ensure_ascii=False # Support Arabic in logs
-    )
+    formatter = make_json_formatter()
     loghandler.setFormatter(formatter)
 
     logger = logging.getLogger()

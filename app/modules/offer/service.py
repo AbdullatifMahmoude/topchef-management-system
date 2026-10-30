@@ -1,7 +1,8 @@
 import contextlib
 import json
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,7 +70,7 @@ class OfferService:
                 data = json.loads(cached)
                 offer = OfferResponse(**data)
                 # TTL check against logical expiration
-                cairo_now = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+                cairo_now = datetime.now(ZoneInfo("Africa/Cairo")).replace(tzinfo=None)
                 if offer.is_active and offer.valid_to < cairo_now:
                     return None
                 return offer
@@ -206,7 +207,7 @@ class OfferService:
         return response
 
     async def get_analytics(self) -> OfferAnalyticsResponse:
-        egypt_tz = timezone(timedelta(hours=3))
+        egypt_tz = ZoneInfo("Africa/Cairo")
         local_now = datetime.now(egypt_tz)
         start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
         start_utc = start_local.astimezone(UTC).replace(tzinfo=None)
@@ -526,7 +527,7 @@ class OfferService:
                     return time(int(hours), int(minutes))
                 # Happy-hour windows follow the normal wall clock; they are not
                 # shifted by the restaurant's business-day/shift cutoff.
-                cairo_tz = timezone(timedelta(hours=3))
+                cairo_tz = ZoneInfo("Africa/Cairo")
                 now_time = datetime.now(cairo_tz).time().replace(second=0, microsecond=0, tzinfo=None)
                 start_time = parse_offer_time(rules["start_time"])
                 end_time = parse_offer_time(rules["end_time"])

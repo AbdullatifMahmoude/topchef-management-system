@@ -1,4 +1,6 @@
 import contextlib
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -9,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.business_calendar import get_current_business_date, is_weekly_holiday
 from app.core.enums import OrderSource, OrderStatus, OrderType, PaymentMethod, UserRole
 from app.core.events import order_events_manager
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import IdempotencyError, NotFoundError, ValidationError
 from app.core.protocols import (
     CacheStore,
     OfferServiceInterface,
@@ -118,6 +120,36 @@ class OrderService:
         # Linking a customer is server-owned state; never write it back into the caller's payload.
         order_data = order_data.model_copy(deep=True)
         async with self._transaction_scope():
+            cashier_attempt = None
+            if order_data.source == OrderSource.CASHIER and order_data.idempotency_key:
+                if not current_user_id:
+                    raise ValidationError("إنشاء طلب الكاشير يتطلب حساب كاشير أو أدمن")
+                canonical = order_data.model_dump(mode="json", exclude={"idempotency_key"})
+                digest = hashlib.sha256(json.dumps(canonical, sort_keys=True, ensure_ascii=False,
+                                                   separators=(",", ":")).encode()).hexdigest()
+                dialect = self.db.get_bind().dialect.name
+                if dialect == "postgresql":
+                    from sqlalchemy.dialects.postgresql import insert
+                elif dialect == "sqlite":
+                    from sqlalchemy.dialects.sqlite import insert
+                else:
+                    raise RuntimeError("Unsupported database for cashier order idempotency")
+                statement = insert(models.CashierOrderAttempt).values(
+                    key=order_data.idempotency_key, cashier_id=current_user_id, request_hash=digest,
+                ).on_conflict_do_nothing(index_elements=["key"]).returning(models.CashierOrderAttempt.key)
+                claimed = (await self.db.execute(statement)).scalar_one_or_none()
+                if claimed is None:
+                    cashier_attempt = await self.db.get(models.CashierOrderAttempt, order_data.idempotency_key)
+                    if (not cashier_attempt or cashier_attempt.cashier_id != current_user_id
+                            or cashier_attempt.request_hash != digest or not cashier_attempt.order_id):
+                        raise IdempotencyError("مفتاح الطلب مستخدم لبيانات مختلفة أو لم تكتمل مراجعته")
+                    return await self.get_order(cashier_attempt.order_id)
+                # Pre-upgrade requests have no fingerprint: never guess whether
+                # they are the same request or silently create another order.
+                if await self.repository.get_by_idempotency_key(order_data.idempotency_key):
+                    raise IdempotencyError("الطلب قديم ويحتاج مراجعة قبل إعادة المحاولة")
+                cashier_attempt = await self.db.get(models.CashierOrderAttempt, order_data.idempotency_key)
+
             if is_weekly_holiday(get_current_business_date()):
                 raise ValidationError("المطعم مغلق يوم الجمعة للإجازة الأسبوعية ولا يمكن إنشاء طلبات جديدة")
 
@@ -277,7 +309,8 @@ class OrderService:
             pricing_res = await self.pricing_service.calculate_price(pricing_req)
             
             # 3. Create Order Object
-            next_number = await self.repository.get_next_order_number()
+            order_business_date = getattr(order_data, "order_date", None) or self.repository.get_business_date()
+            next_number = await self.repository.get_next_order_number(order_business_date)
             order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason', 'loyalty_rule_id', 'loyalty_expected_points', 'loyalty_expected_value', 'cash_received', 'digital_payment_verified'})
             order = models.Order(**order_dict)
             if order_data.digital_payment_verified:
@@ -286,7 +319,7 @@ class OrderService:
             
             # 4. Fill calculated financials and metadata
             order.order_number = getattr(order_data, 'order_number', None) or next_number
-            order.order_date = getattr(order_data, 'order_date', None) or self.repository.get_business_date()
+            order.order_date = order_business_date
             order.order_source = order_data.source
             order.cash_tracking_enabled = True
             order.created_by_user_id = current_user_id
@@ -340,6 +373,9 @@ class OrderService:
             
             # 7. Save and Refresh
             order = await self.repository.save_in_transaction(order)
+            if cashier_attempt is not None:
+                cashier_attempt.order_id = order.id
+                await self.db.flush()
             if order_data.cash_received:
                 from app.modules.shifts.cash_custody import record_customer_collection
                 from app.modules.users.models import User

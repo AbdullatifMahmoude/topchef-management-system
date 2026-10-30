@@ -9,6 +9,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.business_calendar import ORDER_STORAGE_TZ
 from app.core.enums import OrderStatus
 from app.core.exceptions import AuthenticationError, ValidationError
 from app.modules.customer.models import Customer, CustomerDevice, CustomerPointLedger
@@ -160,7 +161,7 @@ async def reverse_order_points(db: AsyncSession, order_id: int) -> bool:
 
 
 async def customer_points_balance(db: AsyncSession, customer_id: int, *, now: datetime | None = None) -> int:
-    start_utc, end_utc, start_local, end_local = points_month_bounds(now)
+    start_utc, end_utc, _, _ = points_month_bounds(now)
     value = await db.scalar(select(func.coalesce(func.sum(CustomerPointLedger.points), 0)).where(
         CustomerPointLedger.customer_id == customer_id,
         CustomerPointLedger.reversed_at.is_(None),
@@ -174,8 +175,8 @@ async def customer_points_balance(db: AsyncSession, customer_id: int, *, now: da
             and_(Order.loyalty_reserved_at >= start_utc.replace(tzinfo=None),
                  Order.loyalty_reserved_at < end_utc.replace(tzinfo=None)),
             and_(Order.loyalty_reserved_at.is_(None),
-                 Order.created_at >= start_local.replace(tzinfo=None),
-                 Order.created_at < end_local.replace(tzinfo=None)),
+                 Order.created_at >= start_utc.astimezone(ORDER_STORAGE_TZ).replace(tzinfo=None),
+                 Order.created_at < end_utc.astimezone(ORDER_STORAGE_TZ).replace(tzinfo=None)),
         ),
     ))
     return max(0, int(value or 0) - int(spent or 0))

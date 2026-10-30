@@ -878,7 +878,7 @@
           // التحقق من حالة المصادقة (401)
           if (response.status === 401) {
             console.warn("Unauthorized (401). Logging out...");
-            localStorage.clear();
+            Object.keys(localStorage).filter(key => !key.startsWith("cashier_pending_order:")).forEach(key => localStorage.removeItem(key));
             window.location.replace("index.html");
             return new Promise(() => { }); // إيقاف التسلسل
           }
@@ -954,7 +954,7 @@
         } catch (err) {
           console.warn("Logout error:", err);
         } finally {
-          localStorage.clear();
+          Object.keys(localStorage).filter(key => !key.startsWith("cashier_pending_order:")).forEach(key => localStorage.removeItem(key));
           window.location.replace("index.html");
         }
       });

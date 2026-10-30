@@ -1,7 +1,10 @@
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 BUSINESS_DAY_START_HOUR = 7
-EGYPT_TZ = timezone(timedelta(hours=3))
+EGYPT_TZ = ZoneInfo("Africa/Cairo")
+# Existing order timestamps are naive UTC+03:00, even in winter.
+ORDER_STORAGE_TZ = timezone(timedelta(hours=3))
 WEEKLY_HOLIDAY_WEEKDAY = 4  # Friday (Monday is 0)
 
 
@@ -17,6 +20,16 @@ def business_day_start(target_date: date) -> datetime:
     return datetime.combine(target_date, datetime.min.time()).replace(
         hour=BUSINESS_DAY_START_HOUR
     )
+
+
+def business_day_start_in_order_storage(target_date: date) -> datetime:
+    """Represent 07:00 Cairo in the existing fixed-offset order time scale."""
+    return business_day_start(target_date).replace(tzinfo=EGYPT_TZ).astimezone(ORDER_STORAGE_TZ).replace(tzinfo=None)
+
+
+def order_time_in_cairo(value: datetime) -> datetime:
+    """Convert a legacy order timestamp to an unambiguous Cairo instant."""
+    return value.replace(tzinfo=ORDER_STORAGE_TZ).astimezone(EGYPT_TZ)
 
 
 def is_weekly_holiday(target_date: date | None = None) -> bool:

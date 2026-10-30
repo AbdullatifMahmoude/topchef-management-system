@@ -34,6 +34,17 @@ class DailyOrderCounter(Base):
     last_value = Column(Integer, nullable=False, default=0)
 
 
+class CashierOrderAttempt(Base):
+    """Immutable request identity; row and order commit in one transaction."""
+    __tablename__ = "cashier_order_attempts"
+
+    key = Column(String(100), primary_key=True)
+    cashier_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="RESTRICT"), nullable=True, unique=True)
+
+
+
 class Order(Base):
     __tablename__ = "orders"
 

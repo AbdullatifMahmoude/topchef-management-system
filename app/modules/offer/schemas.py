@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -19,7 +20,7 @@ class OfferBase(BaseModel):
     usage_limit: int | None = Field(None, gt=0)
     usage_per_user: int | None = Field(None, gt=0)
     is_active: bool = True
-    valid_from: datetime = Field(default_factory=datetime.utcnow)
+    valid_from: datetime = Field(default_factory=lambda: datetime.now(ZoneInfo("Africa/Cairo")).replace(tzinfo=None))
     valid_to: datetime
     product_ids: list[int] = Field(default_factory=list)
     rules: dict[str, Any] = Field(default_factory=dict)
@@ -30,7 +31,7 @@ class OfferBase(BaseModel):
         # Offers use normal midnight-to-midnight calendar time, not the business-day
         # restaurant business-day cutoff. Store the Cairo wall clock as naive.
         if value.tzinfo is not None:
-            value = value.astimezone(timezone(timedelta(hours=3)))
+            value = value.astimezone(ZoneInfo("Africa/Cairo"))
         return value.replace(tzinfo=None)
 
 class OfferCreate(OfferBase):
@@ -57,7 +58,7 @@ class OfferUpdate(BaseModel):
     @classmethod
     def use_normal_calendar_time(cls, value: datetime | None) -> datetime | None:
         if value is not None and value.tzinfo is not None:
-            value = value.astimezone(timezone(timedelta(hours=3)))
+            value = value.astimezone(ZoneInfo("Africa/Cairo"))
         return value.replace(tzinfo=None) if value is not None else None
 
 class OfferResponse(OfferBase):

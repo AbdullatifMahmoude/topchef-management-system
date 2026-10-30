@@ -6,9 +6,11 @@ from sqlalchemy import desc, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.business_calendar import business_day_start, get_current_business_date
+from app.core.business_calendar import (
+    business_day_start_in_order_storage,
+    get_current_business_date,
+)
 from app.core.enums import OrderSource, OrderStatus, OrderType, PaymentMethod
-from app.core.exceptions import ValidationError
 from app.core.logging import logger
 from app.modules.orders.models import Order, OrderStatusHistory
 from app.modules.shifts.models import (
@@ -198,8 +200,8 @@ class ShiftsService:
         # Fetch orders for the day to compute stats
         # We define business day boundaries in LOCAL naive time because Order.created_at is stored in LOCAL naive time.
         # From 7 AM target_date to 6:59:59 AM next day
-        start_local = business_day_start(target_date)
-        end_local = start_local + timedelta(days=1)
+        start_local = business_day_start_in_order_storage(target_date)
+        end_local = business_day_start_in_order_storage(target_date + timedelta(days=1))
 
         def shift_time_to_local(dt):
             if not dt:
@@ -233,6 +235,7 @@ class ShiftsService:
             Order.cash_tracking_enabled,
         ).where(
             or_(
+                Order.order_date == target_date,
                 (Order.created_at >= start_local) & (Order.created_at < report_end_local),
                 Order.id.in_(select(OrderStatusHistory.order_id).where(
                     OrderStatusHistory.status == OrderStatus.CONFIRMED,

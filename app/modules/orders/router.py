@@ -220,8 +220,9 @@ async def get_rider_stats(
     from sqlalchemy.orm import selectinload
 
     from app.core.business_calendar import (
-        EGYPT_TZ,
+        ORDER_STORAGE_TZ,
         get_current_business_date,
+        order_time_in_cairo,
     )
     from app.core.business_calendar import (
         business_day_start as get_business_day_start,
@@ -235,7 +236,7 @@ async def get_rider_stats(
     # browser/device timestamps or page-limited frontend lists.
     business_date = get_current_business_date()
     business_day_start = get_business_day_start(business_date)
-    now = datetime.now(EGYPT_TZ).replace(tzinfo=None)
+    now = datetime.now(ORDER_STORAGE_TZ).replace(tzinfo=None)
     users_result = await db.execute(
         select(User)
         .where(and_(User.role == UserRole.DELIVERY, User.is_deleted == False))
@@ -325,7 +326,7 @@ async def get_rider_stats(
                 "delivery_fee": float(order.delivery_fee or 0),
                 "rider_id": order.delivery_person_id,
                 "rider_name": order.delivery_person_name,
-                "created_at": order.created_at.isoformat(),
+                "created_at": order_time_in_cairo(order.created_at).isoformat(),
                 "age_minutes": age_minutes,
             })
 

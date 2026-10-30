@@ -23,28 +23,28 @@ async function printReceipt(orderData) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 1800);
 
-  fetch(`${TOPCHEF_PRINT_AGENT_URL}/api/print`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ order: printOrder, receipt_type: "customer" }),
-    targetAddressSpace: "loopback",
-    signal: controller.signal,
-  })
-    .then(async (response) => {
-      clearTimeout(timeout);
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.detail || `Print Agent returned ${response.status}`);
-      }
-      console.debug("Invoice queued in Top Chef Print Agent.");
-    })
-    .catch((error) => {
-      clearTimeout(timeout);
-      console.error("Top Chef Print Agent is unavailable.", error);
-      const message = "تطبيق Top Chef Print Agent غير مُشغّل أو لم يتم اختيار طابعة";
-      if (typeof showToast === "function") showToast(message, "error");
-      else alert(message);
+  try {
+    const response = await fetch(`${TOPCHEF_PRINT_AGENT_URL}/api/print`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: printOrder, receipt_type: "customer" }),
+      targetAddressSpace: "loopback",
+      signal: controller.signal,
     });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `Print Agent returned ${response.status}`);
+    }
+    return true;
+  } catch (error) {
+    console.error("Top Chef Print Agent is unavailable.", error);
+    const message = "تطبيق Top Chef Print Agent غير مُشغّل أو لم يتم اختيار طابعة";
+    if (typeof showToast === "function") showToast(message, "error");
+    else alert(message);
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 // End Print Agent bridge.
 
@@ -77,7 +77,7 @@ async function apiFetch(path, options = {}) {
       console.warn(
         "Session expired or unauthorized (401). Redirecting to login...",
       );
-      localStorage.clear();
+      ["token", "token_type", "user_id", "username", "role", "user"].forEach((key) => localStorage.removeItem(key));
       window.location.replace("../index.html");
       return response;
     }
@@ -223,6 +223,10 @@ async function init() {
       `<p style="color:#e40411;text-align:center;grid-column:1/-1">حدث خطأ في تحميل البيانات</p>`;
   } finally {
     showGlobalLoader(false);
+    try {
+      const pending = readPendingCashierOrder();
+      if (pending) showConfirmModal({ grandTotal: pending.grandTotal, orderType: pending.payload.order_type });
+    } catch (error) { showToast(error.message, "error"); }
   }
 }
 
@@ -601,13 +605,22 @@ function appliedOfferCardHtml(order) {
   </div>`;
 }
 
+function cairoWallTimeNow() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}:${values.second}`;
+}
+
 function getActiveOffersForProduct(productId) {
-  const now = Date.now();
+  const now = cairoWallTimeNow();
   const product = products.find((item) => Number(item.id) === Number(productId));
   return activeOffers.filter((offer) => {
     if (!offer || !offer.is_active) return false;
-    const starts = offer.valid_from ? new Date(offer.valid_from).getTime() : 0;
-    const ends = offer.valid_to ? new Date(offer.valid_to).getTime() : Infinity;
+    const starts = offer.valid_from ? offer.valid_from.slice(0, 19) : "";
+    const ends = offer.valid_to ? offer.valid_to.slice(0, 19) : "\uffff";
     if (now < starts || now > ends) return false;
     if (offer.usage_limit && Number(offer.current_usage || 0) >= Number(offer.usage_limit)) return false;
     const rules = offer.rules || {};
@@ -636,11 +649,11 @@ function formatProductOffer(offer) {
 }
 
 function currentlyAvailableOffers() {
-  const now = Date.now();
+  const now = cairoWallTimeNow();
   return activeOffers.filter((offer) => {
     if (!offer?.is_active) return false;
-    if (offer.valid_from && now < new Date(offer.valid_from).getTime()) return false;
-    if (offer.valid_to && now > new Date(offer.valid_to).getTime()) return false;
+    if (offer.valid_from && now < offer.valid_from.slice(0, 19)) return false;
+    if (offer.valid_to && now > offer.valid_to.slice(0, 19)) return false;
     if (offer.usage_limit && Number(offer.current_usage || 0) >= Number(offer.usage_limit)) return false;
     if (offer.discount_type === "happy_hour") {
       const rules = offer.rules || {}, start = String(rules.start_time || "").slice(0, 5), end = String(rules.end_time || "").slice(0, 5);
@@ -767,10 +780,46 @@ function filterLocalProducts(term) {
   renderItems();
 }
 
+// Keep the exact submitted payload until the server confirms the result.
+function pendingCashierOrderStorageKey() {
+  const userId = localStorage.getItem("user_id");
+  if (!userId) throw new Error("تعذر تحديد حساب الكاشير لاستعادة الطلب");
+  return `cashier_pending_order:${userId}`;
+}
+
+function readPendingCashierOrder() {
+  const raw = localStorage.getItem(pendingCashierOrderStorageKey());
+  if (!raw) return null;
+  try {
+    const pending = JSON.parse(raw);
+    if (pending?.payload?.idempotency_key && Array.isArray(pending.payload.items)
+        && Number.isFinite(pending.grandTotal)) return pending;
+  } catch (_) { /* Never silently discard an uncertain order. */ }
+  throw new Error("تعذر قراءة الطلب المعلق؛ راجع الإدارة قبل تسجيل طلب جديد");
+}
+
+function writePendingCashierOrder(pending) {
+  localStorage.setItem(pendingCashierOrderStorageKey(), JSON.stringify(pending));
+}
+
+function clearPendingCashierOrder() {
+  localStorage.removeItem(pendingCashierOrderStorageKey());
+}
+
 let _confirmOrderInFlight = false;
 
 async function confirmOrder() {
   if (_confirmOrderInFlight) return;
+  try {
+    const pending = readPendingCashierOrder();
+    if (pending) {
+      showConfirmModal({ grandTotal: pending.grandTotal, orderType: pending.payload.order_type });
+      return;
+    }
+  } catch (error) {
+    showToast(error.message, "error");
+    return;
+  }
   if (cart.length === 0) return;
 
   if (!orderType) {
@@ -874,6 +923,10 @@ async function confirmOrder() {
 }
 
 function showConfirmModal(orderData) {
+  let pending;
+  try { pending = readPendingCashierOrder(); }
+  catch (error) { showToast(error.message, "error"); return; }
+  const recoveringPrior = Boolean(pending);
   const old = document.getElementById("confirm_modal");
   if (old) old.remove();
 
@@ -893,7 +946,8 @@ function showConfirmModal(orderData) {
 
   box.innerHTML = `
     <h2 style="color:var(--color-primary);font-size:18px;margin:0;">حفظ الطلب</h2>
-    <p style="color:var(--color-text);font-size:14px;margin:0;">اختر حفظ الطلب مع الطباعة أو الحفظ فقط.</p>
+    <p style="color:var(--color-text);font-size:14px;margin:0;">${pending ? "طلب سابق لم تتأكد نتيجته؛ ستُعاد المحاولة بنفس بياناته. راجع الطلب قبل أي بيع جديد." : "اختر حفظ الطلب مع الطباعة أو الحفظ فقط."}</p>
+    ${pending ? `<p>الأصناف: ${pending.payload.items.map(item => `${Number(item.quantity)} × ${escapeOrderText(products.find(p => Number(p.id) === Number(item.product_id))?.product_name || `صنف #${Number(item.product_id)}`)}`).join("، ")}</p>` : ""}
     <div style="font-size:24px;font-weight:900;color:var(--color-primary);padding:10px 0;border-top:1px dashed var(--color-primary-border);border-bottom:1px dashed var(--color-primary-border);">
       ${orderData.grandTotal.toFixed(2)} ج.م
     </div>
@@ -920,7 +974,7 @@ function showConfirmModal(orderData) {
   document.body.appendChild(overlay);
 
   const submitOrder = async (shouldPrint) => {
-    if (["instapay", "wallet"].includes(selectedPaymentMethod) && !document.getElementById("digitalPaymentVerified")?.checked) {
+    if (!pending && ["instapay", "wallet"].includes(selectedPaymentMethod) && !document.getElementById("digitalPaymentVerified")?.checked) {
       showToast("تأكد إن التحويل وصل لحساب المطعم وحدد خانة التأكيد", "error");
       return;
     }
@@ -935,7 +989,12 @@ function showConfirmModal(orderData) {
     });
     btn.textContent = shouldPrint ? "جاري الحفظ والطباعة..." : "جاري الحفظ...";
 
+    let firstAttempt = false;
     try {
+      let payload;
+      if (pending) {
+        payload = pending.payload;
+      } else {
       const items = cart.map((c) => {
         let prodId = c.item.id;
         if (typeof prodId === "string" && prodId.includes("_")) {
@@ -1017,7 +1076,7 @@ function showConfirmModal(orderData) {
       const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
       const discountReason = document.getElementById("discount_reason")?.value || null;
 
-      const payload = {
+      payload = {
         customer_id: resolvedCustomerId || null,
         customer_phone: deliveryCustomerInfo.phone || null,
         customer_name: deliveryCustomerInfo.name || null,
@@ -1029,8 +1088,7 @@ function showConfirmModal(orderData) {
         customer_notes: customerNotes,
         internal_notes: null,
         items: items,
-        idempotency_key:
-          Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        idempotency_key: crypto.randomUUID(),
         address_id: deliveryCustomerInfo.selectedAddressId || null,
         customer_address: deliveryCustomerInfo.newAddress || null, // ✅ Fix: Send address string so backend can create a record
         delivery_person_id: selectedDelivery ? selectedDelivery.id : null,
@@ -1042,8 +1100,12 @@ function showConfirmModal(orderData) {
         manual_discount_type: selectedOfferCode ? null : discountType,
         manual_discount_value: selectedOfferCode ? null : discountValue,
         discount_reason: discountReason,
-        is_printed: Boolean(shouldPrint),
+        is_printed: false,
       };
+      pending = { payload, grandTotal: Number(orderData.grandTotal) };
+      writePendingCashierOrder(pending);
+      firstAttempt = true;
+      }
 
       const res = await apiFetch("/orders/", {
         method: "POST",
@@ -1051,6 +1113,10 @@ function showConfirmModal(orderData) {
       });
 
       if (!res.ok) {
+        if (firstAttempt && res.status >= 400 && res.status < 500 && res.status !== 409) {
+          clearPendingCashierOrder();
+          pending = null;
+        }
         const errData = await res.json().catch(() => ({}));
         console.error("API Error:", errData);
         let errMsg = "حدث خطأ أثناء إرسال الطلب";
@@ -1068,13 +1134,15 @@ function showConfirmModal(orderData) {
       }
 
       const createdOrder = await res.json();
-      createdOrder.is_printed = Boolean(shouldPrint);
+      let printQueued = false;
+      if (!recoveringPrior) {
       selectedPaymentMethod = "cash";
       const cashReceivedCheckbox = document.getElementById("cashReceivedAtCheckout");
       if (cashReceivedCheckbox) cashReceivedCheckbox.checked = false;
       const digitalPaymentCheckbox = document.getElementById("digitalPaymentVerified");
       if (digitalPaymentCheckbox) digitalPaymentCheckbox.checked = false;
       document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item.dataset.paymentMethod === "cash"));
+      }
 
       overlay.remove();
 
@@ -1122,12 +1190,16 @@ function showConfirmModal(orderData) {
             null,
         };
 
-        printReceipt(printData);
+        printQueued = await printReceipt(printData);
+        if (printQueued) {
+          createdOrder.is_printed = await markOrderAsPrinted(createdOrder.id);
+        }
       } else if (shouldPrint) {
         console.error("Print Agent bridge is unavailable.");
       }
 
-      // تصفية السلة وعودة الحالة للصفر
+      // A recovered earlier order must not erase a new unsent cart.
+      if (!recoveringPrior) {
       cart = [];
       selectedOfferCode = null;
       orderType = null;
@@ -1153,8 +1225,9 @@ function showConfirmModal(orderData) {
       renderOrderTypeBadge();
       renderOrderTypeButtons();
       renderCashierOffersBoard();
+      }
 
-      showToast(shouldPrint ? "تم حفظ الطلب وإرساله للطباعة" : "تم حفظ الطلب بنجاح", "success");
+      showToast(recoveringPrior ? "تمت استعادة الطلب السابق؛ راجع السلة قبل تسجيل طلب جديد" : (printQueued ? "تم حفظ الطلب وإرساله للطباعة" : "تم حفظ الطلب بنجاح"), "success");
 
       // ✅ NEW: Update local memory lists immediately so the order appears without refresh
       if (isOnlineOrder(createdOrder)) {
@@ -1177,6 +1250,8 @@ function showConfirmModal(orderData) {
       renderAllOrders();
       renderOnlineOrders();
       updateOnlineStats();
+      clearPendingCashierOrder();
+      pending = null;
 
       // Delayed server fetch to get the synced version from cloud
       setTimeout(() => {
@@ -3510,7 +3585,7 @@ function toggleSound() {
   }
 }
 
-function printOrderFromOnline(orderId) {
+async function printOrderFromOnline(orderId) {
   const order = onlineOrdersList.find((o) => o.id === orderId);
   if (!order) return;
 
@@ -3543,13 +3618,14 @@ function printOrderFromOnline(orderId) {
     customerAddress: getOrderAddressText(order),
   };
   if (typeof printReceipt === "function") {
-    printReceipt(printData);
-    markOrderAsPrinted(order.id);
+    if (await printReceipt(printData)) await markOrderAsPrinted(order.id);
   }
 }
 
 async function markOrderAsPrinted(orderId) {
   try {
+    const response = await apiFetch(`/orders/${orderId}/mark-printed`, { method: "POST" });
+    if (!response.ok) throw new Error("Could not mark order as printed");
     const order = allOrdersList.find((o) => o.id === orderId);
     if (order) {
       order.is_printed = true;
@@ -3563,9 +3639,11 @@ async function markOrderAsPrinted(orderId) {
     if (onlineOrder) {
       onlineOrder.is_printed = true;
     }
-    await apiFetch(`/orders/${orderId}/mark-printed`, { method: "POST" });
+    return true;
   } catch (err) {
     console.warn("Could not mark order as printed on server:", err);
+    showToast("تم إرسال الفاتورة للطباعة، لكن تعذر تحديث حالة الطباعة", "error");
+    return false;
   }
 }
 
@@ -3888,7 +3966,7 @@ function changeAllOrdersPage(newPage) {
 window.changeOnlinePage = changeOnlinePage;
 window.changeAllOrdersPage = changeAllOrdersPage;
 
-function printOrderFromList(orderId) {
+async function printOrderFromList(orderId) {
   const order = allOrdersList.find((o) => o.id === orderId);
   if (!order) {
     showToast("لا يمكن العثور على الطلب", "error");
@@ -3926,9 +4004,10 @@ function printOrderFromList(orderId) {
   };
 
   if (typeof printReceipt === "function") {
-    printReceipt(printData);
-    showToast("جاري تجهيز الفاتورة للطباعة...", "success");
-    markOrderAsPrinted(order.id);
+    if (await printReceipt(printData)) {
+      await markOrderAsPrinted(order.id);
+      showToast("تم إرسال الفاتورة للطباعة", "success");
+    }
   } else {
     console.error("Function printReceipt not found.");
     showToast("خطأ: دالة الطباعة غير موجودة", "error");

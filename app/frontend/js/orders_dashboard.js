@@ -417,7 +417,7 @@
     if (!dateStr) return "---";
     const d = new Date(dateStr);
     if (isNaN(d)) return dateStr;
-    return d.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("ar-EG", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit" });
   }
 
   function summarizeItems(items) {
@@ -457,8 +457,8 @@
       const now = new Date();
       const timeEl = document.getElementById("ops_current_time");
       const dateEl = document.getElementById("ops_business_date");
-      if (timeEl) timeEl.textContent = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
-      if (dateEl) dateEl.textContent = now.toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      if (timeEl) timeEl.textContent = now.toLocaleTimeString("ar-EG", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit" });
+      if (dateEl) dateEl.textContent = now.toLocaleDateString("ar-EG", { timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long", year: "numeric" });
     };
     clock();
     setInterval(clock, 30000);

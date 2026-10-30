@@ -1,9 +1,10 @@
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError as PydanticValidationError
 
@@ -110,7 +111,7 @@ class FinancialBusinessRuleTests(unittest.IsolatedAsyncioTestCase):
             ])
 
     def test_offer_calendar_uses_cairo_wall_clock(self):
-        cairo_now = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
+        cairo_now = datetime.now(ZoneInfo("Africa/Cairo")).replace(tzinfo=None)
         offer = Offer(
             code="CAIRO",
             discount_type=DiscountType.PERCENTAGE,

@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.business_calendar import (
-    EGYPT_TZ,
-    business_day_start,
+    ORDER_STORAGE_TZ,
+    business_day_start_in_order_storage,
     get_current_business_date,
     holiday_name,
     is_weekly_holiday,
@@ -126,8 +126,8 @@ class OrderRepository:
         if shift:
             start = shift.start_time
             end = shift.end_time
-            start_local = start.replace(tzinfo=start.tzinfo or UTC).astimezone(EGYPT_TZ).replace(tzinfo=None)
-            end_local = end.replace(tzinfo=end.tzinfo or UTC).astimezone(EGYPT_TZ).replace(tzinfo=None) if end else datetime.now(EGYPT_TZ).replace(tzinfo=None)
+            start_local = start.replace(tzinfo=start.tzinfo or UTC).astimezone(ORDER_STORAGE_TZ).replace(tzinfo=None)
+            end_local = end.replace(tzinfo=end.tzinfo or UTC).astimezone(ORDER_STORAGE_TZ).replace(tzinfo=None) if end else datetime.now(ORDER_STORAGE_TZ).replace(tzinfo=None)
             filters.extend((
                 models.Order.created_by_user_id == shift.user_id,
                 models.Order.created_at >= start_local,
@@ -227,14 +227,14 @@ class OrderRepository:
         result = await self.db.execute(query.order_by(desc(models.Order.created_at)))
         return result.scalars().all()
 
-    async def get_next_order_number(self) -> str:
+    async def get_next_order_number(self, business_date: date | None = None) -> str:
         """Atomically increment the per-terminal, per-business-day counter."""
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         from app.core.config import settings
         from app.core.exceptions import ValidationError
         
-        business_date = self.get_business_date()
+        business_date = business_date or self.get_business_date()
         prefix = settings.TERMINAL_ID
         
         bind = self.db.bind
@@ -357,11 +357,12 @@ class OrderRepository:
         # Compare like-for-like from the business-day cutoff to the same elapsed
         # point in its business day, rather than yesterday's completed day.
         local_now = datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None)
-        today_start = business_day_start(business_date)
+        today_start = business_day_start_in_order_storage(business_date)
         elapsed = max(timedelta(0), local_now - today_start)
         comparison_date = previous_business_date(business_date)
-        comparison_start = business_day_start(comparison_date)
-        comparison_cutoff = comparison_start + min(elapsed, timedelta(days=1))
+        comparison_start = business_day_start_in_order_storage(comparison_date)
+        comparison_end = business_day_start_in_order_storage(comparison_date + timedelta(days=1))
+        comparison_cutoff = comparison_start + min(elapsed, comparison_end - comparison_start)
         yesterday_sales_query = select(
             func.sum(
                 models.Order.total_amount

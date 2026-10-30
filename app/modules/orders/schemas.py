@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.business_calendar import order_time_in_cairo
 from app.core.enums import (
     DiscountType,
     OrderSource,
@@ -133,6 +134,11 @@ class CancellationRequestResponse(BaseModel):
     status: str
     requested_at: datetime
 
+    @field_validator("requested_at", mode="before")
+    @classmethod
+    def display_requested_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
+
 class OrderUpdateFull(BaseModel):
     """Comprehensive order update schema for patch endpoint."""
     order_type: OrderType | None = None
@@ -200,6 +206,11 @@ class OrderResponse(OrderBase):
     address: CustomerAddressResponse | None = None
     modifications: list["OrderModificationResponse"] = []
 
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def display_order_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
+
     @model_validator(mode='after')
     def validate_financial_integrity(self):
         if self.discount_amount < Decimal("0.00"):
@@ -217,6 +228,11 @@ class OrderModificationResponse(BaseModel):
     changed_by_user_id: int | None = None
     changed_at: datetime
     changes: list[str]  # We will store a list of string messages
+
+    @field_validator("changed_at", mode="before")
+    @classmethod
+    def display_change_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
 
 # Resolve forward reference for OrderResponse.modifications
 OrderResponse.model_rebuild()
@@ -256,6 +272,11 @@ class DashboardOrderResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None = None
     items: list[OrderItemResponse]
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def display_order_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
 
 
 class DashboardOrderListResponse(BaseModel):

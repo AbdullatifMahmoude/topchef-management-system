@@ -70,6 +70,25 @@ from app.modules.shifts.service import ShiftsService
 from app.modules.users.models import User
 
 
+@pytest.fixture(autouse=True)
+def fixed_journey_clock(monkeypatch):
+    # Orders in these journeys start at 08:00 and some occur at 09:00.
+    # Keep the clock after those events, regardless of the time tests run.
+    real_datetime = datetime
+    today = get_current_business_date()
+    instant = real_datetime.combine(today, real_datetime.min.time(), tzinfo=UTC) + timedelta(hours=9)
+
+    class JourneyDateTime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(__import__(__name__, fromlist=["datetime"]), "datetime", JourneyDateTime)
+    for name in ("app.modules.shifts.service", "app.modules.shifts.cash_custody",
+                 "app.modules.shifts.router", "app.modules.report.service", "app.modules.orders.repository"):
+        monkeypatch.setattr(import_module(name), "datetime", JourneyDateTime)
+
+
 @pytest.fixture
 async def cash_db():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -129,9 +148,9 @@ async def test_collection_attestation_does_not_change_expected_cash_and_close_is
     same = await record_customer_collection(cash_db, paid.id, cashier, "checkout-cash-1")
     assert first.id == same.id
     cash_db.add(ShiftExpense(shift_id=shift.id, user_id=cashier.id, target_date=shift.target_date,
-                             title="Supplies", amount=Decimal("20.00"), paid_from="shift_cash"))
+                             title="Supplies", amount=Decimal("20.00"), paid_from="shift_cash", created_at=datetime.now(UTC) - timedelta(minutes=1)))
     cash_db.add(ShiftExpense(shift_id=shift.id, user_id=admin.id, target_date=shift.target_date,
-                             title="Admin purchase", amount=Decimal("15.00"), paid_from="admin_cash"))
+                             title="Admin purchase", amount=Decimal("15.00"), paid_from="admin_cash", created_at=datetime.now(UTC) - timedelta(minutes=1)))
     await cash_db.commit()
 
     report = next(row for row in await ShiftsService(cash_db).get_shifts_report(shift.target_date)
@@ -460,6 +479,7 @@ async def test_closed_shift_from_previous_day_keeps_legacy_financial_calculation
 async def test_only_approved_cutover_shift_keeps_ledger_after_day_boundary(cash_db, monkeypatch):
     cashier, _, _, _, _, _ = await seed(cash_db)
     past_date = get_current_business_date()
+    monkeypatch.setattr("app.modules.shifts.service.MIXED_CUTOVER_SHIFT_DATE", past_date)
     start_local = business_day_start(past_date)
     cutover = CashierShift(
         id=135, user_id=cashier.id, target_date=past_date,
@@ -759,3 +779,98 @@ async def test_cashier_shifts_can_overlap_and_new_shift_ignores_pending_signoffs
     assert opened_while_signoffs_pending.end_time is None
     assert opened_while_signoffs_pending.opening_cash == Decimal("300.00")
     assert opened_while_signoffs_pending.cash_tracking_enabled
+
+@pytest.mark.asyncio
+async def test_cashier_retry_recovers_same_order_after_day_changes_and_rejects_mismatch(cash_db, monkeypatch):
+    from app.core.exceptions import IdempotencyError
+    from app.modules.orders.models import CashierOrderAttempt
+
+    cashier, other, _, _, _, _ = await seed(cash_db)
+    product = Product(
+        category=Category(cat_name="retry category"), product_name="Retry meal",
+        product_type=ProductType.SIMPLE, is_available=True,
+        variants=[Variant(name="regular", price=Decimal("85.00"))],
+    )
+    cash_db.add(product)
+    await cash_db.commit()
+    pricing = AsyncMock()
+    pricing.calculate_price.return_value = SimpleNamespace(
+        subtotal=Decimal("85.00"), discount_amount=Decimal("0.00"),
+        delivery_fee=Decimal("0.00"), total_amount=Decimal("85.00"),
+    )
+    monkeypatch.setattr("app.modules.orders.service.is_weekly_holiday", lambda _: False)
+    monkeypatch.setattr("app.modules.orders.service.order_events_manager.emit", AsyncMock())
+    service = OrderService(cash_db, pricing_service=pricing, notification_service=AsyncMock())
+    payload = OrderCreate(source=OrderSource.CASHIER, order_type=OrderType.TAKEAWAY,
+                          payment_method=PaymentMethod.CASH, idempotency_key="retry-after-response-lost",
+                          items=[OrderItemCreate(product_id=product.id, quantity=1, unit_price=Decimal("85.00"))])
+    saved = await service.create_order(payload, cashier.id)
+    await cash_db.commit()
+    monkeypatch.setattr("app.modules.orders.service.is_weekly_holiday", lambda _: True)
+    retry = await service.create_order(payload, cashier.id)
+    assert retry.id == saved.id
+    assert (await cash_db.scalar(select(CashierOrderAttempt).where(CashierOrderAttempt.key == payload.idempotency_key))).order_id == saved.id
+    altered = payload.model_copy(update={"payment_method": PaymentMethod.WALLET})
+    with pytest.raises(IdempotencyError):
+        await service.create_order(altered, cashier.id)
+    with pytest.raises(IdempotencyError):
+        await service.create_order(payload, other.id)
+    assert len((await cash_db.execute(select(Order).where(Order.idempotency_key == payload.idempotency_key))).scalars().all()) == 1
+
+@pytest.mark.asyncio
+async def test_simultaneous_cashier_retries_create_only_one_order(tmp_path, monkeypatch):
+    import asyncio
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{(tmp_path / 'retry.db').as_posix()}")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as db:
+            cashier = User(username="concurrent", phone="01099999990", hashed_password="x", role=UserRole.CASHIER)
+            product = Product(category=Category(cat_name="retry concurrent"), product_name="Meal",
+                              product_type=ProductType.SIMPLE, is_available=True,
+                              variants=[Variant(name="regular", price=Decimal("85.00"))])
+            db.add_all([cashier, product])
+            await db.flush()
+            db.add(CashierShift(user_id=cashier.id, target_date=get_current_business_date(),
+                                start_time=datetime.now(UTC), opening_cash=Decimal(300),
+                                cash_tracking_enabled=True, opening_confirmed_at=datetime.now(UTC)))
+            await db.commit()
+            cashier_id, product_id = cashier.id, product.id
+        payload = OrderCreate(source=OrderSource.CASHIER, order_type=OrderType.TAKEAWAY,
+                              payment_method=PaymentMethod.CASH, idempotency_key="concurrent-retry-test",
+                              items=[OrderItemCreate(product_id=product_id, quantity=1, unit_price=Decimal("85.00"))])
+        monkeypatch.setattr("app.modules.orders.service.is_weekly_holiday", lambda _: False)
+        monkeypatch.setattr("app.modules.orders.service.order_events_manager.emit", AsyncMock())
+
+        async def submit():
+            pricing = AsyncMock()
+            pricing.calculate_price.return_value = SimpleNamespace(subtotal=Decimal("85.00"), discount_amount=Decimal("0.00"),
+                                                                  delivery_fee=Decimal("0.00"), total_amount=Decimal("85.00"))
+            async with factory() as db:
+                order = await OrderService(db, pricing_service=pricing, notification_service=AsyncMock()).create_order(payload, cashier_id)
+                await db.commit()
+                return order.id
+        ids = await asyncio.gather(submit(), submit())
+        assert ids[0] == ids[1]
+        async with factory() as db:
+            assert len((await db.execute(select(Order).where(Order.idempotency_key == payload.idempotency_key))).scalars().all()) == 1
+    finally:
+        await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_failed_cashier_submission_rolls_back_reserved_retry_key(cash_db, monkeypatch):
+    from app.modules.orders.models import CashierOrderAttempt
+
+    cashier, _, _, _, _, _ = await seed(cash_db)
+    await cash_db.commit()
+    cashier_id = cashier.id
+    payload = OrderCreate(source=OrderSource.CASHIER, order_type=OrderType.TAKEAWAY,
+                          payment_method=PaymentMethod.CASH, idempotency_key="failed-request-key",
+                          items=[OrderItemCreate(product_id=999, quantity=1, unit_price=Decimal("10.00"))])
+    monkeypatch.setattr("app.modules.orders.service.is_weekly_holiday", lambda _: True)
+    with pytest.raises(ValidationError):
+        await OrderService(cash_db, notification_service=AsyncMock()).create_order(payload, cashier_id)
+    await cash_db.rollback()
+    assert await cash_db.get(CashierOrderAttempt, payload.idempotency_key) is None

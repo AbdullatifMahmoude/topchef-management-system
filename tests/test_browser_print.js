@@ -3,50 +3,35 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 const cashierSource = fs.readFileSync("app/frontend/cashier/js/cashier.js", "utf8");
-const source = cashierSource.slice(
-  cashierSource.indexOf("const TOPCHEF_PRINT_AGENT_URL"),
-  cashierSource.indexOf("// End Print Agent bridge.")
-);
+const bridge = cashierSource.slice(cashierSource.indexOf("const TOPCHEF_PRINT_AGENT_URL"), cashierSource.indexOf("// End Print Agent bridge."));
+const mark = cashierSource.slice(cashierSource.indexOf("async function markOrderAsPrinted"), cashierSource.indexOf("// ===================================================", cashierSource.indexOf("async function markOrderAsPrinted")));
 const calls = [];
-const context = vm.createContext({
-  API_BASE: "",
-  AbortController,
-  console,
-  setTimeout,
-  clearTimeout,
+let printOk = true, markOk = true;
+const order = { id: 77, orderNumber: "T1-0077", cart: [{ item: { name: "وجبة", price: 75 }, qty: 1 }], grandTotal: 75 };
+const context = vm.createContext({ API_BASE: "", AbortController, console, setTimeout, clearTimeout,
+  showToast: () => {}, allOrdersList: [order], onlineOrdersList: [], allOrdersFilter: "all", window: {},
+  apiFetch: async () => ({ ok: markOk }),
   fetch: async (url, options) => {
     calls.push({ url, options });
-    if (url.endsWith("/settings/menu-checkout")) {
-      return { ok: true, json: async () => ({ wallet_number: "01009515031" }) };
-    }
+    if (url.endsWith("/settings/menu-checkout")) return { ok: true, json: async () => ({ wallet_number: "01009515031" }) };
+    if (!printOk) throw new Error("offline");
     return { ok: true };
   },
 });
-
-vm.runInContext(source, context);
-context.order = {
-  id: 77,
-  orderNumber: "T1-0077",
-  cart: [{ item: { name: "وجبة", price: 75 }, qty: 1 }],
-  grandTotal: 75,
-};
-vm.runInContext("printReceipt(order)", context);
-const cashOrder = context.order;
-context.order = { ...cashOrder, id: 78, payment_method: "wallet" };
-vm.runInContext("printReceipt(order)", context);
-
-setTimeout(() => {
-  assert.equal(calls.length, 3);
+vm.runInContext(bridge + mark, context);
+(async () => {
+  assert.equal(await context.printReceipt(order), true);
   assert.equal(calls[0].url, "http://127.0.0.1:8199/api/print");
-  assert.equal(calls[0].options.method, "POST");
-  assert.equal(calls[0].options.headers["Content-Type"], "application/json");
   assert.equal(calls[0].options.targetAddressSpace, "loopback");
-  assert.deepEqual(JSON.parse(calls[0].options.body), {
-    order: cashOrder,
-    receipt_type: "customer",
-  });
-  assert.equal(calls[1].url, "/settings/menu-checkout");
-  assert.equal(calls[2].url, "http://127.0.0.1:8199/api/print");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { order, receipt_type: "customer" });
+  assert.equal(await context.printReceipt({ ...order, payment_method: "wallet" }), true);
   assert.equal(JSON.parse(calls[2].options.body).order.payment_destination, "01009515031");
-  console.log("Browser print bridge test passed");
-}, 0);
+  printOk = false;
+  assert.equal(await context.printReceipt(order), false);
+  markOk = false;
+  assert.equal(await context.markOrderAsPrinted(77), false);
+  assert.notEqual(order.is_printed, true);
+  markOk = true;
+  assert.equal(await context.markOrderAsPrinted(77), true);
+  assert.equal(order.is_printed, true);
+})().catch(error => { console.error(error); process.exitCode = 1; });

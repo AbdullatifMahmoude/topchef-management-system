@@ -36,7 +36,7 @@ vm.runInContext("shiftsData = inputShifts", context);
 context.openShiftDrawer(135);
 const markup = element("shiftDrawerContent").innerHTML;
 const money = (amount) => vm.runInContext(`shiftMoney(${amount})`, context);
-assert.ok(markup.includes(`<span>فرق التسوية عند الإقفال</span><strong>${money(-70)}</strong>`));
+assert.ok(markup.includes(`<span>عجز نقدية بالدرج</span><strong>${money(-70)}</strong>`));
 assert.ok(markup.includes(`<span>الفرق بعد تسويات الإدارة المسجلة</span><strong>${money(0)}</strong>`));
 assert.match(markup, /نقد دليفري بعد العد/);
 shift.post_close_adjustments = [];
