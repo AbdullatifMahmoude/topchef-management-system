@@ -1,6 +1,7 @@
-from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Optional
+from decimal import ROUND_HALF_UP, Decimal
+
 from pydantic import BaseModel
+
 
 class FinancialSnapshot(BaseModel):
     """

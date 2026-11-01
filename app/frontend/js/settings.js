@@ -1,6 +1,6 @@
 (function () {
   const form = document.getElementById("whatsappSettingsForm");
-  if (!form) return;
+  if (!form || form.hidden) return;
 
   const apiKeyInput = document.getElementById("whatsappApiKey");
   const apiKeyStatus = document.getElementById("whatsappApiKeyStatus");
@@ -143,6 +143,140 @@
   });
 
   loadSettings();
+})();
+
+(function () {
+  const form = document.getElementById("loyaltySettingsForm");
+  if (!form) return;
+  const tiers = document.getElementById("loyaltyTiers");
+  const redemptionRules = document.getElementById("redemptionRules");
+  let rewardProducts = [];
+  const notice = document.getElementById("loyaltySettingsNotice");
+  const save = document.getElementById("saveLoyaltySettings");
+  const show = (message, type) => {
+    notice.hidden = false;
+    notice.className = `settings_notice ${type}`;
+    notice.textContent = message;
+  };
+  const errorMessage = (data, fallback) => typeof data?.detail === "string"
+    ? data.detail
+    : Array.isArray(data?.detail)
+      ? data.detail.map(item => item.msg).filter(Boolean).join("، ") || fallback
+      : fallback;
+
+  function addTier(value = {}) {
+    if (tiers.children.length >= 20) return show("الحد الأقصى 20 شريحة", "error");
+    const previous = tiers.lastElementChild;
+    const previousStart = Number(previous?.querySelector('[data-field="from_amount"]')?.value || 0);
+    const previousStep = Number(previous?.querySelector('[data-field="step_amount"]')?.value || 100);
+    const row = document.createElement("div");
+    row.className = "loyalty_tier";
+    row.innerHTML = `<label class="settings_field"><span>تبدأ من مبلغ (ج.م)</span><input data-field="from_amount" type="number" min="0" step="0.01" required></label>
+      <label class="settings_field"><span>كل مبلغ كامل (ج.م)</span><input data-field="step_amount" type="number" min="0.01" step="0.01" required></label>
+      <label class="settings_field"><span>نقاط لكل مبلغ كامل</span><input data-field="points_per_step" type="number" min="1" max="100000" step="1" required></label>
+      <button type="button" aria-label="حذف الشريحة">حذف</button>`;
+    row.querySelector('[data-field="from_amount"]').value = value.from_amount ?? (previous ? previousStart + previousStep : 0);
+    row.querySelector('[data-field="step_amount"]').value = value.step_amount ?? 100;
+    row.querySelector('[data-field="points_per_step"]').value = value.points_per_step ?? 10;
+    row.querySelector("button").onclick = () => row.remove();
+    tiers.appendChild(row);
+  }
+
+  function addRedemptionRule(value = {}) {
+    if (redemptionRules.children.length >= 20) return show("الحد الأقصى 20 قاعدة استبدال", "error");
+    const row = document.createElement("div");
+    row.className = "loyalty_tier redemption_rule";
+    row.dataset.ruleId = value.id || crypto.randomUUID();
+    row.innerHTML = `<label class="settings_field"><span>نوع المكافأة</span><select data-field="reward_type"><option value="fixed_discount">خصم ثابت</option><option value="free_product">صنف مجاني</option></select></label>
+      <label class="settings_field"><span>النقاط المطلوبة</span><input data-field="points_required" type="number" min="1" max="1000000" step="1" required></label>
+      <label class="settings_field" data-fixed><span>قيمة الخصم (ج.م)</span><input data-field="discount_amount" type="number" min="0.01" step="0.01"></label>
+      <label class="settings_field" data-free><span>الصنف المجاني</span><select data-field="product_id"></select></label>
+      <label class="settings_field" data-free><span>الحجم أو السعر</span><select data-field="variant_id"></select></label>
+      <button type="button" aria-label="حذف قاعدة الاستبدال">حذف</button>`;
+    const type = row.querySelector('[data-field="reward_type"]');
+    const product = row.querySelector('[data-field="product_id"]');
+    const variant = row.querySelector('[data-field="variant_id"]');
+    type.value = value.reward_type || "fixed_discount";
+    rewardProducts.filter(item => item.is_available).forEach(item => product.add(new Option(item.product_name, item.id)));
+    if (value.product_id) product.value = String(value.product_id);
+    const updateVariants = () => {
+      variant.replaceChildren();
+      const selected = rewardProducts.find(item => String(item.id) === product.value);
+      (selected?.variants || []).forEach(item => variant.add(new Option(`${item.name} — ${Number(item.price).toFixed(2)} ج.م`, item.id)));
+      if (value.variant_id && String(value.product_id) === product.value) variant.value = String(value.variant_id);
+    };
+    const updateType = () => {
+      const free = type.value === "free_product";
+      row.querySelectorAll("[data-free]").forEach(field => { field.hidden = !free; field.querySelector("select").required = free; });
+      row.querySelector("[data-fixed]").hidden = free;
+      row.querySelector('[data-field="discount_amount"]').required = !free;
+    };
+    product.onchange = updateVariants;
+    type.onchange = updateType;
+    row.querySelector('[data-field="points_required"]').value = value.points_required ?? 100;
+    row.querySelector('[data-field="discount_amount"]').value = value.discount_amount ?? 10;
+    row.querySelector("button").onclick = () => row.remove();
+    updateVariants(); updateType();
+    redemptionRules.appendChild(row);
+  }
+
+  document.getElementById("addLoyaltyTier").onclick = () => addTier();
+  document.getElementById("addRedemptionRule").onclick = () => addRedemptionRule();
+  async function load() {
+    try {
+      const [response, productsResponse] = await Promise.all([
+        window.apiFetch("/settings/loyalty"), window.apiFetch("/menu/products"),
+      ]);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(errorMessage(data, "تعذر تحميل قواعد النقاط"));
+      if (!productsResponse.ok) throw new Error("تعذر تحميل الأصناف لقواعد المكافآت");
+      rewardProducts = await productsResponse.json();
+      document.getElementById("loyaltyEnabled").checked = Boolean(data.enabled);
+      document.getElementById("redemptionEnabled").checked = Boolean(data.redemption_enabled);
+      document.getElementById("loyaltyMinimumOrder").value = data.minimum_order_amount ?? 0;
+      document.getElementById("loyaltyMaxPoints").value = data.max_points_per_order ?? 10000;
+      tiers.replaceChildren();
+      (data.tiers || []).forEach(addTier);
+      redemptionRules.replaceChildren();
+      (data.redemption_rules || []).forEach(addRedemptionRule);
+      if (!data.configured) show("البرنامج متوقف. أضف الشرائح واحفظها لتبدأ النقاط بعد التفعيل.", "success");
+    } catch (error) { show(error.message || "تعذر تحميل قواعد النقاط", "error"); }
+  }
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const payload = {
+      enabled: document.getElementById("loyaltyEnabled").checked,
+      redemption_enabled: document.getElementById("redemptionEnabled").checked,
+      minimum_order_amount: document.getElementById("loyaltyMinimumOrder").value,
+      max_points_per_order: Number(document.getElementById("loyaltyMaxPoints").value),
+      tiers: [...tiers.children].map(row => Object.fromEntries(
+        [...row.querySelectorAll("[data-field]")].map(input => [input.dataset.field,
+          input.dataset.field === "points_per_step" ? Number(input.value) : input.value])
+      )),
+      redemption_rules: [...redemptionRules.children].map(row => ({
+        id: row.dataset.ruleId,
+        reward_type: row.querySelector('[data-field="reward_type"]').value,
+        points_required: Number(row.querySelector('[data-field="points_required"]').value),
+        ...(row.querySelector('[data-field="reward_type"]').value === "free_product"
+          ? {product_id: Number(row.querySelector('[data-field="product_id"]').value), variant_id: Number(row.querySelector('[data-field="variant_id"]').value)}
+          : {discount_amount: row.querySelector('[data-field="discount_amount"]').value}),
+      })),
+    };
+    save.disabled = true;
+    notice.hidden = true;
+    try {
+      const response = await window.apiFetch("/settings/loyalty", {
+        method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(errorMessage(data, "تعذر حفظ قواعد النقاط"));
+      const earningState = data.active ? "احتساب النقاط مفعّل للطلبات المؤكدة القادمة" : "احتساب النقاط متوقف";
+      const redemptionState = data.redemption_active ? "استبدال النقاط متاح للعميل" : "الاستبدال متوقف ومخفي عن العميل";
+      show(`تم حفظ القواعد. ${earningState}، و${redemptionState}.`, "success");
+    } catch (error) { show(error.message || "تعذر الاتصال بالخادم", "error"); }
+    finally { save.disabled = false; }
+  });
+  load();
 })();
 
 (function () {

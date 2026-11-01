@@ -1,7 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.business_calendar import order_time_in_cairo
 
 
 class MenuVariant(BaseModel):
@@ -28,6 +30,11 @@ class OrderStatusEvent(BaseModel):
     status_label: str
     changed_at: datetime
 
+    @field_validator("changed_at", mode="before")
+    @classmethod
+    def display_change_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
+
 
 class OrderTrackingResponse(BaseModel):
     order_number: str
@@ -35,6 +42,11 @@ class OrderTrackingResponse(BaseModel):
     status_label: str
     updated_at: datetime
     history: list[OrderStatusEvent]
+
+    @field_validator("updated_at", mode="before")
+    @classmethod
+    def display_update_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
 
 
 class AgentCapabilities(BaseModel):

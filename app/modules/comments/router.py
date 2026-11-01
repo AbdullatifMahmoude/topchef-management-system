@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.modules.comments.service import CommentService
 from app.modules.comments import schemas
+from app.modules.comments.service import CommentService
 
 
 # Dependency to get service

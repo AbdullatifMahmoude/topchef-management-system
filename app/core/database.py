@@ -1,4 +1,6 @@
-from sqlalchemy import create_engine, TypeDecorator, Enum as SA_Enum
+from sqlalchemy import Enum as SA_Enum
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -6,8 +8,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import event
-from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
@@ -69,7 +69,7 @@ def DbEnum(enum_cls, **kwargs):
 
 
 def _is_sqlite_url(url: str) -> bool:
-    return url.startswith("sqlite+aiosqlite://") or url.startswith("sqlite:///")
+    return url.startswith(("sqlite+aiosqlite://", "sqlite:///"))
 
 
 def _is_transaction_pooler_url(url: str) -> bool:

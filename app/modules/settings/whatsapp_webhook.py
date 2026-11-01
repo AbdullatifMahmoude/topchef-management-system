@@ -42,7 +42,7 @@ def webhook_events(value: dict, event_name: str) -> list[dict]:
 def inbound_routing_policy(verification_consumed: bool) -> tuple[bool, str]:
     if verification_consumed:
         return True, "verification_consumed"
-    if settings.META_AGENT_API_KEY:
+    if settings.META_AGENT_ENABLED and settings.META_AGENT_API_KEY:
         return True, "meta_agent_managed"
     return False, "routing_suppressed"
 
@@ -89,7 +89,7 @@ async def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
     hub_verify_token: str = Query(alias="hub.verify_token"),
     hub_challenge: str = Query(alias="hub.challenge"),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ):
     expected = await SettingsService(db).get_whatsapp_webhook_verify_token()
     if not expected or hub_mode != "subscribe" or not hmac.compare_digest(expected, hub_verify_token):
@@ -101,14 +101,16 @@ async def verify_webhook(
 async def receive_webhook(
     request: Request,
     x_hub_signature_256: str | None = Header(default=None),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
-    redis=Depends(get_redis),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
 ):
     secret = await SettingsService(db).get_whatsapp_app_secret()
     body = await request.body()
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest() if secret else ""
     if not secret or not x_hub_signature_256 or not hmac.compare_digest(expected, x_hub_signature_256):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid webhook signature")
+    if settings.WHATSAPP_INTEGRATION_PAUSED:
+        return {"received": True}
     payload = await request.json()
     config = await SettingsService(db).get_whatsapp_settings()
     for entry in payload.get("entry", []):
@@ -116,8 +118,10 @@ async def receive_webhook(
             value = change.get("value", {})
             for message in webhook_events(value, "messages"):
                 text = (message.get("text") or {}).get("body", "")
-                verification_consumed = await consume_incoming_message(
-                    redis, message.get("from", ""), text
+                verification_consumed = (
+                    await consume_incoming_message(redis, message.get("from", ""), text)
+                    if settings.WHATSAPP_VERIFICATION_ENABLED
+                    else False
                 )
                 suppress_routing, suppression_result = inbound_routing_policy(
                     verification_consumed

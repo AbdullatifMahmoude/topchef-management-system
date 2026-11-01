@@ -1,5 +1,6 @@
-from typing import List
+
 from app.core.enums import OrderStatus, OrderType
+
 
 class InvalidOrderTransitionError(Exception):
     """Exception raised for invalid order state transitions."""
@@ -19,7 +20,7 @@ class OrderStateMachine:
     """
     
     @staticmethod
-    def get_allowed_transitions(current_status: OrderStatus, order_type: OrderType) -> List[OrderStatus]:
+    def get_allowed_transitions(current_status: OrderStatus, order_type: OrderType) -> list[OrderStatus]:
         """
         Returns a list of allowed next statuses based on the current status and order type.
         """
@@ -35,7 +36,7 @@ class OrderStateMachine:
 
         # Logic for CONFIRMED
         elif current_status == OrderStatus.CONFIRMED:
-            if order_type in [OrderType.HALL, OrderType.TAKEAWAY]:
+            if order_type in [OrderType.HALL, OrderType.TAKEAWAY, OrderType.PHONE_RESERVATION]:
                 allowed.append(OrderStatus.COMPLETED)
             elif order_type in [OrderType.DELIVERY, OrderType.ONLINE]:
                 allowed.extend([OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED])

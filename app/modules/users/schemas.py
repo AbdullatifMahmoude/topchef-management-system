@@ -1,29 +1,32 @@
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 from app.core.enums import UserRole
-from typing import Annotated, Optional
+
 
 class CreateUser(BaseModel):
-    full_name: Optional[str] = None
+    full_name: str | None = None
     username: Annotated[str, Field(min_length=3, max_length=200)]
     role: UserRole
     phone:Annotated[str, Field(pattern=r"^01[0125][0-9]{8}$")]
     password: Annotated[str, Field(min_length=6, pattern=r"^[A-Za-z0-9]+$")]
 
 class UpdateUser(BaseModel):
-    full_name: Optional[str] = None
-    username: Optional[Annotated[str, Field(min_length=3, max_length=200)]]= None
-    role: Optional[UserRole] = None
-    phone: Optional[Annotated[str, Field(pattern= r"^01[0125][0-9]{8}$")]] = None
-    password: Optional[Annotated[str, Field(min_length=6, pattern=r"^[A-Za-z0-9]+$")]] = None
+    full_name: str | None = None
+    username: Annotated[str, Field(min_length=3, max_length=200)] | None= None
+    role: UserRole | None = None
+    phone: Annotated[str, Field(pattern=r"^01[0125][0-9]{8}$")] | None = None
+    password: Annotated[str, Field(min_length=6, pattern=r"^[A-Za-z0-9]+$")] | None = None
 
 class UserResponse(BaseModel):
     id: int
-    full_name: Optional[str] = None
+    full_name: str | None = None
     username: str
     role: UserRole
     phone: str
     is_active: bool
-    display_name: Optional[str] = None
+    display_name: str | None = None
     
     model_config = ConfigDict(from_attributes=True)
     

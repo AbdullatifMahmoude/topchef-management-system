@@ -22,6 +22,8 @@ def ready_settings():
 @pytest.mark.asyncio
 async def test_inbound_challenge_requires_same_sender_and_is_single_use(monkeypatch):
     redis = InMemoryCache()
+    monkeypatch.setattr(verification.settings, "WHATSAPP_VERIFICATION_ENABLED", True)
+    monkeypatch.setattr(verification.settings, "WHATSAPP_INTEGRATION_PAUSED", False)
 
     async def fake_settings(_self):
         return ready_settings()

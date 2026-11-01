@@ -1,0 +1,229 @@
+(() => {
+  const page = document.getElementById("page-expenses");
+  if (!page) return;
+
+  const $ = (id) => document.getElementById(id);
+  const tbody = $("adminExpensesTable").querySelector("tbody");
+  let expenses = [];
+  let shiftRequestId = 0;
+
+  const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
+  })[char]);
+  const money = (value) => `${Number(value || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+
+  function refreshDate(input) {
+    window.refreshStableDateInput?.(input);
+  }
+
+  async function loadShifts(selectedId = "") {
+    const picker = $("adminExpenseShift");
+    const targetDate = $("adminExpenseDate").value;
+    const requestId = ++shiftRequestId;
+    picker.disabled = true;
+    picker.innerHTML = '<option value="">جاري تحميل شيفتات اليوم...</option>';
+    if (!targetDate) return;
+    try {
+      const response = await window.apiFetch(`/shifts/admin/expense-shifts?target_date=${encodeURIComponent(targetDate)}`, { hideLoader: true });
+      if (!response.ok) throw new Error("تعذر تحميل شيفتات اليوم");
+      const shifts = await response.json();
+      if (requestId !== shiftRequestId) return;
+      picker.innerHTML = `<option value="">${shifts.length ? "اختر صاحب الشيفت" : "لا توجد شيفتات كاشير في هذا اليوم"}</option>${shifts.map((shift) => {
+        const rawTime = String(shift.start_time || "");
+        const parsedTime = rawTime ? new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(rawTime) ? rawTime : `${rawTime}Z`) : null;
+        const started = parsedTime && !Number.isNaN(parsedTime.getTime())
+          ? parsedTime.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Cairo" }) : "";
+        return `<option value="${Number(shift.id)}">${escapeHtml(shift.cashier_name)} — ${escapeHtml(started)} (شيفت #${Number(shift.id)})</option>`;
+      }).join("")}`;
+      picker.value = String(selectedId || "");
+      $("adminExpenseShiftHint").textContent = shifts.length
+        ? "المصروف سيُخصم من عهدة الشيفت المختار"
+        : "لا يمكن إضافة مصروف لهذا اليوم قبل تسجيل دخول كاشير وفتح شيفت";
+      picker.disabled = false;
+    } catch (error) {
+      if (requestId !== shiftRequestId) return;
+      picker.innerHTML = '<option value="">تعذر تحميل الشيفتات</option>';
+      $("adminExpenseShiftHint").textContent = error.message;
+    }
+  }
+
+  function resetForm() {
+    $("adminExpenseForm").reset();
+    $("adminExpenseId").value = "";
+    $("adminExpenseFormTitle").textContent = "تسجيل مصروف جديد";
+    $("adminExpenseSubmit").textContent = "حفظ المصروف";
+    $("adminExpenseCancelEdit").hidden = true;
+    $("adminExpenseDate").disabled = false;
+    $("adminExpenseDate").value = $("adminExpensesEnd").value;
+    $("adminExpenseShift").required = true;
+    refreshDate($("adminExpenseDate"));
+    loadShifts();
+  }
+
+  function render() {
+    const query = $("adminExpensesSearch").value.trim().toLowerCase();
+    const selectedShift = $("adminExpensesShiftFilter").value || "all";
+    const rows = expenses.filter((item) => {
+      const matchesShift = selectedShift === "all"
+        || (selectedShift === "unassigned" ? item.shift_id == null : Number(item.shift_id) === Number(selectedShift));
+      return matchesShift && (!query || `${item.title} ${item.note || ""} ${item.shift_owner || ""} ${item.recorded_by || ""}`.toLowerCase().includes(query));
+    });
+    $("adminExpensesCount").textContent = rows.length.toLocaleString("ar-EG");
+    $("adminExpensesTotal").textContent = money(rows.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="admin_expenses_empty">لا توجد مصاريف مطابقة</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((item) => `<tr>
+      <td>${escapeHtml(item.target_date)}</td>
+      <td><strong>${escapeHtml(item.title)}</strong></td>
+      <td class="admin_expense_amount">${escapeHtml(money(item.amount))}</td>
+      <td>${escapeHtml(item.note || "—")}<small style="display:block">${item.paid_from === "shift_cash" ? "من درج الشيفت" : item.paid_from === "admin_cash" ? "من عهدة الإدارة" : "مصدر النقد غير موثق تاريخيًا"}${item.receipt_reference ? ` • إيصال ${escapeHtml(item.receipt_reference)}` : ""}</small></td>
+      <td>${escapeHtml(item.shift_owner || "—")}</td>
+      <td>${escapeHtml(item.recorded_by || "—")}</td>
+      <td><span class="admin_expense_source ${item.source}">${item.source === "admin" ? "الإدارة" : "الكاشير"}</span></td>
+      <td><div class="admin_expense_actions"><button type="button" data-audit-expense="${item.id}">السجل</button><button type="button" data-edit-expense="${item.id}">تعديل</button><button type="button" data-delete-expense="${item.id}">حذف</button></div></td>
+    </tr>`).join("");
+  }
+
+  function updateShiftFilter() {
+    const picker = $("adminExpensesShiftFilter");
+    const selected = picker.value || "all";
+    const shifts = new Map();
+    expenses.forEach((item) => {
+      if (item.shift_id != null) {
+        shifts.set(Number(item.shift_id), `${item.shift_owner || "كاشير"} — ${item.target_date} (شيفت #${Number(item.shift_id)})`);
+      }
+    });
+    const hasUnassigned = expenses.some((item) => item.shift_id == null);
+    picker.innerHTML = '<option value="all">كل الشيفتات</option>'
+      + [...shifts].map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join("")
+      + (hasUnassigned ? '<option value="unassigned">مصروفات قديمة بلا شيفت</option>' : "");
+    picker.value = ((selected === "unassigned" && hasUnassigned) || shifts.has(Number(selected))) ? selected : "all";
+  }
+
+  async function loadExpenses() {
+    const start = $("adminExpensesStart").value;
+    const end = $("adminExpensesEnd").value;
+    if (!start || !end) return;
+    tbody.innerHTML = '<tr><td colspan="8" class="admin_expenses_empty">جاري التحميل...</td></tr>';
+    try {
+      const response = await window.apiFetch(`/shifts/admin/expenses?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`, { hideLoader: true });
+      if (!response.ok) throw new Error("تعذر تحميل المصاريف");
+      const data = await response.json();
+      expenses = Array.isArray(data.items) ? data.items : [];
+      updateShiftFilter();
+      render();
+    } catch (error) {
+      tbody.innerHTML = `<tr><td colspan="8" class="admin_expenses_empty is_error">${escapeHtml(error.message)}</td></tr>`;
+    }
+  }
+
+  async function initialise() {
+    if ($("adminExpensesStart").value) return Promise.all([loadExpenses(), loadShifts($("adminExpenseShift").value)]);
+    let businessDate = new Date().toISOString().slice(0, 10);
+    try {
+      const response = await window.apiFetch("/shifts/business-date", { hideLoader: true });
+      if (response.ok) businessDate = (await response.json()).business_date || businessDate;
+    } catch (_) {}
+    $("adminExpensesStart").value = businessDate;
+    $("adminExpensesEnd").value = businessDate;
+    $("adminExpenseDate").value = businessDate;
+    [$("adminExpensesStart"), $("adminExpensesEnd"), $("adminExpenseDate")].forEach(refreshDate);
+    await Promise.all([loadExpenses(), loadShifts()]);
+  }
+
+  $("adminExpenseForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const id = $("adminExpenseId").value;
+    const editedItem = expenses.find((item) => String(item.id) === id);
+    const payload = {
+      title: $("adminExpenseTitle").value.trim(),
+      amount: Number($("adminExpenseAmount").value),
+      note: $("adminExpenseNote").value.trim() || null,
+      paid_from: $("adminExpensePaidFrom").value,
+      receipt_reference: $("adminExpenseReceipt").value.trim() || null,
+      target_date: $("adminExpenseDate").value,
+    };
+    if (!payload.paid_from) {
+      alert("حدد مصدر النقد الذي دُفع منه المصروف");
+      return;
+    }
+    if (!id || editedItem?.source === "admin") {
+      payload.shift_id = Number($("adminExpenseShift").value);
+      if (!payload.shift_id) {
+        alert("اختر صاحب الشيفت أولًا");
+        return;
+      }
+    }
+    const submit = $("adminExpenseSubmit");
+    submit.disabled = true;
+    try {
+      const response = await window.apiFetch(id ? `/shifts/admin/expenses/${id}` : "/shifts/admin/expenses", {
+        method: id ? "PATCH" : "POST",
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(typeof data.detail === "string" ? data.detail : "تعذر حفظ المصروف");
+      }
+      const saved = await response.json();
+      resetForm();
+      await loadExpenses();
+      if (saved.shift_id && !id && expenses.some((item) => Number(item.shift_id) === Number(saved.shift_id))) {
+        $("adminExpensesShiftFilter").value = String(saved.shift_id);
+        render();
+      }
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  tbody.addEventListener("click", async (event) => {
+    const auditButton = event.target.closest("[data-audit-expense]");
+    if (auditButton) {
+      const response = await window.apiFetch(`/shifts/admin/expenses/${auditButton.dataset.auditExpense}/audit`);
+      if (!response.ok) return alert("تعذر عرض سجل المصروف");
+      const rows = await response.json();
+      return alert(rows.length ? rows.map((row) => `${new Date(row.created_at).toLocaleString("ar-EG")} • ${row.action} • مستخدم #${row.actor_id}\nقبل: ${JSON.stringify(row.before || {})}\nبعد: ${JSON.stringify(row.after || {})}`).join("\n\n") : "لا يوجد سجل تعديل لهذا المصروف القديم");
+    }
+    const editButton = event.target.closest("[data-edit-expense]");
+    const deleteButton = event.target.closest("[data-delete-expense]");
+    const id = Number(editButton?.dataset.editExpense || deleteButton?.dataset.deleteExpense);
+    const item = expenses.find((row) => Number(row.id) === id);
+    if (!item) return;
+    if (editButton) {
+      $("adminExpenseId").value = item.id;
+      $("adminExpenseTitle").value = item.title;
+      $("adminExpenseAmount").value = item.amount;
+      $("adminExpenseNote").value = item.note || "";
+      $("adminExpensePaidFrom").value = item.paid_from === "legacy_unverified" ? "" : (item.paid_from || "");
+      $("adminExpenseReceipt").value = item.receipt_reference || "";
+      $("adminExpenseDate").value = item.target_date;
+      $("adminExpenseDate").disabled = !item.editable_date;
+      await loadShifts(item.shift_id);
+      $("adminExpenseShift").disabled = item.source === "cashier";
+      $("adminExpenseShift").required = item.source !== "cashier";
+      $("adminExpenseFormTitle").textContent = "تعديل المصروف";
+      $("adminExpenseSubmit").textContent = "حفظ التعديل";
+      $("adminExpenseCancelEdit").hidden = false;
+      refreshDate($("adminExpenseDate"));
+      $("adminExpenseTitle").focus();
+      return;
+    }
+    if (!confirm(`حذف مصروف «${item.title}»؟`)) return;
+    const response = await window.apiFetch(`/shifts/admin/expenses/${id}`, { method: "DELETE" });
+    if (response.ok) await loadExpenses();
+    else alert("تعذر حذف المصروف");
+  });
+
+  $("adminExpenseCancelEdit").addEventListener("click", resetForm);
+  $("adminExpenseDate").addEventListener("change", () => { refreshDate($("adminExpenseDate")); loadShifts(); });
+  $("adminExpensesApply").addEventListener("click", loadExpenses);
+  $("adminExpensesSearch").addEventListener("input", render);
+  $("adminExpensesShiftFilter").addEventListener("change", render);
+  window.refreshAdminExpenses = initialise;
+  document.querySelector('[data-page="expenses"]')?.addEventListener("click", initialise);
+})();

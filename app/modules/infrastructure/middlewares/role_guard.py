@@ -1,4 +1,3 @@
-from typing import List
 
 from fastapi import Depends
 
@@ -6,7 +5,6 @@ from app.core.enums import UserRole
 from app.core.exceptions import AuthorizationError
 from app.core.logging import logger
 from app.modules.auth.dependencies import get_current_user
-
 
 # ─── Role Capabilities Registry ───────────────────────────────
 # Maps each role to the set of capabilities it has.
@@ -17,6 +15,7 @@ class Capability:
     # Menu capabilities
     VIEW_MENU = "view_menu"
     MANAGE_MENU = "manage_menu"           # create/update/delete categories & products
+    TOGGLE_DAILY_PRODUCT = "toggle_daily_product"
     MANAGE_PRICES = "manage_prices"
 
     # User capabilities
@@ -46,6 +45,7 @@ ROLE_CAPABILITIES: dict[UserRole, set[str]] = {
     },
     UserRole.CASHIER: {
         Capability.VIEW_MENU,
+        Capability.TOGGLE_DAILY_PRODUCT,
         Capability.CREATE_ORDER,
         Capability.VIEW_ORDERS,
         Capability.UPDATE_ORDER_STATUS,
@@ -71,7 +71,7 @@ def _has_capability(role: UserRole, required_capability: str) -> bool:
     return required_capability in capabilities
 
 
-def _has_role(user_role: UserRole, allowed_roles: List[UserRole]) -> bool:
+def _has_role(user_role: UserRole, allowed_roles: list[UserRole]) -> bool:
     """Check if user's role is in the list of allowed roles."""
     return user_role in allowed_roles
 

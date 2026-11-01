@@ -7,10 +7,10 @@ from app.modules.auth.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
     PasswordResetResponse,
-    VerificationChallengeResponse,
-    VerificationStatusResponse,
     ResetPasswordRequest,
     TokenResponse,
+    VerificationChallengeResponse,
+    VerificationStatusResponse,
 )
 from app.modules.auth.service import AuthService
 
@@ -56,14 +56,15 @@ async def login(
 
 from fastapi.security import HTTPAuthorizationCredentials
 
+from app.core.exceptions import AuthenticationError, AuthenticationServiceUnavailable
 from app.core.security import decode_token
 from app.core.token_blacklist import TokenBlacklist
-from app.core.exceptions import AuthenticationError, AuthenticationServiceUnavailable
 from app.modules.auth.dependencies import get_current_user, security_scheme
 
 
 @router.post("/logout")
 async def logout(
+    close_shift: bool = True,
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
     _current_user = Depends(get_current_user),
     redis = Depends(get_redis),
@@ -76,10 +77,9 @@ async def logout(
         user_id = payload.get("user_id")
         if not isinstance(exp, int):
             raise AuthenticationError("Token payload is malformed")
-        if not await TokenBlacklist().revoke_token(token, exp):
-            raise AuthenticationServiceUnavailable()
-        
-        if user_id:
+        # A cashier must be able to correct a missing cash count before the
+        # token is revoked; otherwise logout could strand an open shift.
+        if user_id and close_shift:
             from app.core.enums import UserRole
             if payload.get("role") == UserRole.CASHIER.value:
                 from app.core.database import AsyncSessionLocal
@@ -87,5 +87,7 @@ async def logout(
                 async with AsyncSessionLocal() as db:
                     shifts_service = ShiftsService(db, redis)
                     await shifts_service.end_shift(user_id, sync_web_orders=True)
+        if not await TokenBlacklist().revoke_token(token, exp):
+            raise AuthenticationServiceUnavailable()
     
     return {"message": "Logged out successfully"}

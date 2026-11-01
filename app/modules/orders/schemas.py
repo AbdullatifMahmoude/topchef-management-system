@@ -1,9 +1,27 @@
 from datetime import date, datetime
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator, AliasChoices
 from decimal import Decimal
-from app.core.enums import OrderType, OrderSource, OrderStatus, DiscountType, PaymentMethod
+from typing import Any
+from uuid import UUID
+
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+from app.core.business_calendar import order_time_in_cairo
+from app.core.enums import (
+    DiscountType,
+    OrderSource,
+    OrderStatus,
+    OrderType,
+    PaymentMethod,
+)
 from app.modules.customer.schemas import CustomerAddressResponse
+
 
 class OrderItemBase(BaseModel):
     product_id: int
@@ -17,38 +35,45 @@ class OrderItemResponse(OrderItemBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     total_price: Decimal
-    product_name: Optional[str] = None
+    product_name: str | None = None
 
 class AppliedOfferResponse(BaseModel):
     code: str
-    display_name: Optional[str] = None
+    display_name: str | None = None
     discount_type: DiscountType
     discount_value: Decimal
     discount_amount: Decimal
+    rules: dict[str, Any] = Field(default_factory=dict)
 
 class OrderBase(BaseModel):
-    customer_id: Optional[int] = None
-    customer_phone: Optional[str] = None
-    customer_name: Optional[str] = None
+    customer_id: int | None = None
+    customer_phone: str | None = None
+    customer_name: str | None = None
     order_type: OrderType
     source: OrderSource = Field(OrderSource.ONLINE, validation_alias=AliasChoices("source", "order_source"))
-    customer_notes: Optional[str] = None
-    internal_notes: Optional[str] = None
+    customer_notes: str | None = None
+    internal_notes: str | None = None
     payment_method: PaymentMethod = PaymentMethod.CASH
+    is_printed: bool = False
 
 class OrderCreate(OrderBase):
-    items: List[OrderItemCreate]
-    idempotency_key: Optional[str] = None
-    address_id: Optional[int] = None
-    customer_address: Optional[str] = None
-    delivery_person_id: Optional[int] = None
+    items: list[OrderItemCreate]
+    cash_received: bool = False
+    digital_payment_verified: bool = False
+    idempotency_key: str | None = None
+    address_id: int | None = None
+    customer_address: str | None = None
+    delivery_person_id: int | None = None
     delivery_fee: Decimal = Field(default=Decimal("0.00"), ge=0)
-    offer_code: Optional[str] = None
-    manual_discount_type: Optional[DiscountType] = None
-    manual_discount_value: Optional[Decimal] = Field(default=None, gt=0)
-    discount_reason: Optional[str] = None
-    order_number: Optional[str] = None
-    order_date: Optional[date] = None
+    offer_code: str | None = None
+    loyalty_rule_id: UUID | None = None
+    loyalty_expected_points: int | None = Field(default=None, ge=1)
+    loyalty_expected_value: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
+    manual_discount_type: DiscountType | None = None
+    manual_discount_value: Decimal | None = Field(default=None, gt=0)
+    discount_reason: str | None = None
+    order_number: str | None = None
+    order_date: date | None = None
     
     @field_validator('customer_id', 'address_id', 'delivery_person_id', mode='before')
     @classmethod
@@ -59,18 +84,35 @@ class OrderCreate(OrderBase):
 
     @model_validator(mode='after')
     def validate_discount_rules(self):
+        if self.cash_received and (
+            self.source != OrderSource.CASHIER
+            or self.payment_method != PaymentMethod.CASH
+            or self.order_type not in (OrderType.HALL, OrderType.TAKEAWAY)
+        ):
+            raise ValueError("تأكيد النقد عند إنشاء الطلب متاح للصالة والتيك أواي النقدي فقط")
+        if self.digital_payment_verified and (
+            self.source != OrderSource.CASHIER
+            or self.payment_method not in (PaymentMethod.INSTAPAY, PaymentMethod.WALLET)
+        ):
+            raise ValueError("تأكيد التحويل متاح لطلب الكاشير الرقمي فقط")
         if (self.manual_discount_type is None) != (self.manual_discount_value is None):
             raise ValueError("Manual discount type and value must be provided together")
-        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value > Decimal("100"):
+        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value > Decimal(100):
             raise ValueError("Manual percentage discount cannot exceed 100%")
         if self.offer_code and self.manual_discount_type:
             raise ValueError("An offer and a manual discount cannot be combined")
+        if self.loyalty_rule_id and (self.loyalty_expected_points is None or self.loyalty_expected_value is None):
+            raise ValueError("اختر مكافأة النقاط بعد تحديث رصيدك")
+        if not self.loyalty_rule_id and (self.loyalty_expected_points is not None or self.loyalty_expected_value is not None):
+            raise ValueError("حدد قاعدة النقاط قبل إرسال قيمتها")
         return self
 
 class OrderUpdate(BaseModel):
-    order_status: Optional[OrderStatus] = None
-    delivery_person_id: Optional[int] = None
-    internal_notes: Optional[str] = None
+    order_status: OrderStatus | None = None
+    digital_payment_verified: bool = False
+    delivery_person_id: int | None = None
+    internal_notes: str | None = None
+    is_printed: bool | None = None
 
     @field_validator('delivery_person_id', mode='before')
     @classmethod
@@ -79,23 +121,43 @@ class OrderUpdate(BaseModel):
             return None
         return v
 
+
+class CancellationDecision(BaseModel):
+    approve: bool
+
+
+class CancellationRequestResponse(BaseModel):
+    id: int
+    order_id: int
+    order_number: str
+    requester_name: str
+    status: str
+    requested_at: datetime
+
+    @field_validator("requested_at", mode="before")
+    @classmethod
+    def display_requested_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
+
 class OrderUpdateFull(BaseModel):
     """Comprehensive order update schema for patch endpoint."""
-    order_type: Optional[OrderType] = None
-    delivery_person_id: Optional[int] = None
-    customer_name: Optional[str] = None
-    customer_phone: Optional[str] = None
-    customer_notes: Optional[str] = None
-    internal_notes: Optional[str] = None
-    address_id: Optional[int] = None
-    customer_address: Optional[str] = None
-    customer_id: Optional[int] = None
-    delivery_fee: Optional[Decimal] = None
-    items: Optional[List[OrderItemCreate]] = None
-    manual_discount_type: Optional[DiscountType] = None
-    manual_discount_value: Optional[Decimal] = Field(default=None, gt=0)
-    discount_reason: Optional[str] = None
-    payment_method: Optional[PaymentMethod] = None
+    order_type: OrderType | None = None
+    delivery_person_id: int | None = None
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    customer_notes: str | None = None
+    internal_notes: str | None = None
+    address_id: int | None = None
+    customer_address: str | None = None
+    customer_id: int | None = None
+    delivery_fee: Decimal | None = None
+    items: list[OrderItemCreate] | None = None
+    manual_discount_type: DiscountType | None = None
+    manual_discount_value: Decimal | None = Field(default=None, gt=0)
+    discount_reason: str | None = None
+    payment_method: PaymentMethod | None = None
+    digital_payment_verified: bool = False
+    is_printed: bool | None = None
 
     @field_validator('delivery_person_id', 'address_id', mode='before')
     @classmethod
@@ -106,7 +168,7 @@ class OrderUpdateFull(BaseModel):
 
     @model_validator(mode='after')
     def validate_percentage_discount(self):
-        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value is not None and self.manual_discount_value > Decimal("100"):
+        if self.manual_discount_type == DiscountType.PERCENTAGE and self.manual_discount_value is not None and self.manual_discount_value > Decimal(100):
             raise ValueError("Manual percentage discount cannot exceed 100%")
         return self
 
@@ -116,24 +178,38 @@ class OrderResponse(OrderBase):
     order_number: str
     order_date: date
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     order_status: OrderStatus
+    digital_payment_verified_at: datetime | None = None
+    digital_payment_verified_by_user_id: int | None = None
     subtotal: Decimal
     discount_amount: Decimal
-    discount_type: Optional[DiscountType] = None
-    discount_value: Optional[Decimal] = None
-    discount_reason: Optional[str] = None
-    applied_offer: Optional[AppliedOfferResponse] = None
+    discount_type: DiscountType | None = None
+    discount_value: Decimal | None = None
+    discount_reason: str | None = None
+    applied_offer: AppliedOfferResponse | None = None
     delivery_fee: Decimal
     total_amount: Decimal
-    items: List[OrderItemResponse]
-    creator_name: Optional[str] = None
-    delivery_person_name: Optional[str] = None
-    delivery_person_id: Optional[int] = None
-    address_id: Optional[int] = None
-    customer_address: Optional[str] = None
-    address: Optional[CustomerAddressResponse] = None
-    modifications: List["OrderModificationResponse"] = []
+    loyalty_reward_type: str | None = None
+    loyalty_points_spent: int = 0
+    loyalty_discount_amount: Decimal = Decimal("0.00")
+    loyalty_product_id: int | None = None
+    loyalty_product_name: str | None = None
+    loyalty_variant_name: str | None = None
+    loyalty_status: str | None = None
+    items: list[OrderItemResponse]
+    creator_name: str | None = None
+    delivery_person_name: str | None = None
+    delivery_person_id: int | None = None
+    address_id: int | None = None
+    customer_address: str | None = None
+    address: CustomerAddressResponse | None = None
+    modifications: list["OrderModificationResponse"] = []
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def display_order_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
 
     @model_validator(mode='after')
     def validate_financial_integrity(self):
@@ -149,23 +225,62 @@ class OrderResponse(OrderBase):
 class OrderModificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    changed_by_user_id: Optional[int] = None
+    changed_by_user_id: int | None = None
     changed_at: datetime
-    changes: List[str]  # We will store a list of string messages
+    changes: list[str]  # We will store a list of string messages
+
+    @field_validator("changed_at", mode="before")
+    @classmethod
+    def display_change_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
 
 # Resolve forward reference for OrderResponse.modifications
 OrderResponse.model_rebuild()
 
 class OrderDetailResponse(OrderResponse):
-    created_by_user_id: Optional[int] = None
-    delivery_person_id: Optional[int] = None
+    created_by_user_id: int | None = None
+    delivery_person_id: int | None = None
     updated_at: datetime
-    internal_notes: Optional[str] = None
-    modifications: List[OrderModificationResponse] = []
+    internal_notes: str | None = None
+    modifications: list[OrderModificationResponse] = []
 
 
 class OrderListResponse(BaseModel):
     total: int
     page: int
     page_size: int
-    orders: List[OrderResponse]
+    orders: list[OrderResponse]
+
+
+class DashboardOrderResponse(BaseModel):
+    """Lean order shape used by the operational dashboard."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    order_number: str
+    customer_name: str | None = None
+    order_type: OrderType
+    order_status: OrderStatus
+    total_amount: Decimal
+    loyalty_reward_type: str | None = None
+    loyalty_points_spent: int = 0
+    loyalty_discount_amount: Decimal = Decimal("0.00")
+    loyalty_product_id: int | None = None
+    loyalty_product_name: str | None = None
+    loyalty_variant_name: str | None = None
+    loyalty_status: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+    items: list[OrderItemResponse]
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def display_order_time(cls, value):
+        return order_time_in_cairo(value) if isinstance(value, datetime) and value.tzinfo is None else value
+
+
+class DashboardOrderListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    orders: list[DashboardOrderResponse]

@@ -1,9 +1,21 @@
 import contextlib
+import json
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.modules.settings.repository import SettingsRepository
-from app.modules.settings import schemas
+from sqlalchemy.orm import selectinload
+
+from app.core.config import settings
+from app.core.exceptions import ValidationError
 from app.core.logging import logger
 from app.core.secrets import decrypt_secret, encrypt_secret
+from app.modules.menu.models import Product
+from app.modules.settings import schemas
+from app.modules.settings.repository import SettingsRepository
+
+DEFAULT_TRANSFER_NUMBER = "01009515031"
+DEFAULT_WALLET_NUMBER = "01212758001"
+
 
 class SettingsService:
     WHATSAPP_API_KEY = "whatsapp_api_key"
@@ -30,6 +42,7 @@ class SettingsService:
     WALLET_ENABLED = "wallet_enabled"
     WALLET_NUMBER = "wallet_number"
     PAYMENT_ACCOUNT_NAME = "payment_account_name"
+    LOYALTY_RULES = "loyalty_rules"
     def __init__(self, db: AsyncSession, redis=None):
         self.db = db
         self.redis = redis
@@ -53,8 +66,8 @@ class SettingsService:
                 cached = await self.redis.get(cache_key)
                 if cached is not None:
                     return cached.lower() == "true"
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Settings cache read failed for %s: %s", cache_key, exc)
 
         # 2. Get DB
         setting = await self.repo.get_setting("web_orders_enabled")
@@ -64,8 +77,8 @@ class SettingsService:
         if self.redis:
             try:
                 await self.redis.setex(cache_key, 3600, str(status).lower())
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Settings cache write failed for %s: %s", cache_key, exc)
         
         return status
 
@@ -93,8 +106,8 @@ class SettingsService:
                 try:
                     await self.redis.setex("settings:web_orders_enabled", 3600, str(enabled).lower())
                     await self.redis.delete("settings:menu_checkout")
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Web-order settings cache update failed: %s", exc)
             
             logger.info(f"Web orders status toggled to: {enabled}")
             return setting
@@ -106,12 +119,49 @@ class SettingsService:
         text = lambda key: (values.get(key).value_text or "") if values.get(key) else ""
         flag = lambda key: bool(values.get(key) and values.get(key).value_bool)
         return schemas.PaymentSettingsResponse(
-            instapay_enabled=flag(self.INSTAPAY_ENABLED) and bool(text(self.INSTAPAY_ACCOUNT).strip()),
-            instapay_account=text(self.INSTAPAY_ACCOUNT),
-            wallet_enabled=flag(self.WALLET_ENABLED) and bool(text(self.WALLET_NUMBER).strip()),
-            wallet_number=text(self.WALLET_NUMBER),
+            instapay_enabled=flag(self.INSTAPAY_ENABLED),
+            instapay_account=text(self.INSTAPAY_ACCOUNT).strip() or DEFAULT_TRANSFER_NUMBER,
+            wallet_enabled=flag(self.WALLET_ENABLED),
+            wallet_number=(
+                DEFAULT_WALLET_NUMBER
+                if text(self.WALLET_NUMBER).strip() in ("", DEFAULT_TRANSFER_NUMBER)
+                else text(self.WALLET_NUMBER).strip()
+            ),
             payment_account_name=text(self.PAYMENT_ACCOUNT_NAME),
         )
+
+    async def get_loyalty_settings(self) -> schemas.LoyaltySettingsResponse:
+        row = await self.repo.get_setting(self.LOYALTY_RULES)
+        if not row or not row.value_text:
+            return schemas.LoyaltySettingsResponse()
+        try:
+            data = schemas.LoyaltySettingsUpdate.model_validate(json.loads(row.value_text))
+        except (ValueError, TypeError) as exc:
+            logger.error("Invalid loyalty rules stored in app_settings: %s", type(exc).__name__)
+            return schemas.LoyaltySettingsResponse()
+        return schemas.LoyaltySettingsResponse(
+            **data.model_dump(), configured=bool(data.tiers), active=data.enabled and bool(data.tiers),
+            redemption_active=data.redemption_enabled and bool(data.redemption_rules),
+        )
+
+    async def update_loyalty_settings(self, data: schemas.LoyaltySettingsUpdate) -> schemas.LoyaltySettingsResponse:
+        async with self._transaction_scope():
+            for rule in data.redemption_rules:
+                if rule.reward_type != "free_product":
+                    continue
+                product = await self.db.scalar(select(Product).where(Product.id == rule.product_id).options(
+                    selectinload(Product.variants), selectinload(Product.category),
+                ))
+                if not product or product.is_deleted or not product.is_available or not product.category \
+                        or not product.category.is_active or product.category.is_deleted \
+                        or not any(variant.id == rule.variant_id and not variant.is_deleted and variant.price > 0
+                                   for variant in product.variants):
+                    raise ValidationError("اختر صنفًا وحجمًا متاحين لقاعدة الصنف المجاني")
+            await self.repo.create_or_update_text_setting(
+                self.LOYALTY_RULES, data.model_dump_json(), "Customer loyalty earning rules",
+            )
+            await self.db.flush()
+        return await self.get_loyalty_settings()
 
     async def update_payment_settings(self, data: schemas.PaymentSettingsUpdate) -> schemas.PaymentSettingsResponse:
         async with self._transaction_scope():
@@ -126,21 +176,25 @@ class SettingsService:
         if self.redis:
             try:
                 await self.redis.delete("settings:menu_checkout")
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Menu-checkout cache invalidation failed: %s", exc)
         return await self.get_payment_settings()
 
     async def get_menu_checkout_settings(self) -> schemas.MenuCheckoutSettings:
         from sqlalchemy import func, select
-        from app.core.business_calendar import get_current_business_date, is_weekly_holiday
+
+        from app.core.business_calendar import (
+            get_current_business_date,
+            is_weekly_holiday,
+        )
         from app.modules.shifts.models import CashierShift
         if self.redis:
             try:
                 cached = await self.redis.get("settings:menu_checkout")
                 if cached:
                     return schemas.MenuCheckoutSettings.model_validate_json(cached)
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Menu-checkout cache read failed: %s", exc)
         payment = await self.get_payment_settings()
         if is_weekly_holiday():
             enabled, reason, message = False, "weekly_holiday", "النهارده إجازتنا الأسبوعية. مستنيينك بكرة بإذن الله."
@@ -163,8 +217,8 @@ class SettingsService:
         if self.redis:
             try:
                 await self.redis.setex("settings:menu_checkout", 30, result.model_dump_json())
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Menu-checkout cache write failed: %s", exc)
         return result
 
     async def get_whatsapp_settings(self) -> schemas.WhatsAppSettingsResponse:
@@ -200,7 +254,7 @@ class SettingsService:
             ),
             language_code=text(self.WHATSAPP_LANGUAGE_CODE, "ar"),
             graph_api_version=text(self.WHATSAPP_GRAPH_API_VERSION, "v23.0"),
-            enabled=text(self.WHATSAPP_ENABLED, "true").lower() == "true",
+            enabled=not settings.WHATSAPP_INTEGRATION_PAUSED and text(self.WHATSAPP_ENABLED, "true").lower() == "true",
             bulk_template_name=text(self.WHATSAPP_BULK_TEMPLATE_NAME, "topchef_bulk_message"),
             password_reset_template_name=text(self.WHATSAPP_PASSWORD_RESET_TEMPLATE_NAME, "topchef_password_reset"),
             reset_code_expiry_minutes=int(text(self.WHATSAPP_RESET_EXPIRY_MINUTES, "10")),

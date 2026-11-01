@@ -7,8 +7,12 @@
   let reconnectTimer = null;
   let heartbeatTimer = null;
   let fallbackRefreshTimer = null;
+  let dashboardLoadPromise = null;
   let latestStats = {};
   let currentOrderFilter = "all";
+  let pendingCancellations = [];
+
+  const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 
   function displayOrderNumber(orderNumber, fallback = "---") {
     const value = orderNumber ?? fallback;
@@ -23,9 +27,22 @@
     if (statsRes.ok) updateStatsUI(await statsRes.json());
   }
 
-  // ===== INITIAL LOAD =====
-  async function loadDashboardData() {
+  async function loadCancellationRequests() {
     try {
+      const response = await apiFetch("/orders/cancellation-requests", { hideLoader: true });
+      if (!response.ok) throw new Error(`تعذر تحميل طلبات الإلغاء (${response.status})`);
+      pendingCancellations = await response.json();
+      updateOperationalUI();
+    } catch (error) {
+      console.error("Cancellation requests load failed:", error);
+    }
+  }
+
+  // ===== INITIAL LOAD =====
+  function loadDashboardData() {
+    if (dashboardLoadPromise) return dashboardLoadPromise;
+    dashboardLoadPromise = (async () => {
+      try {
       // 1. Fetch Stats
       await loadDashboardStats();
 
@@ -46,9 +63,14 @@
         renderOrdersTable();
         updateOperationalUI();
       }
-    } catch (err) {
-      console.error("Dashboard load failed:", err);
-    }
+      await loadCancellationRequests();
+      } catch (err) {
+        console.error("Dashboard load failed:", err);
+      } finally {
+        dashboardLoadPromise = null;
+      }
+    })();
+    return dashboardLoadPromise;
   }
 
   // ===== RENDER TABLE =====
@@ -158,6 +180,7 @@
     const type = String(value || "").toUpperCase();
     if (type.includes("HALL") || type.includes("DINE_IN")) return "صالة";
     if (type.includes("TAKEAWAY") || type.includes("TAKE_AWAY")) return "تيك أواي";
+    if (type.includes("PHONE_RESERVATION")) return "حجز تلفون";
     if (type.includes("DELIVERY")) return "دليفري";
     if (type.includes("ONLINE")) return "أون لاين";
     return "أخرى";
@@ -191,19 +214,20 @@
 
     const channelCounts = {};
     ordersList.forEach((order) => { const key = normalizeOrderType(order.order_type); channelCounts[key] = (channelCounts[key] || 0) + 1; });
-    const channels = ["صالة", "تيك أواي", "دليفري", "أون لاين"];
+    const channels = ["صالة", "تيك أواي", "حجز تلفون", "دليفري", "أون لاين"];
     const maxChannel = Math.max(...channels.map((key) => channelCounts[key] || 0), 1);
     const channelsEl = document.getElementById("ops_channels");
     if (channelsEl) channelsEl.innerHTML = channels.map((label, index) => `<div><p><span>${label}</span><strong>${(channelCounts[label] || 0).toLocaleString("ar-EG")}</strong></p><i><b style="width:${(channelCounts[label] || 0) / maxChannel * 100}%;--channel-color:${["#f1c75b", "#4fb3bf", "#9b7de3", "#eb8f62"][index]}"></b></i></div>`).join("");
 
     const cancelled = ordersList.filter((order) => order.order_status === "cancelled").slice(0, 3);
     const alerts = [
+      ...pendingCancellations.map((request) => ({ type: "danger", title: `طلب إلغاء #${displayOrderNumber(request.order_number, request.order_id)}`, detail: `الكاشير: ${request.requester_name || "—"}`, requestId: request.id })),
       ...delayed.slice(0, 4).map((entry) => ({ type: "warning", title: `طلب #${displayOrderNumber(entry.order.order_number, entry.order.id)} متأخر`, detail: `${entry.minutes} دقيقة انتظار` })),
       ...cancelled.map((order) => ({ type: "danger", title: `تم إلغاء الطلب #${displayOrderNumber(order.order_number, order.id)}`, detail: formatOrderTime(order.updated_at || order.created_at) })),
     ];
     setText("ops_alerts_count", alerts.length.toLocaleString("ar-EG"));
     const alertsEl = document.getElementById("ops_alerts");
-    if (alertsEl) alertsEl.innerHTML = alerts.length ? alerts.map((alert) => `<div class="ops_alert ${alert.type}"><i></i><div><strong>${alert.title}</strong><span>${alert.detail}</span></div></div>`).join("") : '<div class="ops_empty_state">لا توجد تنبيهات تحتاج تدخلك</div>';
+    if (alertsEl) alertsEl.innerHTML = alerts.length ? alerts.map((alert) => `<div class="ops_alert ${alert.type}"><i></i><div><strong>${escapeHtml(alert.title)}</strong><span>${escapeHtml(alert.detail)}</span>${alert.requestId ? `<div class="ops_alert_actions"><button type="button" data-cancellation-id="${alert.requestId}" data-approve="true">تأكيد الإلغاء</button><button type="button" data-cancellation-id="${alert.requestId}" data-approve="false">رفض</button></div>` : ""}</div></div>`).join("") : '<div class="ops_empty_state">لا توجد تنبيهات تحتاج تدخلك</div>';
   }
 
   function updateConnectionStatus(status) {
@@ -289,14 +313,6 @@
   function handleSocketEvent(payload) {
     const { type, data } = payload;
 
-    if (type === "ORDER_SNAPSHOT") {
-        ordersList = data.orders || [];
-        renderOrdersTable();
-        updateOperationalUI();
-        setTimeout(loadDashboardStats, 300);
-        return;
-    }
-
     // Refresh Orders/Dashboard
     if (type === "NEW_ORDER" || type === "ORDER_UPDATED") {
       if (type === "NEW_ORDER") {
@@ -330,6 +346,8 @@
       setTimeout(loadDashboardStats, 250);
       if (typeof window.refreshShifts === "function") window.refreshShifts();
     }
+
+    if (type === "CANCELLATION_REQUEST_UPDATED") loadCancellationRequests();
 
     // Refresh Products Page
     if (type === "PRODUCT_UPDATED") {
@@ -399,7 +417,7 @@
     if (!dateStr) return "---";
     const d = new Date(dateStr);
     if (isNaN(d)) return dateStr;
-    return d.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("ar-EG", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit" });
   }
 
   function summarizeItems(items) {
@@ -415,12 +433,32 @@
 
   // ===== INIT =====
   document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("ops_alerts")?.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-cancellation-id]");
+      if (!button) return;
+      const approve = button.dataset.approve === "true";
+      button.disabled = true;
+      try {
+        const response = await apiFetch(`/orders/cancellation-requests/${button.dataset.cancellationId}`, {
+          method: "PATCH", body: JSON.stringify({ approve }),
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(typeof error.detail === "string" ? error.detail : "تعذر مراجعة طلب الإلغاء");
+        }
+        await loadCancellationRequests();
+        if (approve) await loadDashboardData();
+      } catch (error) {
+        button.disabled = false;
+        alert(error.message || "تعذر مراجعة طلب الإلغاء");
+      }
+    });
     const clock = () => {
       const now = new Date();
       const timeEl = document.getElementById("ops_current_time");
       const dateEl = document.getElementById("ops_business_date");
-      if (timeEl) timeEl.textContent = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
-      if (dateEl) dateEl.textContent = now.toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      if (timeEl) timeEl.textContent = now.toLocaleTimeString("ar-EG", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit" });
+      if (dateEl) dateEl.textContent = now.toLocaleDateString("ar-EG", { timeZone: "Africa/Cairo", weekday: "long", day: "numeric", month: "long", year: "numeric" });
     };
     clock();
     setInterval(clock, 30000);

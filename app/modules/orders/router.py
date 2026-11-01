@@ -1,31 +1,45 @@
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
-
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
 
 from app.core.database import get_db
-from app.modules.auth.dependencies import get_current_user, get_optional_user
-from app.modules.orders.service import OrderService
-from app.modules.orders import schemas
-from app.core.enums import OrderSource, OrderStatus, OrderType, UserRole
-
-from app.core.redis import get_redis
-from app.modules.orders.dependencies import get_order_service
+from app.core.enums import OrderSource, OrderStatus, OrderType, PaymentMethod, UserRole
 from app.core.events import order_events_manager
-from app.core.security import decode_token
+from app.core.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.logging import logger
+from app.core.security import decode_token
+from app.modules.auth.dependencies import get_current_user, get_optional_user
 from app.modules.auth.repository import AuthRepository
-
+from app.modules.customer.account_security import decode_customer_access
+from app.modules.orders import schemas
+from app.modules.orders.dependencies import get_order_service
+from app.modules.orders.service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+customer_bearer = HTTPBearer(auto_error=False)
 
 WS_CHANNEL_ROLES = {
     "admin": {UserRole.ADMIN.value},
     "cashier": {UserRole.ADMIN.value, UserRole.CASHIER.value},
     "default": {UserRole.ADMIN.value, UserRole.CASHIER.value},
 }
+
+
+async def authorize_cashier_order_access(service: OrderService, order_id: int, current_user: Any) -> Any:
+    order = await service.get_order(order_id)
+    if (current_user.role == UserRole.CASHIER
+            and order.order_source == OrderSource.CASHIER
+            and order.created_by_user_id != current_user.id):
+        raise AuthorizationError("لا يمكنك الوصول إلى طلب كاشير آخر")
+    return order
 
 
 def authorize_websocket_token(token: str | None, channel: str) -> dict | None:
@@ -49,32 +63,62 @@ def websocket_protocol_token(header: str | None) -> str | None:
 async def create_order(
     order_data: schemas.OrderCreate,
     service: OrderService = Depends(get_order_service),
-    current_user: Optional[any] = Depends(get_optional_user)
+    current_user: Any | None = Depends(get_optional_user),
+    customer_credentials: HTTPAuthorizationCredentials | None = Depends(customer_bearer),
 ):
     user_id = current_user.id if current_user else None
-    return await service.create_order(order_data, current_user_id=user_id)
+    if order_data.source == OrderSource.CASHIER and (
+        not current_user or current_user.role not in {UserRole.ADMIN, UserRole.CASHIER}
+    ):
+        raise AuthorizationError("إنشاء طلب كاشير يتطلب حساب كاشير أو أدمن")
+    customer_payload = None
+    if order_data.loyalty_rule_id:
+        if not customer_credentials:
+            raise AuthenticationError("سجّل الدخول لاستبدال نقاطك")
+        customer_payload = decode_customer_access(customer_credentials.credentials)
+    return await service.create_order(order_data, current_user_id=user_id, redeeming_customer=customer_payload)
 
 @router.get("/", response_model=schemas.OrderListResponse)  # Change to dict with pagination
 async def list_orders(
-    source: Optional[OrderSource] = None,
-    status: Optional[OrderStatus] = None,
-    order_type: Optional[OrderType] = None,
+    source: OrderSource | None = None,
+    status: OrderStatus | None = None,
+    order_type: OrderType | None = None,
+    is_printed: bool | None = None,
+    payment_method: PaymentMethod | None = None,
+    shift_id: int | None = Query(default=None, ge=1),
+    search: str | None = Query(default=None, max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     cashier_id = None
     if current_user and hasattr(current_user, 'role') and current_user.role == UserRole.CASHIER:
         cashier_id = current_user.id
 
+    shift = None
+    if shift_id is not None:
+        from app.modules.shifts.models import CashierShift
+
+        if source != OrderSource.CASHIER:
+            raise ValidationError("فلتر الشيفت مخصص لطلبات الكاشير")
+        shift = await service.db.get(CashierShift, shift_id)
+        if not shift:
+            raise NotFoundError("Shift")
+        if current_user.role == UserRole.CASHIER and shift.user_id != current_user.id:
+            raise AuthorizationError("لا يمكنك عرض طلبات شيفت كاشير آخر")
+
     total, orders = await service.list_orders_paginated(
         source=source,
         status=status,
         order_type=order_type,
+        is_printed=is_printed,
         page=page,
         page_size=page_size,
-        cashier_id=cashier_id
+        cashier_id=cashier_id,
+        shift=shift,
+        payment_method=payment_method,
+        search=search,
     )
 
     return {
@@ -84,28 +128,67 @@ async def list_orders(
         "orders": orders
     }
 
+
+@router.get("/cancellation-requests", response_model=list[schemas.CancellationRequestResponse])
+async def list_cancellation_requests(
+    service: OrderService = Depends(get_order_service),
+    current_user: Any = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("مراجعة طلبات الإلغاء متاحة للأدمن فقط")
+    return await service.list_pending_cancellations()
+
+
+@router.patch("/cancellation-requests/{request_id}")
+async def decide_cancellation_request(
+    request_id: int,
+    decision: schemas.CancellationDecision,
+    service: OrderService = Depends(get_order_service),
+    current_user: Any = Depends(get_current_user),
+):
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("تأكيد إلغاء الطلب متاح للأدمن فقط")
+    if decision.approve:
+        order = await service.approve_cancellation(request_id, current_user.id)
+        return {"status": "approved", "order_id": order.id}
+    await service.reject_cancellation(request_id, current_user.id)
+    return {"status": "rejected"}
+
+
+@router.post("/{order_id}/cancellation-request")
+async def request_order_cancellation(
+    order_id: int,
+    service: OrderService = Depends(get_order_service),
+    current_user: Any = Depends(get_current_user),
+):
+    if current_user.role != UserRole.CASHIER:
+        raise AuthorizationError("طلب الإلغاء متاح للكاشير فقط")
+    await authorize_cashier_order_access(service, order_id, current_user)
+    request = await service.request_cancellation(order_id, current_user.id)
+    return {"request_id": request.id, "status": request.status}
+
 @router.get("/{order_id}", response_model=schemas.OrderDetailResponse)
 async def get_order_detail(
     order_id: int,
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
-    return await service.get_order(order_id)
+    return await authorize_cashier_order_access(service, order_id, current_user)
 
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     return await service.get_today_stats()
 
-@router.get("/dashboard/today", response_model=schemas.OrderListResponse)
+@router.get("/dashboard/today", response_model=schemas.DashboardOrderListResponse)
 async def list_dashboard_today_orders(
-    source: Optional[OrderSource] = None,
-    status: Optional[OrderStatus] = None,
-    order_type: Optional[OrderType] = None,
+    source: OrderSource | None = None,
+    status: OrderStatus | None = None,
+    order_type: OrderType | None = None,
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     cashier_id = None
     if current_user and hasattr(current_user, 'role') and current_user.role == UserRole.CASHIER:
@@ -128,28 +211,32 @@ async def list_dashboard_today_orders(
 @router.get("/riders/stats")
 async def get_rider_stats(
     db: AsyncSession = Depends(get_db),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
     """Return the live delivery desk snapshot for the current business day."""
-    from datetime import datetime, timedelta, timezone
-    from sqlalchemy import select, and_, or_
+    from datetime import datetime
+
+    from sqlalchemy import and_, or_, select
     from sqlalchemy.orm import selectinload
+
+    from app.core.business_calendar import (
+        ORDER_STORAGE_TZ,
+        get_current_business_date,
+        order_time_in_cairo,
+    )
+    from app.core.business_calendar import (
+        business_day_start as get_business_day_start,
+    )
+    from app.core.enums import OrderStatus, OrderType, PaymentMethod, UserRole
     from app.modules.orders.models import Order
     from app.modules.users.models import User
-    from app.core.enums import OrderStatus, OrderType, UserRole, PaymentMethod
-    
-    from app.core.business_calendar import (
-        EGYPT_TZ,
-        business_day_start as get_business_day_start,
-        get_current_business_date,
-    )
 
     # `order_date` is set from the 7 AM business-day boundary when the order is
     # created. It is the authoritative order response.
     # browser/device timestamps or page-limited frontend lists.
     business_date = get_current_business_date()
     business_day_start = get_business_day_start(business_date)
-    now = datetime.now(EGYPT_TZ).replace(tzinfo=None)
+    now = datetime.now(ORDER_STORAGE_TZ).replace(tzinfo=None)
     users_result = await db.execute(
         select(User)
         .where(and_(User.role == UserRole.DELIVERY, User.is_deleted == False))
@@ -239,7 +326,7 @@ async def get_rider_stats(
                 "delivery_fee": float(order.delivery_fee or 0),
                 "rider_id": order.delivery_person_id,
                 "rider_name": order.delivery_person_name,
-                "created_at": order.created_at.isoformat(),
+                "created_at": order_time_in_cairo(order.created_at).isoformat(),
                 "age_minutes": age_minutes,
             })
 
@@ -272,8 +359,9 @@ async def update_order(
     order_id: int,
     update_data: schemas.OrderUpdateFull,
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
+    await authorize_cashier_order_access(service, order_id, current_user)
     user_id = current_user.id if current_user else None
     return await service.update_order(order_id, update_data, current_user_id=user_id)
 
@@ -282,10 +370,22 @@ async def update_order_status(
     order_id: int,
     update_data: schemas.OrderUpdate,
     service: OrderService = Depends(get_order_service),
-    current_user: any = Depends(get_current_user)
+    current_user: Any = Depends(get_current_user)
 ):
+    await authorize_cashier_order_access(service, order_id, current_user)
+    if update_data.order_status == OrderStatus.CANCELLED and current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("إلغاء الطلب يتطلب موافقة الأدمن؛ أرسل طلب إلغاء")
     user_id = current_user.id if current_user else None
     return await service.update_order_status(order_id, update_data, current_user_id=user_id)
+
+@router.post("/{order_id}/mark-printed", response_model=schemas.OrderResponse)
+async def mark_order_printed(
+    order_id: int,
+    service: OrderService = Depends(get_order_service),
+    current_user: Any = Depends(get_current_user),
+):
+    await authorize_cashier_order_access(service, order_id, current_user)
+    return await service.mark_order_printed(order_id)
 
 @router.websocket("/ws/online")
 async def websocket_online(websocket: WebSocket):
@@ -312,7 +412,7 @@ async def websocket_online(websocket: WebSocket):
 async def websocket_orders(
     websocket: WebSocket,
     channel: str = "default",
-    service: OrderService = Depends(get_order_service),
+    db: AsyncSession = Depends(get_db),
 ):
 
     token = websocket_protocol_token(websocket.headers.get("sec-websocket-protocol"))
@@ -324,32 +424,17 @@ async def websocket_orders(
         logger.warning("WebSocket authentication rejected channel=%s", channel)
         await websocket.close(code=4401, reason="Authentication required")
         return
-    user = await AuthRepository(service.db).get_user_by_id(payload["user_id"])
+    user = await AuthRepository(db).get_user_by_id(payload["user_id"])
     if not user or not user.is_active or user.role.value not in WS_CHANNEL_ROLES[channel]:
         logger.warning("WebSocket authorization rejected channel=%s user_id=%s", channel, payload["user_id"])
         await websocket.close(code=4403, reason="Not authorized for this channel")
         return
     await order_events_manager.connect(websocket, channel, already_accepted=True)
     try:
-        if channel in {"cashier", "admin", "default"}:
-            total, orders = await service.list_orders_paginated(page=1, page_size=500)
-            
-            validated_orders = []
-            for order in orders:
-                try:
-                    validated_orders.append(
-                        schemas.OrderResponse.model_validate(order).model_dump(mode="json")
-                    )
-                except Exception as e:
-                    logger.warning(f"Skipping malformed order {getattr(order, 'id', 'unknown')} in WS snapshot: {e}")
-
-            await websocket.send_json({
-                "type": "ORDER_SNAPSHOT",
-                "data": {
-                    "total": total,
-                    "orders": validated_orders,
-                },
-            })
+        # Initial order data is fetched through the paginated HTTP endpoints.
+        # Keeping WebSocket startup payload-free avoids materializing hundreds
+        # of orders and all eager-loaded relationships for every reconnect.
+        await websocket.send_json({"type": "CONNECTION_READY"})
 
         while True:
             message = await websocket.receive_text()

@@ -1,13 +1,14 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from app.core.enums import OrderStatus, OrderType, PaymentMethod
-from app.modules.shifts.service import ShiftsService
-from app.modules.shifts.models import CashierShift
 from app.core.business_calendar import get_current_business_date
+from app.core.enums import OrderStatus, OrderType, PaymentMethod
+from app.modules.shifts.models import CashierShift
+from app.modules.shifts.service import ShiftsService
 
 
 class _Scalars:
@@ -121,6 +122,53 @@ async def test_admin_cash_additions_adjust_difference_without_overwriting_cashie
 
 
 @pytest.mark.asyncio
+async def test_digital_payments_count_as_sales_but_not_drawer_cash():
+    target_date = get_current_business_date() - timedelta(days=1)
+    start_local = datetime.combine(target_date, datetime.min.time()).replace(hour=10)
+    shift = SimpleNamespace(
+        id=1, user_id=7, user=SimpleNamespace(full_name="Cashier", username="cashier"),
+        start_time=start_local - timedelta(hours=3),
+        end_time=start_local.replace(hour=18) - timedelta(hours=3),
+        target_date=target_date, opening_cash=50, actual_closing_cash=145,
+        closing_note=None,
+    )
+
+    def order(owner, method, amount, *, status=OrderStatus.COMPLETED):
+        return SimpleNamespace(
+            created_by_user_id=owner,
+            created_at=start_local.replace(hour=12),
+            order_status=status,
+            total_amount=amount,
+            delivery_fee=0,
+            discount_amount=0,
+            payment_method=method,
+            order_type=OrderType.HALL,
+        )
+
+    orders = [
+        order(7, PaymentMethod.CASH, 100),
+        order(7, PaymentMethod.WALLET, 200),
+        order(7, PaymentMethod.INSTAPAY, 300),
+        order(8, PaymentMethod.CASH, 400),
+        order(7, PaymentMethod.CASH, 500, status=OrderStatus.CANCELLED),
+    ]
+    expense = SimpleNamespace(shift_id=1, amount=20)
+    db = AsyncMock()
+    db.execute.side_effect = [_Result([shift]), _Result(orders), _Result([expense]), _Result([])]
+
+    report = (await ShiftsService(db).get_shifts_report(target_date))[0]
+
+    assert report["total_orders"] == 4
+    assert report["total_sales"] == 600
+    assert report["cash_sales"] == 100
+    assert report["wallet_sales"] == 200
+    assert report["instapay_sales"] == 300
+    assert report["cash_expenses"] == 20
+    assert report["expected_cash"] == 130  # Opening cash + cash sales - expenses.
+    assert report["cash_difference"] == 15  # Digital payments never enter the drawer.
+
+
+@pytest.mark.asyncio
 async def test_end_shift_finds_open_shift_without_target_date_restriction():
     shift = SimpleNamespace(end_time=None)
     db = AsyncMock()
@@ -133,7 +181,7 @@ async def test_end_shift_finds_open_shift_without_target_date_restriction():
 
 
 @pytest.mark.asyncio
-async def test_start_shift_closes_stale_shift_and_creates_current_day_shift(monkeypatch):
+async def test_start_shift_keeps_stale_shift_open_for_cashier_count():
     current_date = get_current_business_date()
     stale = SimpleNamespace(
         id=1, user_id=7, end_time=None, target_date=current_date - timedelta(days=1)
@@ -143,10 +191,65 @@ async def test_start_shift_closes_stale_shift_and_creates_current_day_shift(monk
     db.execute.return_value = _Result([])
     db.add = Mock()
 
+    current = await ShiftsService(db).start_shift(user_id=7)
+
+    assert current is stale
+    assert stale.end_time is None
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_closed_cashier_shift_is_not_reopened_for_new_float():
+    target = get_current_business_date()
+    db = AsyncMock()
+    db.scalar.return_value = None
+    db.add = Mock()
+
     created = await ShiftsService(db).start_shift(user_id=7)
 
-    assert stale.end_time is not None
     assert isinstance(created, CashierShift)
-    assert created.target_date == current_date
+    assert created.target_date == target
+    assert created.opening_cash == 0
+    assert created.opening_confirmed_at is not None
     db.add.assert_called_once_with(created)
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_admin_close_shift_endpoint():
+    from app.modules.shifts.router import AdminForceCloseShift, admin_close_shift
+    from app.modules.users.models import User
+    from app.core.enums import UserRole
+
+    admin = User(id=1, username="admin", role=UserRole.ADMIN)
+    shift = SimpleNamespace(
+        id=5, end_time=None, actual_closing_cash=None, closing_note=None,
+        opening_confirmed_at=None, target_date=date(2026, 10, 27), cash_tracking_enabled=True,
+    )
+    db = AsyncMock()
+    db.scalar.return_value = shift
+    payload = AdminForceCloseShift(actual_closing_cash=Decimal("450.00"), closing_note="Closed by admin")
+
+    res = await admin_close_shift(shift_id=5, payload=payload, db=db, current_user=admin, redis=None)
+    assert res["shift_id"] == 5
+    assert shift.end_time is not None
+    assert shift.actual_closing_cash == Decimal("450.00")
+    assert shift.closing_note.startswith("إغلاق إداري بواسطة admin")
+    assert "Closed by admin" in shift.closing_note
+    db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admin_close_rejected_for_cashier():
+    from app.core.exceptions import AuthorizationError
+    from app.modules.shifts.router import AdminForceCloseShift, admin_close_shift
+    from app.modules.users.models import User
+    from app.core.enums import UserRole
+
+    cashier = User(id=2, username="c", role=UserRole.CASHIER)
+    db = AsyncMock()
+    with pytest.raises(AuthorizationError):
+        await admin_close_shift(shift_id=5, payload=AdminForceCloseShift(actual_closing_cash=Decimal("1")),
+                                db=db, current_user=cashier, redis=None)
+    db.commit.assert_not_awaited()

@@ -1,5 +1,7 @@
+from typing import Annotated
+
 from pydantic import BaseModel, Field
-from typing import Annotated, Optional
+
 from app.core.enums import UserRole
 
 
@@ -20,7 +22,7 @@ class TokenPayload(BaseModel):
     sub: str          # username
     user_id: int
     role: str
-    exp: Optional[int] = None
+    exp: int | None = None
 
 class ForgotPasswordRequest(BaseModel):
     username: Annotated[str, Field(min_length=3, max_length=200)]

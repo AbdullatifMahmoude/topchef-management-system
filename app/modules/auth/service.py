@@ -9,7 +9,10 @@ from app.core.logging import logger
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.schemas import LoginRequest, TokenResponse
-from app.modules.settings.whatsapp_verification import create_inbound_challenge, consume_verified_challenge
+from app.modules.settings.whatsapp_verification import (
+    consume_verified_challenge,
+    create_inbound_challenge,
+)
 from app.modules.users.repository import UserRepository
 
 # In-memory failed login tracker: { username: { "count": int, "locked_until": float } }
@@ -105,7 +108,7 @@ class AuthService:
                 if count == 1:
                     await self.redis.expire(redis_key, _PASSWORD_RESET_COOLDOWN_SECONDS)
                 return count == 1
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("Password reset Redis rate limit unavailable: %s", exc)
 
         now = time.monotonic()

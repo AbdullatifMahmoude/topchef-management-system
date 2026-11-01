@@ -5,10 +5,10 @@ from typing import Any
 
 import httpx
 
+from app.core.config import settings as app_settings
 from app.core.database import AsyncSessionLocal
 from app.core.logging import logger
 from app.modules.settings.service import SettingsService
-
 
 STATUS_NAMES = {
     "new": "تم استلام الطلب",
@@ -51,7 +51,8 @@ async def close_whatsapp_http_client() -> None:
 def whatsapp_config_ready(settings, *, template_name: str = "") -> bool:
     """One gate used by every WhatsApp-dependent feature."""
     return bool(
-        settings.enabled
+        not app_settings.WHATSAPP_INTEGRATION_PAUSED
+        and settings.enabled
         and settings.api_key_configured
         and settings.phone_number_id.strip()
         and settings.graph_api_version.strip()
@@ -63,7 +64,8 @@ def whatsapp_config_ready(settings, *, template_name: str = "") -> bool:
 def inbound_verification_config_ready(settings) -> bool:
     """Fail closed unless the complete direct Meta webhook integration is configured."""
     return bool(
-        settings.enabled
+        not app_settings.WHATSAPP_INTEGRATION_PAUSED
+        and settings.enabled
         and settings.api_key_configured
         and settings.phone_number_id.strip()
         and settings.business_phone_number.strip()
@@ -239,7 +241,7 @@ async def send_template_message(
             False, error=error.get("message") or f"Meta API rejected the message ({response.status_code})",
             error_code=int(error_code) if str(error_code).isdigit() else None,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("WhatsApp template '%s' request failed: %s", template_name, type(exc).__name__)
         return WhatsAppSendResult(False, error="WhatsApp request failed")
 
@@ -303,6 +305,6 @@ async def send_session_message(
             error=error.get("message") or f"Meta API rejected the message ({response.status_code})",
             error_code=int(code) if str(code).isdigit() else None,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("WhatsApp session message failed: %s", type(exc).__name__)
         return WhatsAppSendResult(False, error="WhatsApp request failed")

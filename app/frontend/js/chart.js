@@ -15,6 +15,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const errorBox = document.getElementById("reportsError");
   const startInput = document.getElementById("customStartDate");
   const endInput = document.getElementById("customEndDate");
+  const shiftSelect = document.getElementById("reportsShiftFilter");
   let hasLoaded = false;
   const pageSize = 50;
   let currentBaseUrl = "/reports/daily";
@@ -24,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentRange = { start: "", end: "" };
   let currentPageOrders = [];
   let currentBusinessDate = new Date();
+  let reportRequestId = 0;
   if (currentBusinessDate.getHours() < 7) currentBusinessDate.setDate(currentBusinessDate.getDate() - 1);
 
   const dateLabel = (value, options = { day: "numeric", month: "short" }) => value ? new Date(`${value}T12:00:00`).toLocaleDateString("ar-EG", options) : "—";
@@ -103,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderTable(orders, summary, offset, limit) {
-    const tbody = page.querySelector(".orders_table_reports tbody");
+    const tbody = page.querySelector(".reports_orders_section .orders_table_reports tbody");
     const total = Number(summary.total_orders || 0);
     const first = total ? offset + 1 : 0;
     const last = Math.min(offset + orders.length, total);
@@ -117,9 +119,64 @@ document.addEventListener("DOMContentLoaded", () => {
     tbody.innerHTML = orders.map((order) => {
       const cancelled = order.status === "cancelled" || String(order.order_type).includes("ملغي");
       const type = String(order.order_type || "—").replace(" (ملغي)", "");
-      return `<tr><td>#${escapeHtml(displayOrderNumber(order.order_number))}</td><td>${escapeHtml(type)}</td><td><span class="report_status ${cancelled ? "is_cancelled" : "is_completed"}">${cancelled ? "ملغي" : "مكتمل"}</span></td><td>${escapeHtml(money(order.total_amount))}</td><td>${escapeHtml(dateLabel(order.order_date))}</td><td dir="ltr">${escapeHtml(order.created_at_time || "—")}</td></tr>`;
+      return `<tr class="report_order_row" data-report-order-id="${Number(order.id)}" tabindex="0" aria-label="عرض تفاصيل طلب ${escapeHtml(order.order_number)}"><td><button type="button" class="report_order_open" aria-label="عرض تفاصيل طلب ${escapeHtml(order.order_number)}">#${escapeHtml(displayOrderNumber(order.order_number))}</button></td><td>${escapeHtml(type)}</td><td><span class="report_status ${cancelled ? "is_cancelled" : "is_completed"}">${cancelled ? "ملغي" : "مكتمل"}</span></td><td>${escapeHtml(money(order.total_amount))}</td><td>${escapeHtml(dateLabel(order.order_date))}</td><td dir="ltr">${escapeHtml(order.created_at_time || "—")}</td></tr>`;
     }).join("");
   }
+
+  const orderTypeLabels = { hall: "صالة", takeaway: "تيك أواي", phone_reservation: "حجز تلفون", delivery: "دليفري", online: "أونلاين" };
+  const paymentLabels = { cash: "نقدي", instapay: "InstaPay", wallet: "محفظة" };
+  const statusLabels = { new: "جديد", confirmed: "مؤكد", out_for_delivery: "خرج للتوصيل", delivered: "تم التوصيل", completed: "مكتمل", cancelled: "ملغي" };
+  let closeReportOrderDetails = null;
+
+  async function openReportOrderDetails(orderId) {
+    if (!Number.isInteger(orderId) || orderId <= 0) return;
+    closeReportOrderDetails?.();
+    const trigger = document.activeElement;
+    const overlay = document.createElement("div");
+    overlay.id = "reportOrderDetailOverlay";
+    overlay.className = "report_order_overlay";
+    overlay.innerHTML = `<section class="report_order_dialog" role="dialog" aria-modal="true" aria-label="تفاصيل الطلب"><header><div><small>تفاصيل الطلب</small><h2>جاري التحميل...</h2></div><button type="button" class="report_order_close" aria-label="إغلاق التفاصيل">×</button></header><div class="report_order_body" role="status">جاري تحميل تفاصيل الطلب...</div></section>`;
+    document.body.appendChild(overlay);
+    const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey); closeReportOrderDetails = null; trigger?.focus?.(); };
+    closeReportOrderDetails = close;
+    overlay.querySelector(".report_order_close").addEventListener("click", close);
+    overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+    const onKey = (event) => { if (event.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    overlay.querySelector(".report_order_close").focus();
+    try {
+      const response = await window.apiFetch(`/orders/${orderId}`, { hideLoader: true });
+      if (!response.ok) throw new Error(`تعذر تحميل تفاصيل الطلب (${response.status})`);
+      const order = await response.json();
+      if (!overlay.isConnected) return;
+      const type = orderTypeLabels[String(order.order_type || "").toLowerCase()] || order.order_type || "—";
+      const payment = paymentLabels[String(order.payment_method || "").toLowerCase()] || order.payment_method || "—";
+      const status = statusLabels[String(order.order_status || "").toLowerCase()] || order.order_status || "—";
+      const items = (order.items || []).map((item) => `<tr><td>${escapeHtml(item.product_name || `صنف #${item.product_id}`)}</td><td>${number(item.quantity)}</td><td>${money(item.unit_price)}</td><td>${money(item.total_price ?? Number(item.unit_price || 0) * Number(item.quantity || 0))}</td></tr>`).join("");
+      const address = order.address?.address || order.customer_address;
+      const info = [
+        ["نوع الطلب", type], ["الحالة", status], ["طريقة الدفع", payment],
+        ["العميل", order.customer_name], ["الهاتف", order.customer_phone],
+        ["العنوان", address], ["الكاشير", order.creator_name], ["المندوب", order.delivery_person_name],
+      ].filter(([, value]) => value != null && value !== "").map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+      const notes = [order.customer_notes && ["ملاحظة العميل", order.customer_notes], order.internal_notes && ["ملاحظة داخلية", order.internal_notes], order.discount_reason && ["سبب الخصم", order.discount_reason], order.applied_offer && ["العرض", order.applied_offer.display_name || order.applied_offer.code]].filter(Boolean).map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`).join("");
+      overlay.querySelector("h2").textContent = `طلب #${order.order_number}`;
+      overlay.querySelector(".report_order_body").innerHTML = `<p class="report_order_date">${escapeHtml(dateLabel(order.order_date))} • ${escapeHtml(String(order.created_at || "").replace("T", " ").slice(11, 16))}</p><div class="report_order_info">${info}</div><div class="report_order_items"><table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${items || '<tr><td colspan="4">لا توجد أصناف</td></tr>'}</tbody></table></div><div class="report_order_totals"><div><span>الإجمالي قبل الخصم</span><strong>${money(order.subtotal)}</strong></div><div><span>الخصم</span><strong>${money(order.discount_amount)}</strong></div><div><span>رسوم التوصيل</span><strong>${money(order.delivery_fee)}</strong></div><div><span>إجمالي الطلب</span><strong>${money(order.total_amount)}</strong></div><div class="report_order_grand"><span>حصة المطعم في التقرير</span><strong>${money(Number(order.total_amount || 0) - (String(order.order_type).toLowerCase() === "delivery" ? Number(order.delivery_fee || 0) : 0))}</strong></div></div>${notes ? `<div class="report_order_notes">${notes}</div>` : ""}`;
+      overlay.querySelector(".report_order_body").removeAttribute("role");
+    } catch (error) {
+      if (overlay.isConnected) overlay.querySelector(".report_order_body").textContent = error.message || "تعذر تحميل تفاصيل الطلب";
+    }
+  }
+
+  page.querySelector(".reports_orders_section .orders_table_reports tbody").addEventListener("click", (event) => {
+    const row = event.target.closest("[data-report-order-id]");
+    if (row) openReportOrderDetails(Number(row.dataset.reportOrderId));
+  });
+  page.querySelector(".reports_orders_section .orders_table_reports tbody").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest("[data-report-order-id]");
+    if (row && event.target === row) { event.preventDefault(); openReportOrderDetails(Number(row.dataset.reportOrderId)); }
+  });
 
   function renderExpenses(expenses, summary) {
     const rows = expenses || [];
@@ -175,15 +232,33 @@ document.addEventListener("DOMContentLoaded", () => {
     renderExpenses(data.expenses, summary);
   }
 
+  async function loadReportShifts(start, end) {
+    const selected = shiftSelect.value;
+    const response = await window.apiFetch(`/reports/shifts?start_date=${start}&end_date=${end}`, { hideLoader: true });
+    if (!response.ok) throw new Error(`تعذر تحميل شيفتات الفترة (${response.status})`);
+    const shifts = await response.json();
+    shiftSelect.replaceChildren(new Option("كل الشيفتات", ""));
+    shifts.forEach((shift) => {
+      shiftSelect.add(new Option(`${shift.cashier_name} - ${dateLabel(shift.target_date)} - شيفت #${shift.id}`, String(shift.id)));
+    });
+    if ([...shiftSelect.options].some((option) => option.value === selected)) shiftSelect.value = selected;
+  }
+
+  const shiftQuery = () => shiftSelect.value ? `&shift_id=${encodeURIComponent(shiftSelect.value)}` : "";
+
   async function loadReport(baseUrl, type, offset = 0) {
+    const requestId = ++reportRequestId;
     currentBaseUrl = baseUrl; currentType = type; currentOffset = offset;
     const separator = baseUrl.includes("?") ? "&" : "?";
-    const url = `${baseUrl}${separator}limit=${pageSize}&offset=${offset}`;
+    const url = `${baseUrl}${separator}limit=${pageSize}&offset=${offset}${shiftQuery()}`;
     loading.hidden = false; errorBox.hidden = true;
     try {
       const response = await window.apiFetch(url);
       if (!response.ok) throw new Error(`تعذر تحميل التقرير (${response.status})`);
-      updateReport(await response.json(), type); hasLoaded = true;
+      const data = await response.json();
+      if (requestId !== reportRequestId) return;
+      updateReport(data, type); hasLoaded = true;
+      if (currentRange.start && currentRange.end) await loadReportShifts(currentRange.start, currentRange.end);
     } catch (error) { errorBox.textContent = error.message || "حدث خطأ أثناء تحميل التقرير"; errorBox.hidden = false; }
     finally { loading.hidden = true; }
   }
@@ -192,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!currentRange.start || !currentRange.end) return;
     loading.hidden = false; errorBox.hidden = true;
     try {
-      const url = `/reports/orders?start_date=${currentRange.start}&end_date=${currentRange.end}&limit=${pageSize}&offset=${offset}`;
+      const url = `/reports/orders?start_date=${currentRange.start}&end_date=${currentRange.end}&limit=${pageSize}&offset=${offset}${shiftQuery()}`;
       const response = await window.apiFetch(url);
       if (!response.ok) throw new Error(`تعذر تحميل صفحة الطلبات (${response.status})`);
       const data = await response.json();
@@ -214,8 +289,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const buttonTypes = { dailyBtn: "daily", weeklyBtn: "weekly", monthlyBtn: "monthly", yearlyBtn: "yearly" };
   filterBtns.forEach((button) => button.addEventListener("click", () => {
     filterBtns.forEach((item) => item.classList.remove("active_report")); button.classList.add("active_report");
+    shiftSelect.value = "";
     const type = buttonTypes[button.id]; loadReport(periodUrl(type), type, 0);
   }));
+  shiftSelect.addEventListener("change", () => loadReport(currentBaseUrl, currentType, 0));
   const localBusinessDate = `${currentBusinessDate.getFullYear()}-${String(currentBusinessDate.getMonth() + 1).padStart(2, "0")}-${String(currentBusinessDate.getDate()).padStart(2, "0")}`;
   startInput.value = localBusinessDate; endInput.value = localBusinessDate;
   window.apiFetch("/shifts/business-date", { hideLoader: true }).then(async (response) => {
@@ -232,6 +309,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("customDateBtn").addEventListener("click", () => {
     if (!startInput.value || !endInput.value) { errorBox.textContent = "اختر تاريخ البداية والنهاية"; errorBox.hidden = false; return; }
     filterBtns.forEach((item) => item.classList.remove("active_report"));
+    shiftSelect.value = "";
     loadReport(`/reports/custom?start_date=${startInput.value}&end_date=${endInput.value}`, "custom", 0);
   });
   document.getElementById("reportsPrevPage").addEventListener("click", () => loadOrdersPage(Math.max(0, currentOffset - pageSize)));
@@ -257,7 +335,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const total = Number(currentSummary.total_orders || 0);
       const printBatchSize = 200;
       for (let offset = 0; offset < total; offset += printBatchSize) {
-        const url = `/reports/orders?start_date=${currentRange.start}&end_date=${currentRange.end}&limit=${printBatchSize}&offset=${offset}`;
+        const url = `/reports/orders?start_date=${currentRange.start}&end_date=${currentRange.end}&limit=${printBatchSize}&offset=${offset}${shiftQuery()}`;
         const response = await window.apiFetch(url);
         if (!response.ok) throw new Error(`تعذر تجهيز طلبات الطباعة (${response.status})`);
         const data = await response.json();

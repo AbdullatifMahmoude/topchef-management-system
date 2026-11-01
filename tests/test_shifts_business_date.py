@@ -1,7 +1,7 @@
-from datetime import datetime
 import importlib
-from types import SimpleNamespace
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,7 +21,7 @@ def test_before_seven_am_belongs_to_previous_business_date():
 @pytest.mark.asyncio
 async def test_admin_business_date_endpoint_uses_business_day_boundary(monkeypatch):
     shifts_router = importlib.import_module("app.modules.shifts.router")
-    monkeypatch.setattr(shifts_router, "get_business_date", lambda: datetime(2026, 9, 15).date())
+    monkeypatch.setattr(shifts_router, "get_business_date", lambda: datetime(2026, 9, 15, tzinfo=UTC).date())
 
     result = await get_shift_business_date(SimpleNamespace(role=UserRole.ADMIN))
 
@@ -41,4 +41,6 @@ def test_admin_date_fields_use_business_date_and_stable_day_month_format():
 
     assert 'window.apiFetch("/shifts/business-date"' in chart_source
     assert "`${day}/${month}/${year}`" in admin_source
-    assert dashboard.count('class="stable_date_input"') == 5
+    assert dashboard.count('class="stable_date_input"') == 8
+    for field_id in ("adminExpenseDate", "adminExpensesStart", "adminExpensesEnd"):
+        assert f'id="{field_id}"' in dashboard

@@ -1,12 +1,27 @@
-import json
 import contextlib
-from app.modules.menu import repository, models, schemas
+import json
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.exceptions import ValidationError, NotFoundError
-from sqlalchemy.orm import selectinload
-from sqlalchemy.future import select
-from app.core.enums import ProductType 
+
+from app.core.enums import ProductType
+from app.core.business_calendar import (
+    BUSINESS_DAY_START_HOUR, EGYPT_TZ, get_current_business_date, is_weekly_holiday,
+)
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import logger
+from app.modules.menu import models, repository, schemas
+
+
+def next_daily_availability_deadline(now: datetime | None = None) -> datetime:
+    next_date = get_current_business_date(now) + timedelta(days=1)
+    while is_weekly_holiday(next_date):
+        next_date += timedelta(days=1)
+    next_start = datetime.combine(next_date, datetime.min.time()).replace(
+        hour=BUSINESS_DAY_START_HOUR, tzinfo=EGYPT_TZ,
+    )
+    return next_start.astimezone(UTC).replace(tzinfo=None)
+
 
 # ============== category ===============#
 class CategoryService:
@@ -34,7 +49,7 @@ class CategoryService:
                     for cat_data in data:
                         if cat_data["id"] == category_id:
                             return schemas.CategoryResponse.model_validate(cat_data)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error getting category {category_id}: {e}")
 
         # 2. Database Path
@@ -63,7 +78,7 @@ class CategoryService:
                     logger.debug("Redis cache hit: category list")
                     data = json.loads(cached)
                     return [schemas.CategoryResponse.model_validate(item) for item in data]
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error reading categories: {e}")
 
         # 2. DB Fallback
@@ -72,14 +87,13 @@ class CategoryService:
         # Convert to schemas
         categories = [schemas.CategoryResponse.model_validate(c) for c in listcat]
 
-        if only_active:
+        if only_active and self.redis:
             # Refresh public cache
-            if self.redis:
-                try:
-                    serializable = [c.model_dump(mode='json') for c in categories]
-                    await self.redis.setex(cache_key, 3600, json.dumps(serializable))
-                except Exception as e:
-                    logger.warning(f"Redis error writing categories: {e}")
+            try:
+                serializable = [c.model_dump(mode='json') for c in categories]
+                await self.redis.setex(cache_key, 3600, json.dumps(serializable))
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Redis error writing categories: {e}")
 
         return categories
 
@@ -88,7 +102,7 @@ class CategoryService:
             try:
                 await self.redis.delete("menu:categories")
                 await self.redis.delete("menu:products")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error invalidating menu cache: {e}")
 
     async def create_category(self, category_data: schemas.CreateCategory):
@@ -137,7 +151,7 @@ class CategoryService:
         except IntegrityError as e:
             if "foreign key" in str(e).lower() or "order_items" in str(e).lower():
                 raise ValidationError("Cannot delete category because it contains products referenced in existing orders. Please disable its availability instead.")
-            raise e
+            raise
 
     async def toggle_category(self, category_id: int):
         async with self._transaction_scope():
@@ -173,7 +187,7 @@ class ProductService:
         if self.redis:
             try:
                 await self.redis.delete("menu:products")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error invalidating products cache: {e}")
 
     async def get_product(self, product_id: int, check_cache: bool = True, only_active: bool = False):
@@ -187,7 +201,7 @@ class ProductService:
                     for prod_data in products:
                         if prod_data["id"] == product_id:
                             return schemas.ProductResponse.model_validate(prod_data)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error getting product {product_id}: {e}")
 
         # 2. Database Path
@@ -216,7 +230,7 @@ class ProductService:
                     logger.debug("Redis cache hit: product list")
                     data = json.loads(cached)
                     return [schemas.ProductResponse.model_validate(item) for item in data]
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error reading products: {e}")
 
         # 2. DB Fallback
@@ -225,14 +239,13 @@ class ProductService:
         # Convert to schemas
         products = [schemas.ProductResponse.model_validate(p) for p in listproduct]
 
-        if only_active:
+        if only_active and self.redis:
             # Save public list to cache
-            if self.redis:
-                try:
-                    serializable = [p.model_dump(mode='json') for p in products]
-                    await self.redis.setex(cache_key, 3600, json.dumps(serializable))
-                except Exception as e:
-                    logger.warning(f"Redis error writing products: {e}")
+            try:
+                serializable = [p.model_dump(mode='json') for p in products]
+                await self.redis.setex(cache_key, 3600, json.dumps(serializable))
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Redis error writing products: {e}")
 
         return products
 
@@ -335,7 +348,7 @@ class ProductService:
         except IntegrityError as e:
             if "foreign key" in str(e).lower() or "order_items" in str(e).lower():
                 raise ValidationError("Cannot delete product because it is referenced in existing orders. Please disable its availability instead.")
-            raise e
+            raise
 
     async def toggle_product(self, product_id: int, actor_id: int | None = None):
         async with self._transaction_scope():
@@ -356,4 +369,31 @@ class ProductService:
         from app.core.events import order_events_manager
         await order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": schemas.ProductResponse.model_validate(toggle).model_dump(mode='json')})
         return schemas.ProductResponse.model_validate(toggle)
+
+    async def toggle_daily_availability(self, product_id: int, actor_id: int):
+        async with self._transaction_scope():
+            product = await self.get_product(product_id, check_cache=False)
+            if not product.is_available:
+                raise ValidationError("الصنف معطّل بشكل دائم؛ فعّله من إعدادات الأصناف أولًا")
+            old_until = product.temporary_unavailable_until
+            if product.is_temporarily_unavailable:
+                product.temporary_unavailable_until = None
+            else:
+                product.temporary_unavailable_until = next_daily_availability_deadline()
+            self.db.add(models.ProductChangeLog(
+                product_id=product_id, changed_by_user_id=actor_id,
+                change_type="temporary_availability",
+                old_value=old_until.isoformat() if old_until else "available",
+                new_value=product.temporary_unavailable_until.isoformat()
+                if product.temporary_unavailable_until else "available",
+            ))
+            await self.db.flush()
+
+        from app.core.events import order_events_manager
+        if self.db.in_transaction():
+            await self.db.commit()
+        await self._invalidate_cache()
+        response = schemas.ProductResponse.model_validate(product)
+        await order_events_manager.emit({"type": "PRODUCT_UPDATED", "data": response.model_dump(mode="json")})
+        return response
 

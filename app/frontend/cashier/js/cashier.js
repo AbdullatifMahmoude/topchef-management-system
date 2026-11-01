@@ -2,32 +2,49 @@ const API_BASE = window.location.origin;
 const TOPCHEF_PRINT_AGENT_URL = "http://127.0.0.1:8199";
 
 // Print Agent bridge: sends invoice data to the native local service only.
-function printReceipt(orderData) {
+async function printReceipt(orderData) {
+  let printOrder = orderData;
+  if (["instapay", "wallet"].includes(orderData.payment_method)) {
+    let destination = orderData.payment_method === "wallet" ? "01212758001" : "01009515031";
+    try {
+      const response = await fetch(`${API_BASE}/settings/menu-checkout`, { cache: "no-store" });
+      if (response.ok) {
+        const settings = await response.json();
+        destination = orderData.payment_method === "instapay"
+          ? settings.instapay_account || destination
+          : settings.wallet_number || destination;
+      }
+    } catch (error) {
+      console.warn("Could not refresh payment destination for receipt", error);
+    }
+    printOrder = { ...orderData, payment_destination: destination };
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 1800);
 
-  fetch(`${TOPCHEF_PRINT_AGENT_URL}/api/print`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ order: orderData, receipt_type: "customer" }),
-    targetAddressSpace: "loopback",
-    signal: controller.signal,
-  })
-    .then(async (response) => {
-      clearTimeout(timeout);
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.detail || `Print Agent returned ${response.status}`);
-      }
-      console.debug("Invoice queued in Top Chef Print Agent.");
-    })
-    .catch((error) => {
-      clearTimeout(timeout);
-      console.error("Top Chef Print Agent is unavailable.", error);
-      const message = "تطبيق Top Chef Print Agent غير مُشغّل أو لم يتم اختيار طابعة";
-      if (typeof showToast === "function") showToast(message, "error");
-      else alert(message);
+  try {
+    const response = await fetch(`${TOPCHEF_PRINT_AGENT_URL}/api/print`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: printOrder, receipt_type: "customer" }),
+      targetAddressSpace: "loopback",
+      signal: controller.signal,
     });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || `Print Agent returned ${response.status}`);
+    }
+    return true;
+  } catch (error) {
+    console.error("Top Chef Print Agent is unavailable.", error);
+    const message = "تطبيق Top Chef Print Agent غير مُشغّل أو لم يتم اختيار طابعة";
+    if (typeof showToast === "function") showToast(message, "error");
+    else alert(message);
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 // End Print Agent bridge.
 
@@ -60,9 +77,9 @@ async function apiFetch(path, options = {}) {
       console.warn(
         "Session expired or unauthorized (401). Redirecting to login...",
       );
-      localStorage.clear();
+      ["token", "token_type", "user_id", "username", "role", "user"].forEach((key) => localStorage.removeItem(key));
       window.location.replace("../index.html");
-      return new Promise(() => {}); // إيقاف التنفيذ الحالي
+      return response;
     }
 
     return response;
@@ -206,6 +223,10 @@ async function init() {
       `<p style="color:#e40411;text-align:center;grid-column:1/-1">حدث خطأ في تحميل البيانات</p>`;
   } finally {
     showGlobalLoader(false);
+    try {
+      const pending = readPendingCashierOrder();
+      if (pending) showConfirmModal({ grandTotal: pending.grandTotal, orderType: pending.payload.order_type });
+    } catch (error) { showToast(error.message, "error"); }
   }
 }
 
@@ -232,9 +253,40 @@ function renderTabs() {
 // ===================================================
 //  Items Grid
 // ===================================================
+let dailyAvailabilityRefreshTimer = null;
+function isDailyUnavailable(product) {
+  const until = product?.temporary_unavailable_until;
+  return Boolean(until && Date.parse(`${until.replace(/Z$|[+-]\d\d:\d\d$/, "")}Z`) > Date.now());
+}
+
+async function toggleDailyProduct(productId, button) {
+  button.disabled = true;
+  try {
+    const response = await apiFetch(`/menu/products/${productId}/daily-availability`, { method: "PATCH" });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "تعذر تحديث الصنف");
+    const updated = await response.json();
+    products = products.map((product) => product.id === updated.id ? updated : product);
+    renderItems();
+    renderPopularProducts();
+    showToast(isDailyUnavailable(updated) ? "الصنف غير متاح لباقي يوم العمل" : "الصنف متاح الآن", "success");
+  } catch (error) {
+    showToast(error.message || "تعذر تحديث الصنف", "error");
+    button.disabled = false;
+  }
+}
+
 function renderItems() {
   const grid = document.getElementById("items_grid");
   grid.innerHTML = "";
+  clearTimeout(dailyAvailabilityRefreshTimer);
+  const nextExpiry = products.map((product) => product.temporary_unavailable_until)
+    .filter(Boolean).map((value) => Date.parse(`${value.replace(/Z$|[+-]\d\d:\d\d$/, "")}Z`))
+    .filter((value) => value > Date.now()).sort((a, b) => a - b)[0];
+  if (nextExpiry) dailyAvailabilityRefreshTimer = setTimeout(() => {
+    renderItems();
+    renderPopularProducts();
+    renderEditModalItems();
+  }, Math.max(0, nextExpiry - Date.now() + 50));
 
   const searchTerm = String(window.localProductSearchTerm || "").trim().toLowerCase();
   const catProducts = products.filter(
@@ -268,7 +320,8 @@ function renderItems() {
       : "";
 
     const card = document.createElement("div");
-    card.className = "item_card";
+    const unavailable = isDailyUnavailable(product);
+    card.className = `item_card${unavailable ? " daily_unavailable" : ""}`;
     const productOffers = getActiveOffersForProduct(product.id);
     const offerBadge = productOffers.length
       ? `<div class="product_offer_badge" title="${productOffers.map((offer) => offer.display_name || offer.code).join("، ")}">
@@ -278,11 +331,20 @@ function renderItems() {
       : "";
     card.innerHTML = `
       ${offerBadge}
+      <button type="button" class="daily_availability_toggle" aria-label="${unavailable ? "إتاحة المنتج" : "إيقاف المنتج اليوم"}" title="${unavailable ? "إتاحة المنتج" : "إيقاف المنتج اليوم"}" aria-pressed="${unavailable}"><span class="daily_availability_dot" aria-hidden="true"></span></button>
+      ${unavailable ? '<span class="daily_unavailable_badge">غير متاح</span>' : ""}
       <h1>${product.product_name}</h1>
       ${descriptionHtml}
       <h2>${priceLabel}</h2>
     `;
-    card.onclick = () => handleProductClick(product, price);
+    card.querySelector(".daily_availability_toggle").onclick = (event) => {
+      event.stopPropagation();
+      toggleDailyProduct(product.id, event.currentTarget);
+    };
+    card.onclick = () => {
+      if (isDailyUnavailable(product)) return showToast("الصنف غير متاح لباقي يوم العمل", "error");
+      handleProductClick(product, price);
+    };
     grid.appendChild(card);
   });
 }
@@ -396,15 +458,7 @@ function renderCart() {
   const empty = document.getElementById("cart_empty");
   const totalEl = document.getElementById("total_price");
 
-  const itemsTotal = cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
-  let fee = 0;
-  if (orderType === "delivery" && hasFeeValue(selectedDeliveryFee))
-    fee = selectedDeliveryFee;
-  else if (orderType === "dine_in" && hasFeeValue(selectedDineInFee))
-    fee = selectedDineInFee;
-
-  const grandTotal = itemsTotal + fee;
-  totalEl.textContent = grandTotal.toFixed(2) + " ج.م";
+  totalEl.textContent = cart.length ? "جاري الحساب..." : "0.00 ج.م";
 
   // استدعاء معاينة الأسعار من الباك إند
   updatePricingPreview();
@@ -465,11 +519,25 @@ function renderCart() {
 
 let selectedPaymentMethod = "cash";
 
+function refreshCashReceiptControl() {
+  const label = document.getElementById("cashReceivedAtCheckoutLabel");
+  const checkbox = document.getElementById("cashReceivedAtCheckout");
+  const eligible = selectedPaymentMethod === "cash" && ["takeaway", "dine_in"].includes(orderType);
+  if (label) label.style.display = eligible ? "block" : "none";
+  if (!eligible && checkbox) checkbox.checked = false;
+  const digitalLabel = document.getElementById("digitalPaymentVerifiedLabel");
+  const digitalCheckbox = document.getElementById("digitalPaymentVerified");
+  const digital = ["instapay", "wallet"].includes(selectedPaymentMethod);
+  if (digitalLabel) digitalLabel.style.display = digital ? "block" : "none";
+  if (!digital && digitalCheckbox) digitalCheckbox.checked = false;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".payment_method_btn").forEach((button) => {
     button.addEventListener("click", () => {
       selectedPaymentMethod = button.dataset.paymentMethod || "cash";
       document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item === button));
+      refreshCashReceiptControl();
     });
   });
 });
@@ -483,10 +551,20 @@ async function openShiftCashModal() {
   } catch (error) {
     console.warn("Could not load saved shift cash data", error);
   }
+  let reconciliation = null;
+  try {
+    const response = await apiFetch("/shifts/current/reconciliation", { hideLoader: true });
+    if (response.ok) reconciliation = await response.json();
+  } catch (error) {
+    console.warn("Could not load current reconciliation", error);
+  }
   const modal = document.createElement("div");
   modal.id = "shift_cash_modal";
   modal.className = "shift_cash_modal";
-  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديلها ثم الحفظ مرة أخرى.</p><div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>رصيد بداية الشيفت<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00"></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
+  const currentCashSummary = reconciliation?.cash_tracking_enabled
+    ? `<div class="shift_saved_expenses"><span>سجل استلام النقد (للمراجعة فقط)</span><strong>${Number(reconciliation.confirmed_cash || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>نقد دليفري لم يثبت وصوله: ${Number(reconciliation.unconfirmed_delivery_cash || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م • التأكيد لا يغيّر النقد المتوقع أو فرق الشيفت${Number(reconciliation.legacy_expenses_unverified || 0) > 0 ? ` • مصروفات قبل النشر مصدرها يحتاج مراجعة: ${Number(reconciliation.legacy_expenses_unverified).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م` : ""}</small></div>`
+    : "";
+  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>${saved.stale_shift ? `شيفت يوم ${escapeExpenseText(saved.target_date)} ما زال مفتوحًا. سجّل العدّ الفعلي وأغلق الشيفت، ثم تعتمد الإدارة التسليم قبل بدء شيفت جديد.` : saved.cash_tracking_enabled && !saved.opening_confirmed ? `راجع عهدة البداية المسجلة (${Number(saved.opening_cash || 0).toLocaleString("ar-EG")} جنيه) وأكد مبلغها الفعلي بالحفظ قبل إغلاق الشيفت.` : "القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديل النقد الفعلي قبل إغلاق الشيفت."}</p>${currentCashSummary}<div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة من الدرج</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>عهدة بداية الشيفت من الإدارة<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00" ${saved.opening_cash_editable ?? !saved.opening_confirmed ? "" : "readonly"}></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
   document.body.appendChild(modal);
   modal.querySelector(".shift_cash_cancel").onclick = () => modal.remove();
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
@@ -501,7 +579,10 @@ async function openShiftCashModal() {
     const note = String(form.get("closing_note") || "").trim();
     if (note) payload.closing_note = note;
     const response = await apiFetch("/shifts/current/cash", { method: "PATCH", body: JSON.stringify(payload) });
-    if (!response.ok) return showToast("تعذر حفظ تسوية الشيفت", "error");
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return showToast(typeof data.detail === "string" ? data.detail : "تعذر حفظ تسوية الشيفت", "error");
+    }
     modal.remove();
     showToast("تم حفظ تسوية الشيفت", "success");
   });
@@ -524,13 +605,22 @@ function appliedOfferCardHtml(order) {
   </div>`;
 }
 
+function cairoWallTimeNow() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}:${values.second}`;
+}
+
 function getActiveOffersForProduct(productId) {
-  const now = Date.now();
+  const now = cairoWallTimeNow();
   const product = products.find((item) => Number(item.id) === Number(productId));
   return activeOffers.filter((offer) => {
     if (!offer || !offer.is_active) return false;
-    const starts = offer.valid_from ? new Date(offer.valid_from).getTime() : 0;
-    const ends = offer.valid_to ? new Date(offer.valid_to).getTime() : Infinity;
+    const starts = offer.valid_from ? offer.valid_from.slice(0, 19) : "";
+    const ends = offer.valid_to ? offer.valid_to.slice(0, 19) : "\uffff";
     if (now < starts || now > ends) return false;
     if (offer.usage_limit && Number(offer.current_usage || 0) >= Number(offer.usage_limit)) return false;
     const rules = offer.rules || {};
@@ -559,11 +649,11 @@ function formatProductOffer(offer) {
 }
 
 function currentlyAvailableOffers() {
-  const now = Date.now();
+  const now = cairoWallTimeNow();
   return activeOffers.filter((offer) => {
     if (!offer?.is_active) return false;
-    if (offer.valid_from && now < new Date(offer.valid_from).getTime()) return false;
-    if (offer.valid_to && now > new Date(offer.valid_to).getTime()) return false;
+    if (offer.valid_from && now < offer.valid_from.slice(0, 19)) return false;
+    if (offer.valid_to && now > offer.valid_to.slice(0, 19)) return false;
     if (offer.usage_limit && Number(offer.current_usage || 0) >= Number(offer.usage_limit)) return false;
     if (offer.discount_type === "happy_hour") {
       const rules = offer.rules || {}, start = String(rules.start_time || "").slice(0, 5), end = String(rules.end_time || "").slice(0, 5);
@@ -660,7 +750,7 @@ function renderPopularProducts() {
     .map((entry) => ({
       product: products.find((product) => Number(product.id) === Number(entry.product_id)),
     }))
-    .filter(({ product }) => product && product.is_available)
+    .filter(({ product }) => product && product.is_available && !isDailyUnavailable(product))
     .slice(0, 8);
 
   section.hidden = ranked.length === 0;
@@ -690,7 +780,46 @@ function filterLocalProducts(term) {
   renderItems();
 }
 
+// Keep the exact submitted payload until the server confirms the result.
+function pendingCashierOrderStorageKey() {
+  const userId = localStorage.getItem("user_id");
+  if (!userId) throw new Error("تعذر تحديد حساب الكاشير لاستعادة الطلب");
+  return `cashier_pending_order:${userId}`;
+}
+
+function readPendingCashierOrder() {
+  const raw = localStorage.getItem(pendingCashierOrderStorageKey());
+  if (!raw) return null;
+  try {
+    const pending = JSON.parse(raw);
+    if (pending?.payload?.idempotency_key && Array.isArray(pending.payload.items)
+        && Number.isFinite(pending.grandTotal)) return pending;
+  } catch (_) { /* Never silently discard an uncertain order. */ }
+  throw new Error("تعذر قراءة الطلب المعلق؛ راجع الإدارة قبل تسجيل طلب جديد");
+}
+
+function writePendingCashierOrder(pending) {
+  localStorage.setItem(pendingCashierOrderStorageKey(), JSON.stringify(pending));
+}
+
+function clearPendingCashierOrder() {
+  localStorage.removeItem(pendingCashierOrderStorageKey());
+}
+
+let _confirmOrderInFlight = false;
+
 async function confirmOrder() {
+  if (_confirmOrderInFlight) return;
+  try {
+    const pending = readPendingCashierOrder();
+    if (pending) {
+      showConfirmModal({ grandTotal: pending.grandTotal, orderType: pending.payload.order_type });
+      return;
+    }
+  } catch (error) {
+    showToast(error.message, "error");
+    return;
+  }
   if (cart.length === 0) return;
 
   if (!orderType) {
@@ -702,7 +831,7 @@ async function confirmOrder() {
   deliveryCustomerInfo.phone = phoneDigits;
 
   // التحقق من بيانات العميل في حالة الديليفري
-  if (orderType === "delivery" && !phoneDigits) {
+  if (["delivery", "phone_reservation"].includes(orderType) && !phoneDigits) {
     showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
     return;
   }
@@ -727,10 +856,16 @@ async function confirmOrder() {
       unit_price: entry.item.price,
     };
   });
-  const mappedOrderType = orderType === "delivery" ? "delivery" : orderType === "takeaway" ? "takeaway" : "hall";
+  const mappedOrderType = orderType === "dine_in" ? "hall" : orderType;
   const discountType = document.getElementById("discount_type")?.value || null;
   const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
   let pricing;
+  const confirmButton = document.querySelector(".btn_confirm");
+  _confirmOrderInFlight = true;
+  if (confirmButton) {
+    confirmButton.disabled = true;
+    confirmButton.setAttribute("aria-busy", "true");
+  }
   try {
     const pricingResponse = await apiFetch("/pricing/preview", {
       method: "POST",
@@ -754,6 +889,12 @@ async function confirmOrder() {
   } catch (error) {
     showToast(error.message || "تعذر حساب إجمالي الطلب", "error");
     return;
+  } finally {
+    _confirmOrderInFlight = false;
+    if (confirmButton) {
+      confirmButton.disabled = false;
+      confirmButton.removeAttribute("aria-busy");
+    }
   }
 
   const grandTotal = Number(pricing.total_amount || 0);
@@ -782,6 +923,10 @@ async function confirmOrder() {
 }
 
 function showConfirmModal(orderData) {
+  let pending;
+  try { pending = readPendingCashierOrder(); }
+  catch (error) { showToast(error.message, "error"); return; }
+  const recoveringPrior = Boolean(pending);
   const old = document.getElementById("confirm_modal");
   if (old) old.remove();
 
@@ -795,26 +940,31 @@ function showConfirmModal(orderData) {
   const box = document.createElement("div");
   box.style.cssText = `
     background:rgba(15,12,6,0.97);border:1px solid var(--color-primary-border);
-    border-radius:16px;padding:24px;min-width:320px;display:flex;
+    border-radius:16px;padding:24px;width:min(540px,calc(100vw - 32px));min-width:0;display:flex;
     flex-direction:column;gap:16px;direction:rtl;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);
   `;
 
   box.innerHTML = `
-    <h2 style="color:var(--color-primary);font-size:18px;margin:0;">تأكيد وطباعة الطلب</h2>
-    <p style="color:var(--color-text);font-size:14px;margin:0;">هل أنت متأكد من تأكيد الطلب بقيمة الإجمالي أدناه؟</p>
+    <h2 style="color:var(--color-primary);font-size:18px;margin:0;">حفظ الطلب</h2>
+    <p style="color:var(--color-text);font-size:14px;margin:0;">${pending ? "طلب سابق لم تتأكد نتيجته؛ ستُعاد المحاولة بنفس بياناته. راجع الطلب قبل أي بيع جديد." : "اختر حفظ الطلب مع الطباعة أو الحفظ فقط."}</p>
+    ${pending ? `<p>الأصناف: ${pending.payload.items.map(item => `${Number(item.quantity)} × ${escapeOrderText(products.find(p => Number(p.id) === Number(item.product_id))?.product_name || `صنف #${Number(item.product_id)}`)}`).join("، ")}</p>` : ""}
     <div style="font-size:24px;font-weight:900;color:var(--color-primary);padding:10px 0;border-top:1px dashed var(--color-primary-border);border-bottom:1px dashed var(--color-primary-border);">
       ${orderData.grandTotal.toFixed(2)} ج.م
     </div>
-    <div style="display:flex;gap:12px;margin-top:8px;">
+    <div style="display:flex;gap:10px;margin-top:8px;">
       <button id="btn_confirm_yes" style="
         flex:1;background:var(--color-primary);color:#000;border:none;border-radius:10px;
-        padding:12px;font-family:Cairo,sans-serif;font-size:14px;font-weight:900;cursor:pointer;
+        padding:12px 8px;font-family:Cairo,sans-serif;font-size:13px;font-weight:900;cursor:pointer;
         transition:opacity 0.2s;
-      " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">طباعة وتأكيد</button>
-      
+      " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">حفظ وطباعة</button>
+      <button id="btn_confirm_save" style="
+        flex:1;background:#26231d;color:var(--color-primary);border:1px solid var(--color-primary-border);border-radius:10px;
+        padding:12px 8px;font-family:Cairo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;
+        transition:opacity 0.2s;
+      " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">حفظ فقط</button>
       <button id="btn_confirm_no" style="
         flex:1;background:transparent;border:1px solid rgba(255,255,255,0.2);color:var(--color-subtext);
-        border-radius:10px;padding:12px;font-family:Cairo,sans-serif;font-size:14px;font-weight:600;cursor:pointer;
+        border-radius:10px;padding:12px 8px;font-family:Cairo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;
         transition:background 0.2s;
       " onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">إلغاء</button>
     </div>
@@ -823,15 +973,28 @@ function showConfirmModal(orderData) {
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
-  document.getElementById("btn_confirm_yes").onclick = async () => {
-    const btn = document.getElementById("btn_confirm_yes");
+  const submitOrder = async (shouldPrint) => {
+    if (!pending && ["instapay", "wallet"].includes(selectedPaymentMethod) && !document.getElementById("digitalPaymentVerified")?.checked) {
+      showToast("تأكد إن التحويل وصل لحساب المطعم وحدد خانة التأكيد", "error");
+      return;
+    }
+    const btn = document.getElementById(shouldPrint ? "btn_confirm_yes" : "btn_confirm_save");
     const originalText = btn.textContent;
-    btn.textContent = "جاري التأكيد...";
-    btn.disabled = true;
-    btn.style.opacity = "0.7";
-    btn.style.cursor = "not-allowed";
+    const actionButtons = ["btn_confirm_yes", "btn_confirm_save", "btn_confirm_no"]
+      .map((id) => document.getElementById(id));
+    actionButtons.forEach((button) => {
+      button.disabled = true;
+      button.style.opacity = "0.7";
+      button.style.cursor = "not-allowed";
+    });
+    btn.textContent = shouldPrint ? "جاري الحفظ والطباعة..." : "جاري الحفظ...";
 
+    let firstAttempt = false;
     try {
+      let payload;
+      if (pending) {
+        payload = pending.payload;
+      } else {
       const items = cart.map((c) => {
         let prodId = c.item.id;
         if (typeof prodId === "string" && prodId.includes("_")) {
@@ -849,6 +1012,7 @@ function showConfirmModal(orderData) {
       let mappedOrderType = "hall";
       if (orderType === "takeaway") mappedOrderType = "takeaway";
       else if (orderType === "delivery") mappedOrderType = "delivery";
+      else if (orderType === "phone_reservation") mappedOrderType = "phone_reservation";
 
       // معالجة بيانات العميل لجميع أنواع الطلبات
       const dcfNameInput = document.getElementById("dcf_name");
@@ -906,29 +1070,25 @@ function showConfirmModal(orderData) {
         }
       }
 
-      const customerNotes =
-        orderType === "delivery" &&
-        !deliveryCustomerInfo.selectedAddressId &&
-        deliveryCustomerInfo.newAddress
-          ? deliveryCustomerInfo.newAddress
-          : null;
+      const customerNotes = document.getElementById("order_customer_notes")?.value.trim() || null;
 
       const discountType = document.getElementById("discount_type")?.value || null;
       const discountValue = parseFloat(document.getElementById("discount_value")?.value) || null;
       const discountReason = document.getElementById("discount_reason")?.value || null;
 
-      const payload = {
+      payload = {
         customer_id: resolvedCustomerId || null,
         customer_phone: deliveryCustomerInfo.phone || null,
         customer_name: deliveryCustomerInfo.name || null,
         order_type: mappedOrderType,
         source: "cashier",
         payment_method: selectedPaymentMethod,
+        cash_received: selectedPaymentMethod === "cash" && ["hall", "takeaway"].includes(mappedOrderType) && Boolean(document.getElementById("cashReceivedAtCheckout")?.checked),
+        digital_payment_verified: ["instapay", "wallet"].includes(selectedPaymentMethod) && Boolean(document.getElementById("digitalPaymentVerified")?.checked),
         customer_notes: customerNotes,
         internal_notes: null,
         items: items,
-        idempotency_key:
-          Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        idempotency_key: crypto.randomUUID(),
         address_id: deliveryCustomerInfo.selectedAddressId || null,
         customer_address: deliveryCustomerInfo.newAddress || null, // ✅ Fix: Send address string so backend can create a record
         delivery_person_id: selectedDelivery ? selectedDelivery.id : null,
@@ -940,7 +1100,12 @@ function showConfirmModal(orderData) {
         manual_discount_type: selectedOfferCode ? null : discountType,
         manual_discount_value: selectedOfferCode ? null : discountValue,
         discount_reason: discountReason,
+        is_printed: false,
       };
+      pending = { payload, grandTotal: Number(orderData.grandTotal) };
+      writePendingCashierOrder(pending);
+      firstAttempt = true;
+      }
 
       const res = await apiFetch("/orders/", {
         method: "POST",
@@ -948,6 +1113,10 @@ function showConfirmModal(orderData) {
       });
 
       if (!res.ok) {
+        if (firstAttempt && res.status >= 400 && res.status < 500 && res.status !== 409) {
+          clearPendingCashierOrder();
+          pending = null;
+        }
         const errData = await res.json().catch(() => ({}));
         console.error("API Error:", errData);
         let errMsg = "حدث خطأ أثناء إرسال الطلب";
@@ -965,13 +1134,20 @@ function showConfirmModal(orderData) {
       }
 
       const createdOrder = await res.json();
+      let printQueued = false;
+      if (!recoveringPrior) {
       selectedPaymentMethod = "cash";
+      const cashReceivedCheckbox = document.getElementById("cashReceivedAtCheckout");
+      if (cashReceivedCheckbox) cashReceivedCheckbox.checked = false;
+      const digitalPaymentCheckbox = document.getElementById("digitalPaymentVerified");
+      if (digitalPaymentCheckbox) digitalPaymentCheckbox.checked = false;
       document.querySelectorAll(".payment_method_btn").forEach((item) => item.classList.toggle("active", item.dataset.paymentMethod === "cash"));
+      }
 
       overlay.remove();
 
       // الطباعة باستخدام بيانات السيرفر لضمان مطابقة رقم الطلب والوقت
-      if (typeof printReceipt === "function") {
+      if (shouldPrint && typeof printReceipt === "function") {
         // نقوم بتجهيز قائمة الأصناف بالأسماء بناءً على الـ IDS قبل الطباعة
         const cartMapped = (createdOrder.items || []).map((item) => {
           let prod = products.find((p) => p.id === item.product_id);
@@ -1000,6 +1176,8 @@ function showConfirmModal(orderData) {
         // نضيف بيانات العميل يدوياً كاحتياط لو السيرفر لم يعيدها
         const printData = {
           ...createdOrder,
+          order_type: createdOrder.order_type || orderData.orderType,
+          orderType: createdOrder.order_type || orderData.orderType,
           cart: cartMapped,
           customerPhone:
             createdOrder.customer_phone || deliveryCustomerInfo.phone || null,
@@ -1012,14 +1190,16 @@ function showConfirmModal(orderData) {
             null,
         };
 
-        printReceipt(printData);
-      } else {
-        console.error(
-          "Print Agent bridge is unavailable.",
-        );
+        printQueued = await printReceipt(printData);
+        if (printQueued) {
+          createdOrder.is_printed = await markOrderAsPrinted(createdOrder.id);
+        }
+      } else if (shouldPrint) {
+        console.error("Print Agent bridge is unavailable.");
       }
 
-      // تصفية السلة وعودة الحالة للصفر
+      // A recovered earlier order must not erase a new unsent cart.
+      if (!recoveringPrior) {
       cart = [];
       selectedOfferCode = null;
       orderType = null;
@@ -1039,12 +1219,15 @@ function showConfirmModal(orderData) {
       if (discType) discType.value = "";
       if (discValue) discValue.value = "";
       if (discReason) discReason.value = "";
+      const orderNotes = document.getElementById("order_customer_notes");
+      if (orderNotes) orderNotes.value = "";
       renderCart();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
       renderCashierOffersBoard();
+      }
 
-      showToast("تم تأكيد الطلب بنجاح", "success");
+      showToast(recoveringPrior ? "تمت استعادة الطلب السابق؛ راجع السلة قبل تسجيل طلب جديد" : (printQueued ? "تم حفظ الطلب وإرساله للطباعة" : "تم حفظ الطلب بنجاح"), "success");
 
       // ✅ NEW: Update local memory lists immediately so the order appears without refresh
       if (isOnlineOrder(createdOrder)) {
@@ -1067,6 +1250,8 @@ function showConfirmModal(orderData) {
       renderAllOrders();
       renderOnlineOrders();
       updateOnlineStats();
+      clearPendingCashierOrder();
+      pending = null;
 
       // Delayed server fetch to get the synced version from cloud
       setTimeout(() => {
@@ -1077,11 +1262,16 @@ function showConfirmModal(orderData) {
       console.error(err);
       showToast(err.message, "error");
       btn.textContent = originalText;
-      btn.disabled = false;
-      btn.style.opacity = "1";
-      btn.style.cursor = "pointer";
+      actionButtons.forEach((button) => {
+        button.disabled = false;
+        button.style.opacity = "1";
+        button.style.cursor = "pointer";
+      });
     }
   };
+
+  document.getElementById("btn_confirm_yes").onclick = () => submitOrder(true);
+  document.getElementById("btn_confirm_save").onclick = () => submitOrder(false);
 
   document.getElementById("btn_confirm_no").onclick = () => {
     overlay.remove();
@@ -1145,6 +1335,8 @@ function showCancelModal() {
     selectedDeliveryFee = null;
     selectedDineInFee = null;
     resetDeliveryCustomerInfo();
+    const orderNotes = document.getElementById("order_customer_notes");
+    if (orderNotes) orderNotes.value = "";
     const dcFormCancel = document.getElementById("delivery_customer_form");
     if (dcFormCancel) {
       dcFormCancel.style.display = "none";
@@ -1240,10 +1432,12 @@ function showToast(message, type) {
 const ORDER_TYPES = [
   { key: "delivery", label: "دليفري" },
   { key: "takeaway", label: "تيك اواي" },
+  { key: "phone_reservation", label: "حجز تلفون" },
   { key: "dine_in", label: "صالة" },
 ];
 
 function renderOrderTypeButtons() {
+  refreshCashReceiptControl();
   const container = document.getElementById("order_type_btns");
   if (!container) return;
   container.innerHTML = "";
@@ -1287,6 +1481,8 @@ function renderOrderTypeBadge() {
       <span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">تيك اواي</span>
       <button class="badge_clear" onclick="clearOrderType()">✕</button>
     `;
+  } else if (orderType === "phone_reservation") {
+    badge.innerHTML = `<span class="badge_icon"></span><span class="badge_name" style="cursor:pointer" onclick="renderDeliveryCustomerForm()">حجز تلفون</span><button class="badge_clear" onclick="clearOrderType()">✕</button>`;
   } else if (orderType === "dine_in") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
@@ -1308,7 +1504,6 @@ function clearOrderType() {
   selectedDeliveryFee = null;
   selectedDineInFee = null;
   orderType = null;
-  resetDeliveryCustomerInfo();
   const dcFormClear = document.getElementById("delivery_customer_form");
   if (dcFormClear) {
     dcFormClear.style.display = "none";
@@ -1340,14 +1535,40 @@ function selectOrderType(type) {
 //  Pricing Preview API
 // ===================================================
 let _pricingTimeout = null;
+let _pricingAbortController = null;
+let _pricingInFlightBody = null;
+let _lastSuccessfulPricingBody = null;
+let _lastSuccessfulPricingAt = 0;
+let _lastSuccessfulPricingData = null;
+let _pricingGeneration = 0;
+
+function displayCashierPricing(pricing) {
+  const totalEl = document.getElementById("total_price");
+  if (totalEl && pricing?.total_amount != null) {
+    totalEl.textContent = parseFloat(pricing.total_amount).toFixed(2) + " ج.م";
+  }
+}
 
 async function updatePricingPreview() {
-  if (cart.length === 0) return;
+  const generation = ++_pricingGeneration;
+  if (_pricingAbortController) _pricingAbortController.abort();
+  _pricingAbortController = null;
+  _pricingInFlightBody = null;
+
+  if (cart.length === 0) {
+    if (_pricingTimeout) clearTimeout(_pricingTimeout);
+    _pricingTimeout = null;
+    const totalEl = document.getElementById("total_price");
+    if (totalEl) totalEl.textContent = "0.00 ج.م";
+    return;
+  }
 
   // Debounce لمنع كثرة الطلبات أثناء تعديل الكميات
   if (_pricingTimeout) clearTimeout(_pricingTimeout);
 
   _pricingTimeout = setTimeout(async () => {
+    _pricingTimeout = null;
+    let controller = null;
     try {
       const items = cart.map((c) => {
         let prodId = c.item.id;
@@ -1366,9 +1587,10 @@ async function updatePricingPreview() {
       let mappedOrderType = "hall";
       if (orderType === "takeaway") mappedOrderType = "takeaway";
       else if (orderType === "delivery") mappedOrderType = "delivery";
+      else if (orderType === "phone_reservation") mappedOrderType = "phone_reservation";
 
       const currentFee =
-        (orderType === "delivery" ? selectedDeliveryFee : selectedDineInFee) ||
+        (orderType === "delivery" ? selectedDeliveryFee : orderType === "dine_in" ? selectedDineInFee : 0) ||
         0;
 
       const discountType = document.getElementById("discount_type")?.value || null;
@@ -1386,27 +1608,55 @@ async function updatePricingPreview() {
         manual_discount_value: selectedOfferCode ? null : discountValue,
       };
 
+      const requestBody = JSON.stringify(payload);
+      if (
+        _lastSuccessfulPricingBody === requestBody &&
+        Date.now() - _lastSuccessfulPricingAt < 2000 &&
+        _lastSuccessfulPricingData
+      ) {
+        if (generation === _pricingGeneration) {
+          displayCashierPricing(_lastSuccessfulPricingData);
+        }
+        return;
+      }
+
+      controller = new AbortController();
+      _pricingAbortController = controller;
+      _pricingInFlightBody = requestBody;
       const res = await apiFetch("/pricing/preview", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: requestBody,
         hideLoader: true, // لا نريد إيقاف الواجهة في المعاينة
+        signal: controller.signal,
       });
 
       if (res.ok) {
         const data = await res.json();
+        if (generation !== _pricingGeneration) return;
+        _lastSuccessfulPricingBody = requestBody;
+        _lastSuccessfulPricingAt = Date.now();
+        _lastSuccessfulPricingData = data;
+        displayCashierPricing(data);
+      } else if (generation === _pricingGeneration) {
+        const errorPayload = await res.json().catch(() => ({}));
+        const message = typeof errorPayload.detail === "string"
+          ? errorPayload.detail
+          : "تعذر حساب إجمالي الطلب";
         const totalEl = document.getElementById("total_price");
-        if (totalEl && data.total_amount != null) {
-          totalEl.textContent =
-            parseFloat(data.total_amount).toFixed(2) + " ج.م";
-          // يمكننا مستقبلاً عرض الخصم والـ subtotal هنا
-        }
-      } else if (selectedOfferCode) {
-        const payload = await res.json().catch(() => ({}));
-        const message = typeof payload.detail === "string" ? payload.detail : "شروط العرض غير مكتملة في الطلب الحالي";
+        if (totalEl) totalEl.textContent = "تعذر الحساب";
         showToast(message, "error");
       }
     } catch (err) {
-      console.warn("Pricing preview failed:", err);
+      if (err.name !== "AbortError" && generation === _pricingGeneration) {
+        const totalEl = document.getElementById("total_price");
+        if (totalEl) totalEl.textContent = "تعذر الحساب";
+        console.warn("Pricing preview failed:", err);
+      }
+    } finally {
+      if (controller && _pricingAbortController === controller) {
+        _pricingAbortController = null;
+        _pricingInFlightBody = null;
+      }
     }
   }, 400);
 }
@@ -1552,7 +1802,6 @@ function showDeliveryFeeSelector(rider) {
       selectedDelivery = { id: rider.id, name: rider.name };
       selectedDeliveryFee = Number(fee);
       orderType = "delivery";
-      resetDeliveryCustomerInfo();
       closeDeliveryModal();
       renderOrderTypeBadge();
       renderOrderTypeButtons();
@@ -1711,7 +1960,7 @@ function renderDeliveryCustomerForm() {
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          ${orderType === "delivery" ? "بيانات عميل الديليفري" : "بيانات العميل (اختياري)"}
+          ${orderType === "delivery" ? "بيانات عميل الديليفري" : orderType === "phone_reservation" ? "بيانات الحجز (رقم الهاتف مطلوب)" : "بيانات العميل (اختياري)"}
         </div>
         <button class="dcf_close_btn" onclick="hideDeliveryCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
       </div>
@@ -1931,16 +2180,31 @@ renderOrderTypeBadge();
 // ===================================================
 //  Delivery Riders Tab Logic
 // ===================================================
+let riderOutstandingCash = [];
+let riderPendingDirectCash = [];
+
 async function renderRidersTab() {
   const body = document.getElementById("riders_table_body");
   if (!body) return;
 
-  body.innerHTML = `<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
+  body.innerHTML = `<tr><td colspan="10" style="padding:40px; text-align:center; color:var(--color-primary);">جاري تحميل بيانات الدليفري...</td></tr>`;
   try {
     const response = await apiFetch("/orders/riders/stats", { suppress401: true });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const riders = Array.isArray(data.stats) ? data.stats : [];
+    const outstandingResponse = await apiFetch("/shifts/cash/riders/outstanding", { hideLoader: true });
+    const pendingResponse = await apiFetch("/shifts/cash/riders/pending-direct-settlement", { hideLoader: true });
+    const outstandingAvailable = outstandingResponse.ok;
+    const outstanding = outstandingResponse.ok ? await outstandingResponse.json() : [];
+    const pendingAvailable = pendingResponse.ok;
+    const pending = pendingAvailable ? await pendingResponse.json() : [];
+    riderOutstandingCash = Array.isArray(outstanding) ? outstanding : [];
+    riderPendingDirectCash = Array.isArray(pending) ? pending : [];
+    const riderCash = new Map();
+    const riderPending = new Map();
+    outstanding.forEach((row) => riderCash.set(Number(row.rider_id), (riderCash.get(Number(row.rider_id)) || 0) + Number(row.restaurant_cash_due_from_rider || 0)));
+    pending.forEach((row) => riderPending.set(Number(row.rider_id), (riderPending.get(Number(row.rider_id)) || 0) + Number(row.restaurant_cash_due_from_rider || 0)));
     const summary = data.summary || {};
     const setRiderText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
     setRiderText("cashierRidersTotal", Number(summary.total_delivery_orders || 0).toLocaleString("ar-EG"));
@@ -1950,29 +2214,42 @@ async function renderRidersTab() {
     setRiderText("cashierRidersDelivered", Number(summary.delivered_orders || 0).toLocaleString("ar-EG"));
     setRiderText("cashierRidersValue", `${Number(summary.orders_value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م`);
 
-    if (!riders.length) {
-      body.innerHTML = `<tr><td colspan="9" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
+    const riderRows = [...riders];
+    [...riderOutstandingCash, ...riderPendingDirectCash].forEach((row) => {
+      if (!riderRows.some((rider) => Number(rider.id) === Number(row.rider_id))) {
+        riderRows.push({ id: row.rider_id, name: row.rider_name || `مندوب #${row.rider_id}`, availability: "unknown", active_orders: 0, delivered_orders: 0, cash_amount: 0, digital_amount: 0, delivery_fees: 0, order_value: 0, total_orders: 0, order_numbers: [] });
+      }
+    });
+    if (!riderRows.length) {
+      body.innerHTML = `<tr><td colspan="10" style="padding:40px; text-align:center; color:var(--color-subtext);">لا توجد بيانات دليفري متاحة حالياً</td></tr>`;
       return;
     }
 
-    riders.sort((a, b) => b.total_orders - a.total_orders);
-    body.innerHTML = riders.map((r) => `
+    riderRows.sort((a, b) => b.total_orders - a.total_orders);
+    body.innerHTML = riderRows.map((r) => `
       <tr style="border-bottom:1px solid rgba(255,255,255,0.05)">
-        <td style="padding:15px; font-weight:700; color:#fff;">${r.name}</td>
+        <td style="padding:15px; font-weight:700; color:#fff;">${escapeOrderText(r.name)}</td>
         <td style="padding:15px;"><span class="cashier_rider_state ${r.availability}">${r.availability === "busy" ? "مشغول" : "متاح"}</span></td>
         <td style="padding:15px; font-weight:800;">${r.active_orders || 0}</td>
         <td style="padding:15px; color:var(--color-accent); font-weight:800;">${r.delivered_orders || 0}</td>
         <td style="padding:15px; font-weight:800;">${Number(r.cash_amount || 0).toFixed(2)} ج.م</td>
+        <td style="padding:15px; font-weight:800;">${outstandingAvailable && pendingAvailable ? `<span>مؤكد: ${Number(riderCash.get(Number(r.id)) || 0).toFixed(2)} ج.م</span><small class="rider_cash_pending">بانتظار تسليم مباشر: ${Number(riderPending.get(Number(r.id)) || 0).toFixed(2)} ج.م</small>${Number(riderCash.get(Number(r.id)) || 0) + Number(riderPending.get(Number(r.id)) || 0) > 0 ? `<button type="button" class="cash_custody_button" onclick="showRiderCashOutstanding(${Number(r.id)})">تسوية النقد</button>` : ""}` : "تعذر تحميل عهدة المندوب"}</td>
         <td style="padding:15px; font-weight:800;">${Number(r.digital_amount || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px; font-weight:900; color:var(--color-primary);">${Number(r.delivery_fees || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px; font-weight:900; color:#fff0d0;">${Number(r.order_value || 0).toFixed(2)} ج.م</td>
         <td style="padding:15px;">
-          <button onclick='showRiderOrdersPopup("${String(r.name).replace(/"/g, "&quot;")}", ${JSON.stringify(r.order_numbers || [])})'
+          <button type="button" data-rider-orders-id="${Number(r.id)}"
             style="background:rgba(61,158,107,.15); color:#3d9e6b; border:1px solid rgba(61,158,107,.3); padding:4px 12px; border-radius:6px; cursor:pointer; font-family:Cairo,sans-serif; font-weight:700;">
             ${r.total_orders} طلب
           </button>
         </td>
       </tr>`).join("");
+    body.querySelectorAll("[data-rider-orders-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const rider = riderRows.find((row) => Number(row.id) === Number(button.dataset.riderOrdersId));
+        if (rider) showRiderOrdersPopup(rider.name, rider.order_numbers || []);
+      });
+    });
     return;
   } catch (error) {
     console.error("Could not load rider statistics:", error);
@@ -2056,6 +2333,54 @@ async function renderRidersTab() {
     .join("");
 }
 
+function showRiderCashOutstanding(riderId) {
+  document.getElementById("riderCashHandoffOverlay")?.remove();
+  const rows = [
+    ...riderOutstandingCash.filter((row) => Number(row.rider_id) === Number(riderId)).map((row) => ({ ...row, mode: "confirmed" })),
+    ...riderPendingDirectCash.filter((row) => Number(row.rider_id) === Number(riderId)).map((row) => ({ ...row, mode: "direct" })),
+  ];
+  const overlay = document.createElement("div");
+  overlay.id = "riderCashHandoffOverlay";
+  overlay.className = "rider_cash_overlay";
+  overlay.innerHTML = `<section class="rider_cash_dialog" role="dialog" aria-modal="true" aria-label="تسوية نقد المندوب"><div class="rider_cash_dialog_header"><div><small>عهدة الدليفري</small><h2>تسوية نقد المندوب</h2></div><button type="button" id="closeRiderCashHandoff" aria-label="إغلاق">×</button></div><p>تظهر حصة المطعم لكل طلب. سجّل الاستلام بعد عدّ النقد الذي سلّمه المندوب فعليًا.</p><div class="rider_cash_orders">${rows.map((row) => `<div class="rider_cash_order"><div><strong>طلب #${escapeOrderText(row.order_number)}</strong><small>${row.mode === "direct" ? (row.rider_id == null ? "مندوب غير مسند في النظام — إقرار استلام من الكاشير" : "المندوب لم يؤكد التحصيل بالتطبيق — إقرار مباشر من الكاشير") : "تحصيل المندوب مؤكد"}</small></div><label>حصة المطعم<input type="number" min="0.01" max="${Number(row.restaurant_cash_due_from_rider)}" step="0.01" value="${Number(row.restaurant_cash_due_from_rider).toFixed(2)}" ${row.mode === "direct" ? "readonly" : ""}></label><button type="button" class="cash_custody_button" data-handoff-order="${Number(row.order_id)}" data-mode="${row.mode}">${row.mode === "direct" ? "استلام مباشر" : "استلام"}</button></div>`).join("")}</div></section>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#closeRiderCashHandoff").onclick = () => overlay.remove();
+  overlay.addEventListener("click", (event) => { if (event.target === overlay) overlay.remove(); });
+  overlay.querySelectorAll("[data-handoff-order]").forEach((button) => button.addEventListener("click", async () => {
+    const row = rows.find((item) => Number(item.order_id) === Number(button.dataset.handoffOrder) && item.mode === button.dataset.mode);
+    if (!row || button.disabled) return;
+    const amount = Number(button.closest(".rider_cash_order")?.querySelector("input")?.value);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > Number(row.restaurant_cash_due_from_rider)) return showToast("راجع المبلغ المستلم", "error");
+    const direct = row.mode === "direct";
+    const approved = await showCustomActionConfirm(direct
+      ? `هل عديت واستلمت من المندوب كامل حصة المطعم، ${amount.toFixed(2)} جنيه؟ هيُسجل إقرارك بدل تأكيد المندوب.`
+      : `هل عديت واستلمت من المندوب ${amount.toFixed(2)} جنيه فعلًا؟`);
+    if (!approved) return;
+    button.disabled = true;
+    const originalLabel = button.textContent;
+    button.textContent = "جاري التسجيل...";
+    try {
+      const key = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const route = direct ? "direct-rider-settlement" : "rider-handoff";
+      const response = await apiFetch(`/shifts/cash/orders/${row.order_id}/${route}`, {
+        method: "POST", body: JSON.stringify({ amount, idempotency_key: key }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(typeof data.detail === "string" ? data.detail : "تعذر تسجيل التسوية");
+      }
+      overlay.remove();
+      await renderRidersTab();
+      showToast("تم تسجيل استلام النقد من المندوب", "success");
+    } catch (error) {
+      showToast(error.name === "TimeoutError" ? "تأخر الرد؛ حدّث التسوية قبل إعادة التسجيل" : error.message, "error");
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }));
+}
+
 function showRiderOrdersPopup(riderName, orderNumbers) {
   const old = document.getElementById("rider_orders_popup");
   if (old) old.remove();
@@ -2070,7 +2395,7 @@ function showRiderOrdersPopup(riderName, orderNumbers) {
   overlay.innerHTML = `
     <div style="background: var(--color-bg); border: 1px solid var(--color-primary); border-radius: 16px; padding: 24px; width: 400px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(201, 168, 76, 0.2); padding-bottom: 12px;">
-        <h3 style="margin: 0; color: var(--color-primary); font-size: 18px;">طلبات المندوب: ${riderName}</h3>
+        <h3 style="margin: 0; color: var(--color-primary); font-size: 18px;">طلبات المندوب: ${escapeOrderText(riderName)}</h3>
         <button onclick="document.getElementById('rider_orders_popup').remove()" style="background: none; border: none; color: var(--color-subtext); font-size: 24px; cursor: pointer;">&times;</button>
       </div>
       
@@ -2080,7 +2405,7 @@ function showRiderOrdersPopup(riderName, orderNumbers) {
           ${orderNumbers
             .map(
               (num) => `
-            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; text-align: center; color: #fff; font-weight: 700;">#${num}</div>
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; text-align: center; color: #fff; font-weight: 700;">#${escapeOrderText(num)}</div>
           `,
             )
             .join("")}
@@ -2188,7 +2513,7 @@ function renderShiftExpenses() {
     <article class="expense_row${item._pending ? " is_pending" : ""}">
       <div><strong>${escapeExpenseText(item.title)}</strong><span>${escapeExpenseText(item.note || "بدون ملاحظة")}</span></div>
       <div><b>${expenseMoney(item.amount)}</b><small>${item._pending ? "جاري الحفظ..." : new Date(item.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</small></div>
-      <button type="button" ${item._pending ? "disabled" : `onclick="deleteShiftExpense(${item.id})"`} title="${item._pending ? "جاري الحفظ" : "حذف المصروف"}">${item._pending ? "…" : "×"}</button>
+      ${item.can_delete === false ? '<span class="expense_admin_label" title="مصروف أضافته الإدارة">الإدارة</span>' : `<button type="button" ${item._pending ? "disabled" : `onclick="deleteShiftExpense(${item.id})"`} title="${item._pending ? "جاري الحفظ" : "حذف المصروف"}">${item._pending ? "…" : "×"}</button>`}
     </article>`).join("") : '<div class="expenses_empty">لا توجد مصروفات مسجلة في الشيفت الحالي</div>';
 }
 
@@ -2220,6 +2545,7 @@ async function deleteShiftExpense(expenseId) {
   const itemIndex = currentShiftExpenses.findIndex((item) => Number(item.id) === Number(expenseId));
   if (itemIndex < 0) return;
   const removedItem = currentShiftExpenses[itemIndex];
+  if (removedItem.can_delete === false) return;
   currentShiftExpenses.splice(itemIndex, 1);
   currentShiftExpensesTotal = Math.max(0, currentShiftExpensesTotal - Number(removedItem.amount || 0));
   renderShiftExpenses();
@@ -2248,7 +2574,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const submitButton = expenseForm.querySelector('button[type="submit"]');
     if (submitButton?.disabled) return;
     const form = new FormData(expenseForm);
-    const payload = { title: String(form.get("title") || "").trim(), amount: Number(form.get("amount")), note: String(form.get("note") || "").trim() || null };
+    const payload = { title: String(form.get("title") || "").trim(), amount: Number(form.get("amount")), note: String(form.get("note") || "").trim() || null, receipt_reference: String(form.get("receipt_reference") || "").trim() || null };
     if (payload.title.length < 2 || !Number.isFinite(payload.amount) || payload.amount <= 0) {
       return showToast("راجع بند المصروف والمبلغ", "error");
     }
@@ -2266,6 +2592,7 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(error.detail || "تعذر حفظ المصروف");
       }
       const savedExpense = await response.json();
+      currentShiftExpenses = currentShiftExpenses.filter((item) => Number(item.id) !== Number(savedExpense.id));
       currentShiftExpenses.unshift(savedExpense);
       if (Number.isFinite(Number(savedExpense.shift_total))) currentShiftExpensesTotal = Number(savedExpense.shift_total);
       expenseForm.reset();
@@ -2321,13 +2648,29 @@ async function fetchOnlineOrdersServer(page = 1, silent = false) {
 }
 
 async function fetchAllOrdersServer(page = 1, silent = false) {
+  const requestId = ++allOrdersRequestId;
   allOrdersCurrentPage = page;
   if (!silent) showGlobalLoader(true);
   try {
-    const url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier`;
+    const shiftResponse = await apiFetch("/shifts/current/cash", { hideLoader: true });
+    if (!shiftResponse.ok) {
+      const error = await shiftResponse.json().catch(() => ({}));
+      throw new Error(error.detail || "تعذر تحديد الشيفت الحالي");
+    }
+    const shift = await shiftResponse.json();
+    if (!shift.active || !shift.shift_id) throw new Error("لا يوجد شيفت مفتوح لهذا الكاشير");
+    let url = `/orders/?page=${page}&page_size=${ordersPageSize}&source=cashier&shift_id=${shift.shift_id}`;
+    if (allOrdersFilter === "unprinted") {
+      url += "&is_printed=false";
+    } else if (allOrdersFilter !== "all") {
+      url += `&order_type=${encodeURIComponent(allOrdersFilter)}`;
+    }
+    if (allOrdersPaymentFilter) url += `&payment_method=${encodeURIComponent(allOrdersPaymentFilter)}`;
+    if (allOrdersSearchTerm) url += `&search=${encodeURIComponent(allOrdersSearchTerm)}`;
     const res = await apiFetch(url);
     if (!res.ok) throw new Error("Failed to fetch all orders");
     const data = await res.json();
+    if (requestId !== allOrdersRequestId) return;
     allOrdersList = data.orders || [];
     allOrdersTotal = data.total || 0;
 
@@ -2339,8 +2682,9 @@ async function fetchAllOrdersServer(page = 1, silent = false) {
 
     renderAllOrders();
   } catch (err) {
+    if (requestId !== allOrdersRequestId) return;
     console.error(err);
-    if (!silent) showToast("فشل تحميل طلبات الكاشير", "error");
+    if (!silent) showToast(err.message || "فشل تحميل طلبات الكاشير", "error");
   } finally {
     if (!silent) showGlobalLoader(false);
   }
@@ -2358,6 +2702,7 @@ async function fetchAllOrders(skipSync = false) {
 
     ordersSnapshotLoaded = true;
     updateOnlineStats();
+    renderAllOrders();
     renderRidersTab();
 
     showToast("تم تحديث البيانات بنجاح", "success");
@@ -2548,7 +2893,7 @@ function renderOnlineOrders() {
           order.customer_notes
             ? `
         <div class="detail_row">
-          <span style="font-size:12px">ملاحظات: ${order.customer_notes}</span>
+          <span style="font-size:12px">ملاحظات: ${escapeOrderText(order.customer_notes)}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
         </div>`
             : ""
@@ -2648,6 +2993,19 @@ function renderOnlineOrders() {
   if (pagination) grid.appendChild(pagination);
 }
 
+async function requestOrderCancellation(orderId) {
+  try {
+    const response = await apiFetch(`/orders/${orderId}/cancellation-request`, { method: "POST" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(typeof error.detail === "string" ? error.detail : "تعذر إرسال طلب الإلغاء");
+    }
+    showToast("اترسل طلب الإلغاء للأدمن، والطلب لسه فعال لحد الموافقة", "success");
+  } catch (error) {
+    showToast(error.message || "تعذر إرسال طلب الإلغاء", "error");
+  }
+}
+
 async function updateOnlineStatus(orderId, newStatus) {
   const order = onlineOrdersList.find((o) => o.id === orderId);
   let msg = "هل أنت متأكد؟";
@@ -2656,13 +3014,19 @@ async function updateOnlineStatus(orderId, newStatus) {
   else if (newStatus === "delivered") msg = "هل تم توصيل الطلب؟";
   else if (newStatus === "cancelled") msg = "إلغاء هذا الطلب؟";
 
+  if (newStatus === "cancelled") {
+    await requestOrderCancellation(orderId);
+    return;
+  }
   const confirmed = await showCustomActionConfirm(msg);
   if (!confirmed) return;
 
   try {
+    const digitalPaymentVerified = newStatus === "confirmed" ? await confirmDigitalPaymentForOrder(orderId) : false;
+    if (digitalPaymentVerified === null) return;
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ order_status: newStatus }),
+      body: JSON.stringify({ order_status: newStatus, digital_payment_verified: digitalPaymentVerified }),
     });
 
     if (res.ok) {
@@ -2797,6 +3161,7 @@ function getCashierLiveSocket() {
       path: "/orders/ws/cashier",
       onMessage: (payload) => handleSocketEvent(payload),
       onOpen: (ws) => {
+        refreshVisibleShiftExpenses();
         setTimeout(() => {
           if (ws.readyState !== WebSocket.OPEN) return;
           Promise.all([
@@ -2813,7 +3178,10 @@ function getCashierLiveSocket() {
           }).catch((error) => console.warn("Post-reconnect order sync failed:", error));
         }, 700);
       },
-      onVisible: () => scheduleOffersRefresh(0),
+      onVisible: () => {
+        scheduleOffersRefresh(0);
+        refreshVisibleShiftExpenses();
+      },
     });
   }
   return cashierLiveSocket;
@@ -2827,6 +3195,12 @@ function updateConnectionStatus(status) {
   getCashierLiveSocket().updateStatus(status);
 }
 
+function refreshVisibleShiftExpenses() {
+  if (document.getElementById("tab_expenses")?.classList.contains("active")) {
+    loadShiftExpenses();
+  }
+}
+
 function handleSocketEvent(payload) {
   if (
     !payload ||
@@ -2834,6 +3208,11 @@ function handleSocketEvent(payload) {
     payload.type === "HEARTBEAT_ACK" ||
     payload.type === "heartbeat_ack"
   ) {
+    return;
+  }
+
+  if (payload.type === "EXPENSE_UPDATED") {
+    refreshVisibleShiftExpenses();
     return;
   }
 
@@ -2859,36 +3238,6 @@ function handleSocketEvent(payload) {
   if (normalizeOrderEventName(payload.type || payload.event) === "NEW_ORDER") {
     // A newly committed order may consume the final global offer use.
     scheduleOffersRefresh(450);
-  }
-
-  if (payload.type === "ORDER_SNAPSHOT") {
-    const orders = Array.isArray(payload.data?.orders)
-      ? payload.data.orders
-      : [];
-    ordersSnapshotLoaded = true;
-    // Split the live snapshot into cashier and online orders.
-    const allFromSnapshot = orders.filter((o) => !isOnlineOrder(o));
-    const onlineFromSnapshot = orders.filter(isOnlineOrder);
-    // Respect pagination: only keep first page and set totals
-    allOrdersTotal = allFromSnapshot.length;
-    onlineOrdersTotal = onlineFromSnapshot.length;
-    allOrdersList = allFromSnapshot.slice(0, ordersPageSize);
-    onlineOrdersList = onlineFromSnapshot.slice(0, ordersPageSize);
-    allOrdersCurrentPage = 1;
-    onlineOrdersCurrentPage = 1;
-    lastSocketOrderUpdate = Date.now();
-    updateOnlineStats();
-    renderOnlineOrders();
-    renderAllOrders();
-    refreshNewOrdersBadge();
-    updateConnectionStatus("connected");
-
-    // Always fetch from server for accurate pagination and data
-    setTimeout(() => {
-      fetchOnlineOrdersServer(1, true);
-      fetchAllOrdersServer(1, true);
-    }, 300);
-    return;
   }
 
   if (payload.type === "SYNC_COMPLETE") {
@@ -3252,7 +3601,7 @@ function toggleSound() {
   }
 }
 
-function printOrderFromOnline(orderId) {
+async function printOrderFromOnline(orderId) {
   const order = onlineOrdersList.find((o) => o.id === orderId);
   if (!order) return;
 
@@ -3279,11 +3628,38 @@ function printOrderFromOnline(orderId) {
 
   const printData = {
     ...order,
+    order_type: order.order_type || order.orderType,
+    orderType: order.order_type || order.orderType,
     cart: cartMapped,
     customerAddress: getOrderAddressText(order),
   };
   if (typeof printReceipt === "function") {
-    printReceipt(printData);
+    if (await printReceipt(printData)) await markOrderAsPrinted(order.id);
+  }
+}
+
+async function markOrderAsPrinted(orderId) {
+  try {
+    const response = await apiFetch(`/orders/${orderId}/mark-printed`, { method: "POST" });
+    if (!response.ok) throw new Error("Could not mark order as printed");
+    const order = allOrdersList.find((o) => o.id === orderId);
+    if (order) {
+      order.is_printed = true;
+      if (allOrdersFilter === "unprinted") {
+        renderAllOrders();
+      } else if (typeof window.updateOrAddAllOrderDOM === "function") {
+        window.updateOrAddAllOrderDOM(order);
+      }
+    }
+    const onlineOrder = onlineOrdersList.find((o) => o.id === orderId);
+    if (onlineOrder) {
+      onlineOrder.is_printed = true;
+    }
+    return true;
+  } catch (err) {
+    console.warn("Could not mark order as printed on server:", err);
+    showToast("تم إرسال الفاتورة للطباعة، لكن تعذر تحديث حالة الطباعة", "error");
+    return false;
   }
 }
 
@@ -3293,6 +3669,9 @@ function printOrderFromOnline(orderId) {
 let allOrdersList = [];
 let allOrdersFilter = "all";
 let allOrdersSearchTerm = "";
+let allOrdersPaymentFilter = "";
+let allOrdersSearchTimer = null;
+let allOrdersRequestId = 0;
 let allOrdersCurrentPage = 1;
 let allOrdersTotal = 0;
 
@@ -3308,7 +3687,14 @@ function setAllOrdersFilter(filter, btn) {
 function handleAllOrdersSearch(term) {
   allOrdersSearchTerm = term.trim().toLowerCase();
   allOrdersCurrentPage = 1;
-  renderAllOrders();
+  clearTimeout(allOrdersSearchTimer);
+  allOrdersSearchTimer = setTimeout(() => fetchAllOrdersServer(1), 250);
+}
+
+function setAllOrdersPaymentFilter(method) {
+  allOrdersPaymentFilter = method;
+  allOrdersCurrentPage = 1;
+  fetchAllOrdersServer(1);
 }
 
 function renderAllOrders() {
@@ -3320,25 +3706,17 @@ function renderAllOrders() {
     return;
   }
 
-  const term = (allOrdersSearchTerm || "").toLowerCase();
-  const filteredList = allOrdersList.filter(o => {
-    if (allOrdersFilter !== "all" && o.order_type !== allOrdersFilter) return false;
-    if (!term) return true;
-    const oNum = String(o.order_number || o.id || "").toLowerCase();
-    const phone = String(o.customer_phone || "").toLowerCase();
-    const name = String(o.customer_name || "").toLowerCase();
-    return oNum.includes(term) || phone.includes(term) || name.includes(term);
-  });
+  const filteredList = allOrdersList;
 
   const completedOrders = allOrdersList.filter((order) => ["completed", "delivered"].includes(order.order_status));
   const kpis = {
-    allOrdersTotalKpi: allOrdersList.length.toLocaleString("ar-EG"),
+    allOrdersTotalKpi: allOrdersTotal.toLocaleString("ar-EG"),
     allOrdersDeliveryKpi: allOrdersList.filter((order) => order.order_type === "delivery").length.toLocaleString("ar-EG"),
     allOrdersCompletedKpi: completedOrders.length.toLocaleString("ar-EG"),
   };
   Object.entries(kpis).forEach(([id, value]) => { const el = document.getElementById(id); if (el) el.textContent = value; });
   const resultCount = document.getElementById("allOrdersResultCount");
-  if (resultCount) resultCount.textContent = `${filteredList.length.toLocaleString("ar-EG")} طلب`;
+  if (resultCount) resultCount.textContent = `${allOrdersTotal.toLocaleString("ar-EG")} طلب`;
 
   if (filteredList.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);text-align:center;grid-column:1/-1;padding:40px;">لا توجد طلبات</p>`;
@@ -3362,7 +3740,9 @@ function renderAllOrders() {
         ? "دليفري"
         : order.order_type === "takeaway"
           ? "تيك أواي"
-          : "صالة";
+          : order.order_type === "phone_reservation"
+            ? "حجز تلفون"
+            : "صالة";
 
     let statusObj = statusMap[order.order_status] || {
       label: order.order_status,
@@ -3465,6 +3845,7 @@ function renderAllOrders() {
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
           <div style="display:flex; align-items:center; gap:8px;">
             ${badgeHtml}
+            ${!order.is_printed ? `<span style="font-size:10px; padding:2px 6px; background:rgba(228,4,17,0.15); color:#ff6b6b; border:1px solid rgba(228,4,17,0.3); border-radius:4px; font-weight:bold;">غير مطبوع</span>` : ""}
             <span style="font-size:14px; font-weight:800; color:var(--color-primary);">#${displayOrderNumber(order.order_number, order.id)}</span>
             <span style="font-size:11px; padding:2px 6px; background:rgba(255,255,255,0.05); border-radius:4px; color:var(--color-subtext);">${typeLabel}</span>
           </div>
@@ -3601,7 +3982,7 @@ function changeAllOrdersPage(newPage) {
 window.changeOnlinePage = changeOnlinePage;
 window.changeAllOrdersPage = changeAllOrdersPage;
 
-function printOrderFromList(orderId) {
+async function printOrderFromList(orderId) {
   const order = allOrdersList.find((o) => o.id === orderId);
   if (!order) {
     showToast("لا يمكن العثور على الطلب", "error");
@@ -3632,13 +4013,17 @@ function printOrderFromList(orderId) {
   // نمرر كائن الطلب بالكامل لضمان استخدام بيانات السيرفر (order_number, created_at, creator_name)
   const printData = {
     ...order,
+    order_type: order.order_type || order.orderType,
+    orderType: order.order_type || order.orderType,
     cart: cartMapped,
     customerAddress: getOrderAddressText(order),
   };
 
   if (typeof printReceipt === "function") {
-    printReceipt(printData);
-    showToast("جاري تجهيز الفاتورة للطباعة...", "success");
+    if (await printReceipt(printData)) {
+      await markOrderAsPrinted(order.id);
+      showToast("تم إرسال الفاتورة للطباعة", "success");
+    }
   } else {
     console.error("Function printReceipt not found.");
     showToast("خطأ: دالة الطباعة غير موجودة", "error");
@@ -3653,16 +4038,23 @@ async function changeOrderStatus(orderId, status) {
     confirmed: "مؤكد",
     out_for_delivery: "خرج للتوصيل",
   };
+  if (status === "cancelled") {
+    await requestOrderCancellation(orderId);
+    return;
+  }
   const confirmed = await showCustomActionConfirm(
     `هل أنت متأكد من تغيير حالة الطلب إلى ${statusLabels[status] || status}؟`,
   );
   if (!confirmed) return;
 
   try {
+    const digitalPaymentVerified = status === "confirmed" ? await confirmDigitalPaymentForOrder(orderId) : false;
+    if (digitalPaymentVerified === null) return;
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
       body: JSON.stringify({
         order_status: status,
+        digital_payment_verified: digitalPaymentVerified,
         delivery_person_id: null,
         internal_notes: null,
       }),
@@ -3776,23 +4168,39 @@ function showCustomActionConfirm(message) {
 // ===================================================
 //  Logout
 // ===================================================
-async function logout() {
+async function logout(leaveShiftOpen = false) {
   const token = localStorage.getItem("token");
   const headers = token ? { Authorization: "Bearer " + token } : {};
 
   try {
-    // تسجيل الخروج هو الذي يقفل الشيفت على السيرفر؛ لا نمسح الجلسة محليًا إذا فشل.
-    const response = await fetch(`${API_BASE}/auth/logout`, {
+    const response = await fetch(`${API_BASE}/auth/logout${leaveShiftOpen ? "?close_shift=false" : ""}`, {
       method: "POST",
       headers: {
         ...headers,
         "Content-Type": "application/json",
       },
     });
+    // Another device may already have revoked this token. The local session is
+    // already unusable, so clear it here instead of trapping the cashier.
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("token_type");
+      localStorage.removeItem("user_id");
+      localStorage.removeItem("username");
+      localStorage.removeItem("role");
+      localStorage.removeItem("user");
+      window.location.replace("../index.html");
+      return;
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (err) {
     console.warn("Logout API error:", err);
-    showToast("تعذر إغلاق الشيفت. تأكد من الاتصال وحاول تسجيل الخروج مرة أخرى", "error");
+    if (String(err.message).includes("400")) {
+      const leaveOpen = await showCustomActionConfirm("لم تُسجّل تسوية الشيفت. هل تريد الخروج وترك الشيفت مفتوحًا لتكمله لاحقًا؟");
+      if (leaveOpen) return logout(true);
+    } else {
+      showToast("تعذر تسجيل الخروج. تأكد من الاتصال وحاول مرة أخرى", "error");
+    }
     return;
   }
 
@@ -3816,8 +4224,14 @@ function openOrderDetails(orderId, source) {
   const typeLabels = {
     delivery: "دليفري",
     takeaway: "تيك أواي",
+    phone_reservation: "حجز تلفون",
     dine_in: "صالة",
     hall: "صالة",
+  };
+  const paymentMethodLabels = {
+    cash: "نقدي",
+    instapay: "InstaPay",
+    wallet: "محفظة",
   };
 
   const statusMap = {
@@ -3875,6 +4289,8 @@ function openOrderDetails(orderId, source) {
 
   const deliveryFee = parseFloat(order.delivery_fee || 0);
   const itemsTotal = parseFloat(order.subtotal || order.total_amount || 0);
+  const loyaltyDiscount = Number(order.loyalty_discount_amount || 0);
+  const otherDiscount = Math.max(0, Number(order.discount_amount || 0) - loyaltyDiscount);
 
   // Compute modification date display
   let modificationHtml = "";
@@ -3945,6 +4361,15 @@ function openOrderDetails(orderId, source) {
             <p>${typeLabels[order.order_type] || order.order_type}</p>
           </div>
           <div class="info_group">
+            <h4>طريقة الدفع</h4>
+            <p>${paymentMethodLabels[order.payment_method] || "غير محددة"}</p>
+            ${["instapay", "wallet"].includes(order.payment_method)
+              ? `<small>${order.digital_payment_verified_at
+                ? `الكاشير #${Number(order.digital_payment_verified_by_user_id)} أكد وصول التحويل ${new Date(order.digital_payment_verified_at).toLocaleString("ar-EG")}`
+                : "التحويل لم يؤكد الكاشير وصوله بعد"}</small>`
+              : ""}
+          </div>
+          <div class="info_group">
             <h4>العنوان</h4>
             <p>${
               typeof order.address === "object" && order.address !== null
@@ -3968,7 +4393,7 @@ function openOrderDetails(orderId, source) {
               ? `
           <div class="info_group" style="grid-column: 1 / -1;">
             <h4>ملاحظات</h4>
-            <p>${order.customer_notes}</p>
+            <p>${escapeOrderText(order.customer_notes)}</p>
           </div>`
               : ""
           }
@@ -4004,12 +4429,19 @@ function openOrderDetails(orderId, source) {
             <span>العرض: ${escapeOrderText(order.applied_offer.display_name || order.applied_offer.code)} (${escapeOrderText(order.applied_offer.code)})</span>
             <span>قيمة الخصم: ${Number(order.applied_offer.discount_amount || order.discount_amount || 0).toFixed(2)} ج.م</span>
           </div>` : ""}
+          ${loyaltyDiscount > 0 ? `
+          <div class="summary_row" style="color:#f1c75b;">
+            <span>${order.loyalty_reward_type === "free_product"
+              ? `صنف مجاني بالنقاط: ${escapeOrderText(order.loyalty_product_name || "صنف")} ${escapeOrderText(order.loyalty_variant_name || "")}`
+              : "خصم ثابت بالنقاط"} (${Number(order.loyalty_points_spent || 0)} نقطة، ${order.loyalty_status === "reserved" ? "محجوزة حتى تأكيد الطلب" : "مخصومة"})</span>
+            <span>- ${loyaltyDiscount.toFixed(2)} ج.م</span>
+          </div>` : ""}
           ${
-            order.discount_amount && parseFloat(order.discount_amount) > 0
+            otherDiscount > 0
               ? `
           <div class="summary_row" style="color: #e74c3c;">
             <span>الخصم${order.discount_reason ? ` (${order.discount_reason})` : ""}:</span>
-            <span>- ${parseFloat(order.discount_amount).toFixed(2)} ج.م</span>
+            <span>- ${otherDiscount.toFixed(2)} ج.م</span>
           </div>
               `
               : ""
@@ -4019,6 +4451,7 @@ function openOrderDetails(orderId, source) {
             <span id="od_grand_total">${parseFloat(order.total_amount).toFixed(2)} ج.م</span>
           </div>
         </div>
+        ${order.payment_method === "cash" ? '<section id="order_cash_custody" aria-live="polite" style="margin-top:18px;padding:15px;border:1px solid rgba(201,168,76,.3);border-radius:10px">جاري تحميل حركة النقد...</section>' : ""}
         
         ${
           order.modifications && order.modifications.length > 0
@@ -4080,14 +4513,92 @@ function openOrderDetails(orderId, source) {
   if (isOnlineDelivery) {
     loadDeliveryRidersForModal(order);
   }
+  if (order.payment_method === "cash") loadOrderCashCustody(order.id);
+}
+
+async function loadOrderCashCustody(orderId) {
+  const target = document.getElementById("order_cash_custody");
+  if (!target) return;
+  target.textContent = "جاري مراجعة عهدة النقد...";
+  try {
+    const response = await apiFetch(`/shifts/cash/orders/${orderId}`, { hideLoader: true });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(typeof error.detail === "string" ? error.detail : "تعذر تحميل حركة النقد");
+    }
+    const data = await response.json();
+    const format = (value) => Number(value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+    const order = [...onlineOrdersList, ...allOrdersList].find((item) => Number(item.id) === Number(orderId));
+    if (!data.cash_collection_available && !data.cash_tracking_enabled) {
+      target.innerHTML = `<strong>عهدة النقد لهذا الطلب</strong><p>الطلب قديم وسابق لسجل التحصيل الجديد. راجع نقده مع الإدارة يدويًا؛ لا يمكن إنشاء حركة تحصيل جديدة عليه.</p>`;
+      return;
+    }
+    const canCollect = order && order.order_type !== "delivery" && order.order_status !== "cancelled" && Number(data.uncollected) > 0;
+    const canHandoff = order && order.order_type === "delivery" && Number(data.rider_holding) > 0;
+    const canDirect = order && order.order_type === "delivery" && (order.delivery_person_id || (data.legacy_same_shift && order.order_status === "delivered")) && !["new", "cancelled"].includes(order.order_status) && Number(data.restaurant_due) > 0 && Number(data.customer_paid) === 0 && Number(data.cashier_received) === 0 && Number(data.rider_holding) === 0;
+    target.innerHTML = `<strong>عهدة النقد لهذا الطلب</strong>${data.legacy_same_shift ? '<p>الطلب اتسجل قبل النشر في نفس الشيفت. تحصيله غير مؤكد لحد ما تسجل الاستلام الفعلي.</p>' : ""}<p>حصة المطعم: ${format(data.restaurant_due)} ج.م • وصل للصندوق: ${format(data.cashier_received)} ج.م • مع المندوب مؤكد: ${format(data.rider_holding)} ج.م • لم يؤكد تحصيله: ${format(data.uncollected)} ج.م</p><div class="cash_custody_actions">${canCollect ? '<button type="button" class="cash_custody_button" data-cash-action="collect">أؤكد استلام النقد من العميل</button>' : ""}${canHandoff ? '<button type="button" class="cash_custody_button" data-cash-action="handoff">أؤكد استلام النقد من المندوب</button>' : ""}${canDirect ? '<button type="button" class="cash_custody_button" data-cash-action="direct">تسوية مباشرة من المندوب</button>' : ""}</div><small>كل تأكيد يُحفظ باسم المستخدم ووقت العملية. عند وجود فرق في المبلغ راجع الإدارة.</small>`;
+    target.querySelector("[data-cash-action='collect']")?.addEventListener("click", () => recordOrderCash(orderId, "collect", data.uncollected));
+    target.querySelector("[data-cash-action='handoff']")?.addEventListener("click", () => recordOrderCash(orderId, "handoff", data.rider_holding));
+    target.querySelector("[data-cash-action='direct']")?.addEventListener("click", () => recordOrderCash(orderId, "direct", data.restaurant_due));
+  } catch (error) {
+    target.textContent = error.message;
+  }
+}
+
+async function recordOrderCash(orderId, action, availableAmount) {
+  const target = document.getElementById("order_cash_custody");
+  const button = target?.querySelector(`[data-cash-action='${action}']`);
+  if (!button || button.disabled) return;
+  const amount = Number(availableAmount);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > Number(availableAmount)) return;
+  const confirmed = await showCustomActionConfirm(action === "collect"
+    ? `هل استلمت من العميل ${amount.toFixed(2)} جنيه نقدًا بالفعل؟`
+    : action === "direct"
+      ? `هل عديت واستلمت كامل حصة المطعم ${amount.toFixed(2)} جنيه من المندوب؟ هيُحفظ إقرارك بدل تأكيد المندوب.`
+      : `هل عديت واستلمت ${amount.toFixed(2)} جنيه من المندوب فعلًا؟`);
+  if (!confirmed) return;
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = "جاري التسجيل...";
+  try {
+    const key = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const url = action === "direct" ? `/shifts/cash/orders/${orderId}/direct-rider-settlement` : action === "handoff" ? `/shifts/cash/orders/${orderId}/rider-handoff` : `/shifts/cash/orders/${orderId}/customer-collection`;
+    const response = await apiFetch(url, {
+      method: "POST",
+      body: JSON.stringify({ idempotency_key: key, ...(action !== "collect" ? { amount } : {}) }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(typeof data.detail === "string" ? data.detail : "تعذر تسجيل التحصيل");
+    }
+    await loadOrderCashCustody(orderId);
+    showToast("تم تسجيل حركة النقد", "success");
+  } catch (error) {
+    showToast(error.name === "TimeoutError" ? "تأخر الرد؛ حدّث الطلب قبل إعادة التسجيل" : error.message, "error");
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
 }
 
 // ===================================================
 //  Accept Order from Modal (new → confirmed)
 // ===================================================
+async function confirmDigitalPaymentForOrder(orderId) {
+  const response = await apiFetch(`/orders/${orderId}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("تعذر مراجعة وسيلة دفع الطلب");
+  const order = await response.json();
+  if (!["instapay", "wallet"].includes(order.payment_method)) return false;
+  const confirmed = await showCustomActionConfirm(
+    `هل راجعت حساب المطعم وتأكدت إن تحويل ${Number(order.total_amount).toFixed(2)} جنيه وصل بالفعل؟`
+  );
+  return confirmed ? true : null;
+}
+
 async function acceptOrderFromModal(orderId, source) {
   const btn = document.getElementById("od_accept_btn");
   if (!btn) return;
+  const originalButtonHtml = btn.innerHTML;
 
   // حالة تحميل
   btn.disabled = true;
@@ -4102,9 +4613,17 @@ async function acceptOrderFromModal(orderId, source) {
   `;
 
   try {
+    const digitalPaymentVerified = await confirmDigitalPaymentForOrder(orderId);
+    if (digitalPaymentVerified === null) {
+      btn.disabled = false;
+      btn.style.opacity = "1";
+      btn.style.cursor = "pointer";
+      btn.innerHTML = originalButtonHtml;
+      return;
+    }
     const res = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ order_status: "confirmed" }),
+      body: JSON.stringify({ order_status: "confirmed", digital_payment_verified: digitalPaymentVerified }),
     });
 
     if (!res.ok) {
@@ -4301,10 +4820,21 @@ async function assignDeliveryToOnlineOrder(orderId, riderId, riderName, fee) {
     });
     if (!resFull.ok) throw new Error("فشل تحديث بيانات التوصيل");
 
+    // Confirm the bank receipt against the final amount after delivery fees
+    // have been saved, never against the customer's earlier checkout total.
+    const digitalPaymentVerified = await confirmDigitalPaymentForOrder(orderId);
+    if (digitalPaymentVerified === null) {
+      await fetchOnlineOrdersServer(onlineOrdersCurrentPage, true);
+      openOrderDetails(orderId, "online");
+      showToast("تم حفظ رسوم التوصيل؛ الطلب ما زال جديدًا حتى تأكيد وصول المبلغ النهائي", "error");
+      return;
+    }
+
     const resStatus = await apiFetch(`/orders/${orderId}/status`, {
       method: "PATCH",
       body: JSON.stringify({
         order_status: "confirmed",
+        digital_payment_verified: digitalPaymentVerified,
       }),
     });
     if (!resStatus.ok) throw new Error("فشل تحديث الحالة");
@@ -4481,116 +5011,85 @@ function renderEditOrderModal() {
 
   const overlay = document.createElement("div");
   overlay.id = "edit_order_modal_overlay";
-  overlay.style.cssText = `
-    position:fixed; inset:0; background:rgba(0,0,0,0.4);
-    display:flex; align-items:center; justify-content:center; z-index:11000; padding: 20px;
-  `;
-
   overlay.innerHTML = `
-    <div style="background:var(--color-bg); width:90vw; max-width:1150px; height:85vh; border-radius:16px; border:1px solid var(--color-primary); display:flex; flex-direction:column; overflow:hidden; position:relative; direction:rtl; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
-      
-      <!-- Modal Navigation Header (Mirroring Navbar theme) -->
-      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 32px; background:linear-gradient(180deg, #c79a4a 0%, #7a4f1a 100%); direction:rtl;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <img src="/assets/توب شيف 1@2x.png" style="width:40px; height:40px; object-fit:contain;" />
-          <h2 style="color:var(--color-bg); margin:0; font-size:18px; font-weight:900;">تعديل الطلب #${displayOrderNumber(editModalState.originalOrder.order_number, editModalState.originalOrder.id)}</h2>
+    <div class="edit_order_modal_shell">
+      <div class="edit_order_modal_header">
+        <div class="edit_order_modal_heading">
+          <img src="/assets/توب شيف 1@2x.png" alt="" />
+          <div><span>نقطة البيع</span><h2>تعديل الطلب #${displayOrderNumber(editModalState.originalOrder.order_number, editModalState.originalOrder.id)}</h2></div>
         </div>
-        <button onclick="document.getElementById('edit_order_modal_overlay').remove()" style="background:var(--color-bg); border:none; color:var(--color-primary); width:32px; height:32px; border-radius:50%; font-size:20px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center;display:flex; align-items:center; justify-content:center">&times;</button>
+        <button type="button" class="edit_order_modal_close" onclick="document.getElementById('edit_order_modal_overlay').remove()" aria-label="إغلاق نافذة التعديل">&times;</button>
       </div>
 
-      <!-- Main Layout Mirror -->
-      <div class="main_layout" style="flex:1; height:auto; padding:20px; overflow:hidden; gap:16px;">
-        
-        <!-- Right Section: Categories & Products Grid -->
-        <div class="right_section" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
-          <div class="category_tabs" id="edit_modal_cat_tabs" style="margin-bottom:16px; flex-wrap:wrap; padding-bottom:4px;"></div>
-          <div class="items_grid" id="edit_modal_items_grid" style="flex:1; padding:4px;"></div>
+      <div class="main_layout edit_order_modal_layout">
+        <div class="right_section">
+          <header class="local_menu_header">
+            <div><p>منيو الطلب</p><h1>تعديل الأصناف</h1><span>اختر التصنيف ثم أضف الأصناف إلى الأوردر</span></div>
+            <label class="local_product_search">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input id="edit_modal_product_search" type="search" placeholder="ابحث عن صنف..." oninput="renderEditModalItems()" />
+            </label>
+          </header>
+          <div class="category_tabs" id="edit_modal_cat_tabs"></div>
+          <div class="items_grid" id="edit_modal_items_grid"></div>
         </div>
 
-        <!-- Left Section: Cart (Total Container) -->
-        <div class="total_container" id="edit_modal_cart_container" style="height:100%; display:flex; flex-direction:column; overflow:hidden;">
-          <div class="total_header" style="flex-shrink:0;">
-            <h1>ملخص التعديل</h1>
-          </div>
-          
-          <div style="flex:1; overflow-y:auto; padding:0 0 10px 0;">
-            <!-- Mini Customer Info Card (Matching Cashier Style) -->
-            <div id="edit_modal_customer_form" style="padding: 0 16px; margin-bottom: 12px; display: ${editModalState.orderType ? "block" : "none"};">
-               <div class="delivery_customer_card" style="margin-top: 0; box-shadow: none; border: 1px solid rgba(201,168,76,0.2);">
-                  <div class="dcf_title" id="edit_modal_dcf_title">
-                     <div style="display:flex; align-items:center; gap:6px;">
-                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                        </svg>
-                        <span>${editModalState.orderType === "delivery" ? "تعديل بيانات عميل الديليفري" : "تعديل بيانات العميل (اختياري)"}</span>
-                     </div>
-                     <button class="dcf_close_btn" onclick="clearOrderTypeInEditModal()" title="إغلاق وإلغاء نوع الطلب">✕</button>
-                  </div>
-                  <div class="dcf_field">
-                     <span class="dcf_label">📞 رقم التليفون</span>
-                     <input type="tel" class="dcf_input" placeholder="01xxxxxxxxx" maxlength="11" 
-                        value="${editModalState.customerPhone}" 
-                        oninput="editModalState.customerPhone = normalizePhoneDigits(this.value); this.value = editModalState.customerPhone" />
-                  </div>
-                  <div class="dcf_field">
-                     <span class="dcf_label">👤 الاسم</span>
-                     <input type="text" class="dcf_input" placeholder="اسم العميل" 
-                        value="${editModalState.customerName}" 
-                        oninput="editModalState.customerName = this.value" />
-                  </div>
-                  <div class="dcf_field">
-                     <span class="dcf_label">📍 العنوان</span>
-                     <input type="text" class="dcf_input" placeholder="العنوان بالتفصيل" 
-                        value="${editModalState.customerAddress}" 
-                        oninput="editModalState.customerAddress = this.value" />
-                  </div>
-               </div>
-            </div>
-            
-            <div class="total_cards" id="edit_modal_cart_list" style="padding:0 16px;"></div>
-
-            <!-- Edit Discount Section -->
-            <div id="edit_modal_discount_form" style="border-top: 1px solid rgba(201, 168, 76, 0.3); padding: 12px 14px; flex-shrink: 0; margin-bottom: 8px;">
-              <div class="dcf_title" style="margin-bottom: 8px;">
-                <i class="fa-solid fa-tags"></i>
-                <span>تعديل الخصم</span>
-              </div>
+        <aside class="order_setup_panel" aria-label="إعداد تعديل الطلب">
+          <header class="order_setup_header">
+            <div><span>بيانات الطلب</span><h2>استكمال التعديل</h2><p>راجع بيانات العميل والخصم قبل الحفظ</p></div>
+          </header>
+          <div class="order_setup_body">
+            <section id="edit_modal_customer_form" class="order_setup_section" style="display:${editModalState.orderType ? "block" : "none"}">
               <div class="delivery_customer_card">
-                <div style="display:flex; gap:8px;">
-                  <select id="edit_modal_discount_type" class="dcf_select" style="flex:1;" onchange="editModalState.discountType = this.value; updateEditModalGrandTotal()">
+                <div class="dcf_title" id="edit_modal_dcf_title">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>${editModalState.orderType === "delivery" ? "تعديل بيانات عميل الديليفري" : "تعديل بيانات العميل (اختياري)"}</span>
+                  </div>
+                  <button class="dcf_close_btn" onclick="hideEditModalCustomerForm()" title="إخفاء بيانات العميل">✕</button>
+                </div>
+                <div class="dcf_field"><span class="dcf_label">📞 رقم التليفون</span><input type="tel" class="dcf_input" placeholder="01xxxxxxxxx" maxlength="11" value="${editModalState.customerPhone}" oninput="editModalState.customerPhone = normalizePhoneDigits(this.value); this.value = editModalState.customerPhone" /></div>
+                <div class="dcf_field"><span class="dcf_label">👤 الاسم</span><input type="text" class="dcf_input" placeholder="اسم العميل" value="${editModalState.customerName}" oninput="editModalState.customerName = this.value" /></div>
+                <div class="dcf_field"><span class="dcf_label">📍 العنوان</span><input type="text" class="dcf_input" placeholder="العنوان بالتفصيل" value="${editModalState.customerAddress}" oninput="editModalState.customerAddress = this.value" /></div>
+              </div>
+            </section>
+
+            <section id="edit_modal_discount_form" class="order_setup_section">
+              <div class="order_setup_section_title"><span>خصم إضافي</span><small>اختياري</small></div>
+              <div class="delivery_customer_card discount_card">
+                <div class="discount_fields">
+                  <label><span>نوع الخصم</span><select id="edit_modal_discount_type" class="dcf_select" onchange="editModalState.discountType = this.value; updateEditModalGrandTotal()">
                     <option value="" ${!editModalState.discountType ? "selected" : ""}>بدون خصم</option>
                     <option value="fixed" ${editModalState.discountType === "fixed" ? "selected" : ""}>مبلغ ثابت</option>
                     <option value="percentage" ${editModalState.discountType === "percentage" ? "selected" : ""}>نسبة مئوية (%)</option>
-                  </select>
-                  <input type="number" id="edit_modal_discount_value" class="dcf_input" style="flex:1;" placeholder="القيمة" min="0" step="0.01" value="${editModalState.discountValue || ""}" oninput="editModalState.discountValue = parseFloat(this.value) || 0; updateEditModalGrandTotal()">
+                  </select></label>
+                  <label><span>قيمة الخصم</span><input type="number" id="edit_modal_discount_value" class="dcf_input" placeholder="0.00" min="0" step="0.01" value="${editModalState.discountValue || ""}" oninput="editModalState.discountValue = parseFloat(this.value) || 0; updateEditModalGrandTotal()"></label>
                 </div>
-                <input type="text" id="edit_modal_discount_reason" class="dcf_input" placeholder="سبب الخصم (اختياري)" value="${editModalState.discountReason || ""}" oninput="editModalState.discountReason = this.value">
+                <label class="discount_reason_field"><span>السبب (اختياري)</span><input type="text" id="edit_modal_discount_reason" class="dcf_input" placeholder="مثال: عميل دائم" value="${editModalState.discountReason || ""}" oninput="editModalState.discountReason = this.value"></label>
               </div>
-            </div>
+            </section>
           </div>
+        </aside>
 
-          <div class="total_footer" style="flex-shrink:0;">
-            <!-- Badge نوع الطلب -->
-            <div id="edit_modal_order_type_badge" class="order_type_badge" style="display: none; margin-bottom: 8px;"></div>
-
-            <!-- زراير نوع الطلب -->
-            <div id="edit_modal_order_type_btns" class="order_type_btns" style="margin-bottom: 8px;"></div>
-
-            <div class="total_sum">
-              <h1>إجمالي الأصناف الكاشير:</h1>
-              <h2 id="edit_modal_items_total">0 ج.م</h2>
-            </div>
+        <div class="total_container" id="edit_modal_cart_container">
+          <div class="total_header"><h1>الطلب الحالي</h1></div>
+          <div class="total_cards" id="edit_modal_cart_list"></div>
+          <div class="total_footer">
+            <div class="total_sum"><h1>الإجمالي</h1><h2 id="edit_modal_items_total">0 ج.م</h2></div>
+            <section class="checkout_order_type" aria-label="نوع الطلب">
+              <div class="checkout_order_type_title"><span>نوع الطلب</span><small>اختر طريقة الاستلام</small></div>
+              <div id="edit_modal_order_type_btns" class="order_type_btns"></div>
+              <div id="edit_modal_order_type_badge" class="order_type_badge" style="display:none"></div>
+            </section>
             <div class="footer_btns">
-               <button class="btn_confirm" onclick="updateEditOrderConfirm()">حفظ التعديلات</button>
-               <button class="btn_cancel" onclick="document.getElementById('edit_order_modal_overlay').remove()">إلغاء</button>
+              <button class="btn_confirm" onclick="updateEditOrderConfirm()">حفظ التعديلات</button>
+              <button class="btn_cancel" onclick="document.getElementById('edit_order_modal_overlay').remove()">إلغاء</button>
             </div>
           </div>
         </div>
-
       </div>
-      
-      <!-- Sub-modal container for delivery/dine-in selection -->
-      <div id="edit_modal_sub_container" class="delivery_modal_container" style="display: none; z-index: 12000; position: absolute; inset: 0;"></div>
+
+      <div id="edit_modal_sub_container" class="delivery_modal_container" style="display:none; z-index:12000; position:absolute; inset:0;"></div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -4648,6 +5147,8 @@ function renderEditModalOrderTypeBadge() {
       <span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">تيك اواي</span>
       <button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>
     `;
+  } else if (editModalState.orderType === "phone_reservation") {
+    badge.innerHTML = `<span class="badge_icon"></span><span class="badge_name" style="cursor:pointer" onclick="showEditModalCustomerForm()">حجز تلفون</span><button class="badge_clear" onclick="clearOrderTypeInEditModal()">✕</button>`;
   } else if (editModalState.orderType === "dine_in") {
     badge.innerHTML = `
       <span class="badge_icon"></span>
@@ -4689,7 +5190,7 @@ function selectOrderTypeInEditModal(type) {
            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
            </svg>
-           <span>${type === "delivery" ? "تعديل بيانات عميل الديليفري" : "تعديل بيانات العميل (اختياري)"}</span>
+           <span>${type === "delivery" ? "تعديل بيانات عميل الديليفري" : type === "phone_reservation" ? "بيانات الحجز (رقم الهاتف مطلوب)" : "تعديل بيانات العميل (اختياري)"}</span>
          </div>
          <button class="dcf_close_btn" onclick="hideEditModalCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
        `;
@@ -4900,8 +5401,11 @@ function renderEditModalItems() {
   if (!grid) return;
   grid.innerHTML = "";
 
+  const searchTerm = document.getElementById("edit_modal_product_search")?.value.trim().toLowerCase() || "";
   const catProducts = products.filter(
-    (p) => p.cat_id === editModalState.activeCatId && p.is_available,
+    (p) => p.cat_id === editModalState.activeCatId && p.is_available &&
+      (!searchTerm || String(p.product_name || "").toLowerCase().includes(searchTerm) ||
+        String(p.description || p.desc || "").toLowerCase().includes(searchTerm)),
   );
   if (catProducts.length === 0) {
     grid.innerHTML = `<p style="color:var(--color-subtext);grid-column:1/-1;text-align:center;padding:30px">لا توجد أصناف في هذا التصنيف</p>`;
@@ -4921,13 +5425,18 @@ function renderEditModalItems() {
       : "";
 
     const card = document.createElement("div");
-    card.className = "item_card";
+    const unavailable = isDailyUnavailable(product);
+    card.className = `item_card${unavailable ? " daily_unavailable" : ""}`;
     card.innerHTML = `
+      ${unavailable ? '<span class="daily_unavailable_badge">غير متاح</span>' : ""}
       <h1>${product.product_name}</h1>
       ${descriptionHtml}
       <h2>${priceLabel}</h2>
     `;
-    card.onclick = () => handleEditModalProductClick(product, price);
+    card.onclick = () => {
+      if (isDailyUnavailable(product)) return showToast("الصنف غير متاح لباقي يوم العمل", "error");
+      handleEditModalProductClick(product, price);
+    };
     grid.appendChild(card);
   });
 }
@@ -5108,20 +5617,40 @@ function handleEditModalProductClick(product, defaultPrice) {
 // --------------------------- Edit Modal API Save Call ---------------------------
 async function updateEditOrderConfirm() {
   editModalState.customerPhone = normalizePhoneDigits(editModalState.customerPhone);
+  editModalState.customerName = String(editModalState.customerName || "").trim();
+  editModalState.customerAddress = String(editModalState.customerAddress || "").trim();
 
   if (editModalState.customerPhone && !isValidEgyptianPhone(editModalState.customerPhone)) {
     showToast("رقم التليفون يجب أن يكون 11 رقم", "error");
     return;
   }
 
-  if (editModalState.orderType === "delivery" && !editModalState.customerPhone) {
+  if (["delivery", "phone_reservation"].includes(editModalState.orderType) && !editModalState.customerPhone) {
     showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
+    return;
+  }
+
+  if (editModalState.orderType === "delivery" && !editModalState.customerName) {
+    showEditModalCustomerForm();
+    showToast("يرجى إدخال اسم العميل قبل حفظ طلب الدليفري", "error");
+    return;
+  }
+
+  if (editModalState.orderType === "delivery" && !editModalState.customerAddress) {
+    showEditModalCustomerForm();
+    showToast("يرجى إدخال عنوان العميل قبل حفظ طلب الدليفري", "error");
     return;
   }
 
   if (editModalState.cart.length === 0) {
     showToast("الفاتورة فارغة، لا يمكن حفظ طلب فارغ!", "error");
     return;
+  }
+
+  let digitalPaymentVerified = false;
+  if (["instapay", "wallet"].includes(editModalState.originalOrder?.payment_method)) {
+    digitalPaymentVerified = await showCustomActionConfirm("هل راجعت حساب المطعم وتأكدت إن مبلغ التحويل بعد التعديل وصل بالفعل؟");
+    if (!digitalPaymentVerified) return;
   }
 
   const confirmed = await showCustomActionConfirm(
@@ -5184,6 +5713,7 @@ async function updateEditOrderConfirm() {
       manual_discount_type: editModalState.discountType || null,
       manual_discount_value: editModalState.discountValue || null,
       discount_reason: editModalState.discountReason || null,
+      digital_payment_verified: digitalPaymentVerified,
     };
 
     // إرسال طلب التحديث (PATCH)
@@ -5195,10 +5725,27 @@ async function updateEditOrderConfirm() {
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       console.error("API Error during update:", errData);
-      throw new Error("فشل تحديث الطلب في الباك إند");
+      throw new Error(typeof errData.detail === "string" ? errData.detail : "فشل تحديث الطلب في الباك إند");
     }
 
-    const updatedOrder = await res.json();
+    let updatedOrder = await res.json();
+    const requestedAddress = String(payload.customer_address || "").trim();
+    const addressChanged =
+      mappedOrderType === "delivery" &&
+      requestedAddress !== String(getOrderAddressText(orig) || "").trim();
+    if (addressChanged) {
+      const verifyRes = await apiFetch(`/orders/${orig.id}`, {
+        cache: "no-store",
+      });
+      if (!verifyRes.ok) {
+        throw new Error("تعذر التأكد من حفظ عنوان الطلب. حاول مرة أخرى.");
+      }
+      const storedOrder = await verifyRes.json();
+      if (String(getOrderAddressText(storedOrder) || "").trim() !== requestedAddress) {
+        throw new Error("لم يُحفظ العنوان الجديد. لم تُغلق نافذة التعديل.");
+      }
+      updatedOrder = storedOrder;
+    }
     showToast("تم تعديل الطلب بنجاح ✓", "success");
 
     // إغلاق المودال بعد النجاح
@@ -5274,7 +5821,7 @@ async function updateEditOrderConfirm() {
     }
   } catch (err) {
     console.error(err);
-    showToast("حدث خطأ أثناء الاتصال بالسيرفر لحفظ التعديلات", "error");
+    showToast(err.message || "حدث خطأ أثناء الاتصال بالسيرفر لحفظ التعديلات", "error");
   } finally {
     showGlobalLoader(false);
   }

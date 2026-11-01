@@ -1,20 +1,20 @@
-from fastapi import APIRouter, status, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.modules.users import schemas, service
-from typing import List
-from app.core.database import get_db
-from app.core.redis import get_redis
-from app.core.enums import UserRole
-from app.modules.infrastructure.dependencies import require_role
-from app.core.exceptions import ValidationError
 
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.enums import UserRole
+from app.core.exceptions import ValidationError
+from app.core.redis import get_redis
+from app.modules.infrastructure.dependencies import require_role
+from app.modules.users import schemas, service
 
 router = APIRouter(prefix="/user", tags=['user'])
 
 
 # ─── All user management endpoints require ADMIN role ───
 
-@router.get("/users", response_model=List[schemas.UserResponse])
+@router.get("/users", response_model=list[schemas.UserResponse])
 async def get_list(
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
@@ -25,7 +25,7 @@ async def get_list(
     return get_list
 
 
-@router.get("/users/delivery", response_model=List[schemas.UserResponse])
+@router.get("/users/delivery", response_model=list[schemas.UserResponse])
 async def get_delivery_users(
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
@@ -83,7 +83,6 @@ async def delete_user(
         raise ValidationError("You cannot delete your current account")
     user_service = service.UserService(db, redis)
     await user_service.delete_user(id)
-    return None
 
 
 @router.patch("/users/{id}/toggle", response_model=schemas.UserResponse)

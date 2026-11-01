@@ -1,12 +1,15 @@
-from app.core.security import get_password_hash
-from app.modules.users import schemas, models, repository
-from app.core.enums import UserRole
 import contextlib
-from app.core.exceptions import NotFoundError, ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
-import re
 import json
+import re
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.enums import UserRole
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import logger
+from app.core.security import get_password_hash
+from app.modules.users import repository, schemas
+
 
 class UserService:
     def __init__(self, db: AsyncSession, redis=None):
@@ -28,7 +31,7 @@ class UserService:
             try:
                 await self.redis.delete("delivery:users:list")
                 logger.debug("Invalidated delivery users cache")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error invalidating delivery cache: {e}")
     
     @staticmethod
@@ -47,7 +50,7 @@ class UserService:
                 cached = await self.redis.get(cache_key)
                 if cached:
                     return schemas.UserResponse.model_validate_json(cached)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error getting user {userid}: {e}")
 
         # 2. Database Path
@@ -60,7 +63,7 @@ class UserService:
             try:
                 user_res = schemas.UserResponse.model_validate(user)
                 await self.redis.setex(cache_key, 600, user_res.model_dump_json())
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error caching user {userid}: {e}")
                 
         return user
@@ -84,7 +87,7 @@ class UserService:
                     logger.debug("Redis cache hit: delivery users")
                     data = json.loads(cached)
                     return [schemas.UserResponse(**item) for item in data]
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error reading delivery users: {e}")
         
         # 2. Database Path
@@ -96,7 +99,7 @@ class UserService:
             try:
                 serializable = [u.model_dump(mode='json') for u in response]
                 await self.redis.setex(cache_key, 3600, json.dumps(serializable))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Redis error writing delivery users cache: {e}")
         
         return response
@@ -181,7 +184,7 @@ class UserService:
         except IntegrityError as e:
             if "foreign key" in str(e).lower() or "orders" in str(e).lower():
                 raise ValidationError("Cannot delete user because they are referenced in existing orders. Please disable their account instead.")
-            raise e
+            raise
 
     async def toggle_user(self, user_id):
         async with self._transaction_scope():

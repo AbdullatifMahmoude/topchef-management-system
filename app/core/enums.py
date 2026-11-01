@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class CaseInsensitiveEnum(str, Enum):
     @classmethod
     def _missing_(cls, value):
@@ -41,6 +42,7 @@ class OrderStatus(CaseInsensitiveEnum):
 class OrderType(CaseInsensitiveEnum):
     HALL = "hall"
     TAKEAWAY = "takeaway"
+    PHONE_RESERVATION = "phone_reservation"
     DELIVERY = "delivery"
     ONLINE = "online"
 

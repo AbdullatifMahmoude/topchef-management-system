@@ -7,7 +7,7 @@ from app.modules.menu.models import Category, Product, Variant
 from app.modules.users.models import User
 from app.modules.offer.models import Offer, OfferUsage
 from app.modules.orders.models import DailyOrderCounter, Order, OrderItem, OrderStatusHistory
-from app.modules.customer.models import Customer, CustomerAddress
+from app.modules.customer.models import Customer, CustomerAddress, CustomerPointLedger
 from app.modules.comments.models import Comment
 from app.modules.settings.models import AppSetting, WhatsAppOutbox
 from app.modules.auth.models import PasswordResetCode

@@ -51,7 +51,7 @@ async def meta_agent_capabilities() -> schemas.AgentCapabilities:
 
 @router.get("/menu", response_model=schemas.MenuResponse)
 async def meta_agent_menu(
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> schemas.MenuResponse:
     """Return only active, available menu products and their current prices."""
     return await service.get_available_menu(db)
@@ -60,7 +60,7 @@ async def meta_agent_menu(
 @router.post("/customer-verification", response_model=schemas.CustomerVerificationResponse)
 async def meta_agent_customer_verification(
     data: schemas.CustomerVerificationRequest,
-    redis=Depends(get_redis),  # noqa: B008
+    redis=Depends(get_redis),
 ) -> schemas.CustomerVerificationResponse:
     """Confirm only a live TCV challenge bound to the current WhatsApp sender."""
     verified = await consume_incoming_message(
@@ -79,7 +79,7 @@ async def meta_agent_order_status(
         max_length=20,
         description="WhatsApp sender phone used to verify order ownership",
     ),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> schemas.OrderTrackingResponse:
     """Read order status only after matching it to the WhatsApp sender phone."""
     order = await service.get_owned_order_status(

@@ -58,6 +58,15 @@ class NotFoundError(AppExceptions):
         )
 
 
+class AccountAlreadyActiveError(AppExceptions):
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="الحساب مسجل بالفعل؛ سجل الدخول برقم الهاتف أو البريد",
+            error_code="ACCOUNT_ALREADY_ACTIVE",
+        )
+
+
 class AuthenticationServiceUnavailable(AppExceptions):
     def __init__(self):
         super().__init__(

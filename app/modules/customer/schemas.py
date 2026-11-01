@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict
+
 
 class CustomerAddressBase(BaseModel):
     address: str
@@ -22,15 +23,15 @@ class CustomerCreate(CustomerBase):
     pass
 
 class CustomerUpdate(BaseModel):
-    name: Optional[str] = None
-    phone_number: Optional[str] = None
+    name: str | None = None
+    phone_number: str | None = None
 
 class CustomerResponse(CustomerBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     created_at: datetime
     whatsapp_status: str = "unknown"
-    whatsapp_consent_at: Optional[datetime] = None
-    whatsapp_checked_at: Optional[datetime] = None
-    whatsapp_failure_reason: Optional[str] = None
-    addresses: List[CustomerAddressResponse] = []
+    whatsapp_consent_at: datetime | None = None
+    whatsapp_checked_at: datetime | None = None
+    whatsapp_failure_reason: str | None = None
+    addresses: list[CustomerAddressResponse] = []

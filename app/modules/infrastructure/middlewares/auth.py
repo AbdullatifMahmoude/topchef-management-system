@@ -22,6 +22,7 @@ PUBLIC_PATHS = {
     "/settings/menu-checkout",
     "/health",
     "/metrics",
+    "/ai-menu",
 }
 
 # Paths that allow prefix matching (like WebSockets)
@@ -84,10 +85,7 @@ class AuthMiddleware:
 
         # ─── 3. Domain Logic Bypasses (GET menu, POST guest orders) ───
         if method == "GET" and (
-            path.startswith("/menu/categories") or 
-            path.startswith("/menu/products") or
-            path.startswith("/offers") or
-            path.startswith("/comments")
+            path.startswith(("/menu/categories", "/menu/products", "/offers", "/comments"))
         ):
             await self.app(scope, receive, send)
             return

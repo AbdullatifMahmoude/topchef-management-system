@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from app.core.redis import get_redis
-from app.modules.settings import schemas, service
-from app.modules.infrastructure.dependencies import require_role
-from app.core.enums import UserRole
+
 from app.core.business_calendar import is_weekly_holiday
+from app.core.database import get_db
+from app.core.enums import UserRole
+from app.core.redis import get_redis
 from app.modules.customer.repository import CustomerRepository
+from app.modules.infrastructure.dependencies import require_role
+from app.modules.settings import schemas, service
 from app.modules.settings.whatsapp import whatsapp_config_ready
 from app.modules.settings.whatsapp_outbox import enqueue_bulk_notifications
 
@@ -20,6 +21,19 @@ async def get_menu_checkout_settings(db: AsyncSession = Depends(get_db), redis=D
 async def get_payment_settings(db: AsyncSession = Depends(get_db), redis=Depends(get_redis),
                                _current_user=Depends(require_role(UserRole.ADMIN))):
     return await service.SettingsService(db, redis).get_payment_settings()
+
+
+@router.get("/loyalty", response_model=schemas.LoyaltySettingsResponse)
+async def get_loyalty_settings(db: AsyncSession = Depends(get_db),
+                               _current_user=Depends(require_role(UserRole.ADMIN))):
+    return await service.SettingsService(db).get_loyalty_settings()
+
+
+@router.patch("/loyalty", response_model=schemas.LoyaltySettingsResponse)
+async def update_loyalty_settings(update_data: schemas.LoyaltySettingsUpdate,
+                                  db: AsyncSession = Depends(get_db),
+                                  _current_user=Depends(require_role(UserRole.ADMIN))):
+    return await service.SettingsService(db).update_loyalty_settings(update_data)
 
 @router.patch("/payments", response_model=schemas.PaymentSettingsResponse)
 async def update_payment_settings(update_data: schemas.PaymentSettingsUpdate,

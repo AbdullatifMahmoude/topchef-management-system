@@ -1,7 +1,20 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
-from sqlalchemy.orm import relationship
 from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import relationship
+
 from app.core.database import Base
+
 
 class Customer(Base):
     __tablename__ = "customers"
@@ -9,6 +22,7 @@ class Customer(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     phone_number = Column(String(40), unique=True, index=True, nullable=False)
+    email = Column(String(254), unique=True, index=True, nullable=True)
     is_deleted = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -45,3 +59,35 @@ class CustomerDevice(Base):
     last_used_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     revoked_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class CustomerNotification(Base):
+    __tablename__ = "customer_notifications"
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_key = Column(String(120), nullable=False)
+    title = Column(String(120), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, nullable=False, default=False, server_default="false", index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    read_at = Column(DateTime, nullable=True)
+    dismissed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("customer_id", "event_key", name="uq_customer_notification_event"),
+    )
+
+
+class CustomerPointLedger(Base):
+    __tablename__ = "customer_point_ledger"
+
+    id = Column(Integer, primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, unique=True)
+    points = Column(Integer, nullable=False)
+    eligible_amount = Column(Numeric(10, 2), nullable=False)
+    rules_snapshot = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    reversed_at = Column(DateTime, nullable=True)

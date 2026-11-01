@@ -1,8 +1,11 @@
 import asyncio
+import contextlib
 import os
 import socket
-from app.core.redis import redis_client
+
 from app.core.logging import logger
+from app.core.redis import redis_client
+
 
 class LeaderManager:
     """
@@ -14,6 +17,7 @@ class LeaderManager:
         self.instance_id = f"{socket.gethostname()}_{os.getpid()}"
         self.is_leader = False
         self._heartbeat_task = None
+        self._leader_tasks: set[asyncio.Task] = set()
         self._leader_callbacks = []
         self._leader_lost_callbacks = []
 
@@ -34,9 +38,25 @@ class LeaderManager:
     async def stop(self):
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._heartbeat_task
+            await self._cancel_leader_tasks()
             await redis_client.release_leader_lock(self.service_name, self.instance_id)
             self._heartbeat_task = None
             self.is_leader = False
+
+    def _start_leader_task(self, callback):
+        task = asyncio.create_task(callback())
+        self._leader_tasks.add(task)
+        task.add_done_callback(self._leader_tasks.discard)
+
+    async def _cancel_leader_tasks(self):
+        tasks = list(self._leader_tasks)
+        self._leader_tasks.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _heartbeat_loop(self):
         while True:
@@ -52,16 +72,17 @@ class LeaderManager:
                     logger.info(f"👑 Instance {self.instance_id} is now the LEADER for {self.service_name}")
                     # Trigger global tasks
                     for callback in self._leader_callbacks:
-                        asyncio.create_task(callback())
+                        self._start_leader_task(callback)
                 elif not self.is_leader and was_leader:
                     logger.warning(f"🏳️ Instance {self.instance_id} lost leadership for {self.service_name}")
+                    await self._cancel_leader_tasks()
                     for callback in self._leader_lost_callbacks:
-                        asyncio.create_task(callback())
+                        await callback()
                 
                 await asyncio.sleep(10)
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error(f"Leader heartbeat error: {e}")
                 await asyncio.sleep(5)
 

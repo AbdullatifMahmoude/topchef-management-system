@@ -26,7 +26,7 @@ async def test_cashier_cannot_add_cash_to_shift():
     with pytest.raises(AuthorizationError):
         await create_shift_cash_addition(
             1,
-            CashAdditionCreate(amount=Decimal("10"), reason="تم العثور على المبلغ"),
+            CashAdditionCreate(amount=Decimal(10), reason="تم العثور على المبلغ"),
             db,
             cashier,
         )
@@ -41,14 +41,14 @@ async def test_admin_cannot_add_cash_before_shift_is_closed():
     db.scalar.return_value = SimpleNamespace(
         id=1,
         end_time=None,
-        actual_closing_cash=Decimal("90"),
+        actual_closing_cash=Decimal(90),
     )
     admin = SimpleNamespace(id=2, role=UserRole.ADMIN)
 
     with pytest.raises(ValidationError):
         await create_shift_cash_addition(
             1,
-            CashAdditionCreate(amount=Decimal("10"), reason="تم العثور على المبلغ"),
+            CashAdditionCreate(amount=Decimal(10), reason="تم العثور على المبلغ"),
             db,
             admin,
         )
@@ -61,11 +61,11 @@ async def test_admin_addition_keeps_audit_fields_and_returns_adjusted_cash():
     shift = SimpleNamespace(
         id=1,
         end_time=datetime.now(UTC),
-        actual_closing_cash=Decimal("90"),
+        actual_closing_cash=Decimal(90),
     )
     db = AsyncMock()
     db.add = Mock()
-    db.scalar.side_effect = [shift, Decimal("10")]
+    db.scalar.side_effect = [shift, Decimal(10)]
     db.refresh.side_effect = lambda addition: (
         setattr(addition, "id", 5),
         setattr(addition, "created_at", datetime(2026, 9, 16, 20, 0, tzinfo=UTC)),
@@ -74,7 +74,7 @@ async def test_admin_addition_keeps_audit_fields_and_returns_adjusted_cash():
 
     result = await create_shift_cash_addition(
         1,
-        CashAdditionCreate(amount=Decimal("10"), reason="  تم العثور على المبلغ  "),
+        CashAdditionCreate(amount=Decimal(10), reason="  تم العثور على المبلغ  "),
         db,
         admin,
     )

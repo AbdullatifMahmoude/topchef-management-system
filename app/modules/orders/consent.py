@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.customer.service import CustomerService
 from app.core.enums import OrderSource
+from app.modules.customer.service import CustomerService
 
 
 async def resolve_order_message_consent(db: AsyncSession, redis, order_data):

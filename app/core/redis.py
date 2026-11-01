@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Any, Optional
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -10,7 +10,7 @@ from app.core.logging import logger
 
 class InMemoryCache:
     def __init__(self) -> None:
-        self._store: dict[str, tuple[Any, Optional[float]]] = {}
+        self._store: dict[str, tuple[Any, float | None]] = {}
 
     async def ping(self) -> bool:
         return True
@@ -26,12 +26,12 @@ class InMemoryCache:
         if expires_at is not None and expires_at <= time.time():
             self._store.pop(key, None)
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         self._purge_if_expired(key)
         entry = self._store.get(key)
         return entry[0] if entry else None
 
-    async def set(self, key: str, value: Any, ex: Optional[int] = None, nx: bool = False) -> bool:
+    async def set(self, key: str, value: Any, ex: int | None = None, nx: bool = False) -> bool:
         if nx and key in self._store:
             self._purge_if_expired(key)
             if key in self._store:
@@ -49,7 +49,7 @@ class InMemoryCache:
         self._store.pop(key, None)
         return 1 if existed else 0
 
-    async def getdel(self, key: str) -> Optional[Any]:
+    async def getdel(self, key: str) -> Any | None:
         value = await self.get(key)
         await self.delete(key)
         return value
@@ -109,7 +109,7 @@ class RedisClient:
                 self.redis = candidate
                 self.backend_name = "redis"
                 logger.info("Redis connected successfully")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 if candidate is not None:
                     await candidate.aclose()
                 logger.warning(f"Failed to connect to Redis: {e}. System will proceed without caching.")
@@ -137,7 +137,7 @@ class RedisClient:
                 self.backend_name = "none"
                 logger.info("Cache backend disconnected")
 
-    async def get(self, key: str, track_hit: bool = True) -> Optional[Any]:
+    async def get(self, key: str, track_hit: bool = True) -> Any | None:
         if not self.redis:
             return None
 
@@ -156,12 +156,12 @@ class RedisClient:
             self._update_avg_response_time(elapsed)
             self.stats["total_operations"] += 1
             return value
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.stats["errors"] += 1
             logger.warning(f"Cache GET error for {key}: {e}")
             return None
 
-    async def set(self, key: str, value: Any, ex: Optional[int] = None) -> bool:
+    async def set(self, key: str, value: Any, ex: int | None = None) -> bool:
         if not self.redis:
             return False
 
@@ -173,7 +173,7 @@ class RedisClient:
             self.stats["total_operations"] += 1
             logger.debug(f"Cache SET: {key} ({elapsed*1000:.2f}ms)")
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.stats["errors"] += 1
             logger.warning(f"Cache SET error for {key}: {e}")
             return False
@@ -190,7 +190,7 @@ class RedisClient:
             self.stats["total_operations"] += 1
             logger.debug(f"Cache SETEX: {key} (TTL: {ttl_seconds}s, {elapsed*1000:.2f}ms)")
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.stats["errors"] += 1
             logger.warning(f"Cache SETEX error for {key}: {e}")
             return False
@@ -207,12 +207,12 @@ class RedisClient:
             self.stats["total_operations"] += 1
             logger.debug(f"Cache DELETE: {key} ({elapsed*1000:.2f}ms)")
             return result > 0
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.stats["errors"] += 1
             logger.warning(f"Cache DELETE error for {key}: {e}")
             return False
 
-    async def incr(self, key: str) -> Optional[int]:
+    async def incr(self, key: str) -> int | None:
         if not self.redis:
             return None
 
@@ -223,7 +223,7 @@ class RedisClient:
             self._update_avg_response_time(elapsed)
             self.stats["total_operations"] += 1
             return result
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.stats["errors"] += 1
             logger.warning(f"Cache INCR error for {key}: {e}")
             return None
@@ -233,7 +233,7 @@ class RedisClient:
             return False
         try:
             return bool(await self.redis.exists(key))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.stats["errors"] += 1
             logger.warning(f"Cache EXISTS error for {key}: {e}")
             return False
@@ -289,7 +289,7 @@ class RedisClient:
                 return True
                 
             return False
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error acquiring leader lock: {e}")
             return False
 
@@ -301,7 +301,7 @@ class RedisClient:
             current_holder = await self.redis.get(lock_key)
             if current_holder == instance_id:
                 await self.redis.delete(lock_key)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error releasing leader lock: {e}")
 
 

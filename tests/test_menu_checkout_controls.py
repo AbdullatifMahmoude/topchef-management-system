@@ -3,15 +3,19 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from app.core.enums import OrderSource, OrderType, PaymentMethod
+from app.core.exceptions import ValidationError
+from app.modules.menu.models import Product  # noqa: F401 - register ORM relationship
+from app.modules.offer.models import (
+    OfferUsage,  # noqa: F401 - register ORM relationship
+)
+from app.modules.orders.models import Order  # noqa: F401 - register ORM relationship
+from app.modules.orders.schemas import OrderCreate, OrderItemCreate
+from app.modules.orders.service import OrderService
 from app.modules.settings.schemas import PaymentSettingsResponse
 from app.modules.settings.service import SettingsService
-from app.modules.offer.models import OfferUsage  # noqa: F401 - register ORM relationship
-from app.modules.menu.models import Product  # noqa: F401 - register ORM relationship
-from app.modules.orders.models import Order  # noqa: F401 - register ORM relationship
-from app.modules.orders.service import OrderService
-from app.core.enums import OrderSource, PaymentMethod
-from app.core.exceptions import ValidationError
 from app.modules.shifts.models import CashierShift
+from app.modules.shifts.router import _current_shift
 from app.modules.shifts.service import ShiftsService
 
 
@@ -49,7 +53,7 @@ async def test_checkout_reason_distinguishes_shift_and_manual_pause(monkeypatch,
 @pytest.mark.asyncio
 async def test_first_cashier_shift_opens_web_orders(monkeypatch):
     db = AsyncMock()
-    db.scalar.side_effect = [0, None]
+    db.scalar.side_effect = [0, None, None, None]
     db.execute.return_value = _Result([])
     db.add = Mock()
     toggle = AsyncMock()
@@ -57,6 +61,40 @@ async def test_first_cashier_shift_opens_web_orders(monkeypatch):
     created = await ShiftsService(db).start_shift(7, sync_web_orders=True)
     assert isinstance(created, CashierShift)
     toggle.assert_awaited_once_with(True)
+
+
+@pytest.mark.asyncio
+async def test_current_shift_uses_start_shift_result(monkeypatch):
+    db = AsyncMock()
+    db.execute.return_value = _Result([SimpleNamespace(id=42)])
+    redis = object()
+    start_shift = AsyncMock(return_value=SimpleNamespace(id=42))
+    dependencies = []
+    monkeypatch.setattr(
+        ShiftsService, "__init__",
+        lambda self, session, cache=None: dependencies.append((session, cache)),
+    )
+    monkeypatch.setattr(ShiftsService, "start_shift", start_shift)
+
+    shift = await _current_shift(db, 7, redis)
+
+    assert shift.id == 42
+    assert dependencies == [(db, redis)]
+    start_shift.assert_awaited_once_with(7, sync_web_orders=True)
+
+
+@pytest.mark.asyncio
+async def test_existing_active_shift_does_not_override_manual_pause(monkeypatch):
+    db = AsyncMock()
+    active_shift = SimpleNamespace(target_date=None)
+    db.scalar.side_effect = [1, active_shift]
+    monkeypatch.setattr("app.modules.shifts.service.get_business_date", lambda: None)
+    toggle = AsyncMock()
+    monkeypatch.setattr(SettingsService, "toggle_web_orders", toggle)
+
+    await ShiftsService(db).start_shift(7, sync_web_orders=True)
+
+    toggle.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -79,6 +117,9 @@ async def test_online_order_cannot_bypass_disabled_payment_method(method, flag):
     checkout = SimpleNamespace(ordering_enabled=True, ordering_message="", instapay_enabled=True, wallet_enabled=True)
     setattr(checkout, flag, False)
     service.settings_service.get_menu_checkout_settings = AsyncMock(return_value=checkout)
-    order_data = SimpleNamespace(source=OrderSource.ONLINE, payment_method=method)
+    order_data = OrderCreate(
+        source=OrderSource.ONLINE, order_type=OrderType.TAKEAWAY, payment_method=method,
+        items=[OrderItemCreate(product_id=1, quantity=1, unit_price=100)],
+    )
     with pytest.raises(ValidationError):
         await service._create_order_inner(order_data)

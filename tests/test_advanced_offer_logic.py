@@ -5,7 +5,6 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from app.core.enums import DiscountType, ProductType
-from app.modules.users.models import User  # registers relationship target for SQLAlchemy tests
 from app.modules.menu.models import Product
 from app.modules.offer.models import Offer
 from app.modules.offer.service import OfferService
@@ -58,7 +57,7 @@ def offer(dtype, value=1, product_ids=(1,), rules=None):
 async def calculate(model, items, subtotal=None):
     service = OfferService(FakeDB())
     service.repository = FakeRepository(model)
-    subtotal = subtotal or sum((entry.unit_price * entry.quantity for entry in items), Decimal("0"))
+    subtotal = subtotal or sum((entry.unit_price * entry.quantity for entry in items), Decimal(0))
     return await service.apply_offer("test", subtotal, items, commit_usage=False)
 
 

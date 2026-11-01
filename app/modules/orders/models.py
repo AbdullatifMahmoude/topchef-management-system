@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -31,6 +32,17 @@ class DailyOrderCounter(Base):
     business_date = Column(Date, primary_key=True)
     terminal_id = Column(String(32), primary_key=True)
     last_value = Column(Integer, nullable=False, default=0)
+
+
+class CashierOrderAttempt(Base):
+    """Immutable request identity; row and order commit in one transaction."""
+    __tablename__ = "cashier_order_attempts"
+
+    key = Column(String(100), primary_key=True)
+    cashier_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="RESTRICT"), nullable=True, unique=True)
+
 
 
 class Order(Base):
@@ -72,6 +84,9 @@ class Order(Base):
         default=PaymentMethod.CASH,
         server_default="CASH",
     )
+    cash_tracking_enabled = Column(Boolean, nullable=False, default=True, server_default="false")
+    digital_payment_verified_at = Column(DateTime(timezone=True), nullable=True)
+    digital_payment_verified_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
     subtotal = Column(Numeric(10, 2), nullable=False, default=0)
     discount_amount = Column(Numeric(10, 2), nullable=False, default=0)
@@ -80,9 +95,19 @@ class Order(Base):
     discount_reason = Column(String(255), nullable=True)
     delivery_fee = Column(Numeric(10, 2), nullable=False, default=0)
     total_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    loyalty_rule_id = Column(String(36), nullable=True)
+    loyalty_reward_type = Column(String(24), nullable=True)
+    loyalty_points_spent = Column(Integer, nullable=False, default=0)
+    loyalty_discount_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    loyalty_product_id = Column(Integer, nullable=True)
+    loyalty_product_name = Column(String(255), nullable=True)
+    loyalty_variant_name = Column(String(255), nullable=True)
+    loyalty_status = Column(String(12), nullable=True)
+    loyalty_reserved_at = Column(DateTime, nullable=True)  # UTC; distinct from the order creation time
     
     customer_notes = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)
+    is_printed = Column(Boolean, nullable=False, default=False, server_default="false")
     is_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None))
@@ -133,6 +158,7 @@ class Order(Base):
             "discount_type": offer.discount_type,
             "discount_value": offer.discount_value,
             "discount_amount": usage.discount_amount,
+            "rules": offer.rules or {},
         }
 
     __table_args__ = (
@@ -142,6 +168,7 @@ class Order(Base):
         Index('idx_order_source', 'order_source'),
         Index('idx_order_payment_method', 'payment_method'),
         Index('idx_order_created', 'created_at'),
+        Index('idx_order_is_printed', 'is_printed'),
         Index('idx_order_number_date', 'order_number', 'order_date', unique=True),
         Index('idx_order_date_source', 'order_date', 'order_source'),
         Index('idx_order_date_created_at', 'order_date', 'created_at'),
@@ -161,6 +188,26 @@ class Order(Base):
             OrderStatus.CANCELLED: []
         }
         return new_status in allowed_transitions.get(self.order_status, [])
+
+
+class OrderCancellationRequest(Base):
+    __tablename__ = "order_cancellation_requests"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    requested_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String(16), nullable=False, default="pending")
+    requested_at = Column(DateTime, default=lambda: datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None), nullable=False)
+    decided_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    decided_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_order_pending_cancellation", "order_id", unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
 
 
 class OrderItem(Base):

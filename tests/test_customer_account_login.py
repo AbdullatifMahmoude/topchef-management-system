@@ -17,7 +17,7 @@ class FakeDb:
 
 
 @pytest.mark.asyncio
-async def test_customer_login_uses_phone_and_pin_without_whatsapp_challenge(monkeypatch):
+async def test_customer_login_uses_phone_and_pin(monkeypatch):
     customer = SimpleNamespace(id=17, pin_hash="stored")
 
     async def get_by_phone(_self, phone):
@@ -36,7 +36,7 @@ async def test_customer_login_uses_phone_and_pin_without_whatsapp_challenge(monk
     response = Response()
 
     result = await account_router.login_customer(
-        CustomerLoginRequest(phone="01000000001", pin="1234", device_name="Chrome"),
+        CustomerLoginRequest(identifier="01000000001", pin="1234", device_name="Chrome"),
         response,
         db,
     )
@@ -57,7 +57,32 @@ async def test_customer_login_rejects_wrong_pin(monkeypatch):
 
     with pytest.raises(AuthenticationError):
         await account_router.login_customer(
-            CustomerLoginRequest(phone="01000000001", pin="9999"),
+            CustomerLoginRequest(identifier="01000000001", pin="9999"),
             Response(),
             FakeDb(),
         )
+
+
+@pytest.mark.asyncio
+async def test_customer_login_accepts_email(monkeypatch):
+    customer = SimpleNamespace(id=18, pin_hash="stored")
+
+    async def get_by_email(_self, email):
+        assert email == "customer@example.com"
+        return customer
+
+    async def create_session(_db, customer_id, _device_name):
+        assert customer_id == 18
+        return "access-token", "refresh-token", object()
+
+    monkeypatch.setattr(account_router.CustomerRepository, "get_by_email", get_by_email)
+    monkeypatch.setattr(account_router, "verify_password", lambda pin, stored: (pin, stored) == ("1234", "stored"))
+    monkeypatch.setattr(account_router, "create_device_session", create_session)
+
+    result = await account_router.login_customer(
+        CustomerLoginRequest(identifier="Customer@Example.com", pin="1234"),
+        Response(),
+        FakeDb(),
+    )
+
+    assert result.customer_id == 18

@@ -1,6 +1,21 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SA_Enum, Numeric, ForeignKey, Index, Table, JSON
+from datetime import datetime
+from typing import ClassVar
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Table,
+)
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta, timezone
+
 from app.core.database import Base, DbEnum
 from app.core.enums import DiscountType
 
@@ -41,7 +56,7 @@ class Offer(Base):
     # which is safer for high-concurrency scenarios.
     version = Column(Integer, nullable=False, default=1)
     
-    __mapper_args__ = {
+    __mapper_args__: ClassVar[dict[str, object]] = {
         "version_id_col": version
     }
 
@@ -53,10 +68,10 @@ class Offer(Base):
         return [product.id for product in self.products]
 
     def is_started(self):
-        return datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None) >= self.valid_from
+        return datetime.now(ZoneInfo("Africa/Cairo")).replace(tzinfo=None) >= self.valid_from
 
     def is_expired(self):
-        return datetime.now(timezone(timedelta(hours=3))).replace(tzinfo=None) > self.valid_to
+        return datetime.now(ZoneInfo("Africa/Cairo")).replace(tzinfo=None) > self.valid_to
 
     def is_usage_limit_reached(self) -> bool:
         return self.usage_limit is not None and int(self.current_usage or 0) >= self.usage_limit

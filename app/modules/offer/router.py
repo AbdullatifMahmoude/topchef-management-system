@@ -1,19 +1,19 @@
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
 from app.core.redis import get_redis
-from app.modules.offer import service, schemas
-from typing import List
 from app.modules.infrastructure.dependencies import (
-    require_capability,
     Capability,
-    get_current_user,
     get_optional_user,
+    require_capability,
 )
+from app.modules.offer import schemas, service
 
 router = APIRouter(prefix="/offers", tags=["offers"])
 
-@router.get("/", response_model=List[schemas.OfferResponse])
+@router.get("/", response_model=list[schemas.OfferResponse])
 async def list_offers(
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis),
@@ -84,4 +84,3 @@ async def delete_offer(
 ):
     offer_service = service.OfferService(db, redis)
     await offer_service.delete_offer(offer_id)
-    return None

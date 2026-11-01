@@ -163,17 +163,159 @@ function openShiftDrawer(id) {
   if (!selectedShift) return;
   document.getElementById("drawerCashierName").textContent = selectedShift.cashier_name;
   const difference = selectedShift.cash_difference;
+  const differenceClass = difference == null ? "" : Number(difference) > 0 ? "cash_difference_positive" : Number(difference) < 0 ? "cash_difference_negative" : "";
+  const differenceLabel = difference == null ? "فرق النقدية" : Number(difference) < 0 ? "عجز نقدية بالدرج" : Number(difference) > 0 ? "زيادة نقدية بالدرج" : "نقدية مطابقة تماماً";
+  const settledDifference = selectedShift.difference_after_adjustments;
+  const settledDifferenceClass = settledDifference == null ? "" : Number(settledDifference) > 0 ? "cash_difference_positive" : Number(settledDifference) < 0 ? "cash_difference_negative" : "";
+  const settledDifferenceMetric = selectedShift.cash_tracking_enabled && (selectedShift.post_close_adjustments || []).length && settledDifference != null
+    ? `<div class="${settledDifferenceClass}"><span>الفرق بعد تسويات الإدارة المسجلة</span><strong>${shiftMoney(settledDifference)}</strong></div>`
+    : "";
   const additions = selectedShift.cash_additions || [];
-  const additionHistory = additions.length ? additions.map((item) => `<li><div><strong>${shiftMoney(item.amount)}</strong><span>${shiftEscape(item.reason)}</span></div><small>${shiftEscape(item.admin_name)} • ${shiftTime(item.created_at)}</small></li>`).join("") : '<li class="is_empty">لا توجد إضافات مسجلة</li>';
+  const adjustmentRows = selectedShift.cash_tracking_enabled ? (selectedShift.post_close_adjustments || []) : additions;
+  const additionHistory = adjustmentRows.length ? adjustmentRows.map((item) => `<li><div><strong>${shiftMoney(item.amount)}</strong><span>${shiftEscape(item.reason)}</span></div><small>${shiftTime(item.created_at)}</small></li>`).join("") : '<li class="is_empty">لا توجد تسويات لاحقة</li>';
   const additionForm = selectedShift.status === "active"
-    ? '<p class="shift_addition_hint">يمكن إضافة مبلغ بعد إغلاق الشيفت فقط.</p>'
+    ? ''
     : selectedShift.actual_closing_cash == null
-      ? '<p class="shift_addition_hint">يجب أن يسجل الكاشير النقد الفعلي أولًا.</p>'
-      : `<form id="shiftCashAdditionForm"><label>المبلغ الموجود<input name="amount" type="number" min="0.01" step="0.01" required></label><label>سبب الإضافة<textarea name="reason" minlength="2" maxlength="500" required placeholder="مثال: تم العثور على المبلغ داخل درج جانبي"></textarea></label><button type="submit">إضافة المبلغ للشيفت</button></form>`;
-  document.getElementById("shiftDrawerContent").innerHTML = `<div class="drawer_shift_status"><span class="shift_status ${selectedShift.status}">${selectedShift.status === "active" ? "نشط الآن" : "شيفت مغلق"}</span><small>${selectedShift.target_date}</small></div><div class="drawer_metrics"><div><span>بداية الشيفت</span><strong>${shiftTime(selectedShift.start_time)}</strong></div><div><span>نهاية الشيفت</span><strong>${selectedShift.end_time ? shiftTime(selectedShift.end_time) : "مفتوح"}</strong></div><div><span>مدة الشيفت</span><strong>${shiftDuration(selectedShift.duration_minutes)}</strong></div><div><span>إجمالي الطلبات</span><strong>${shiftNumber(selectedShift.total_orders)}</strong></div><div><span>نقدي — حصة المطعم</span><strong>${shiftMoney(selectedShift.cash_sales)}</strong></div><div><span>InstaPay — حصة المطعم</span><strong>${shiftMoney(selectedShift.instapay_sales)}</strong></div><div><span>محفظة — حصة المطعم</span><strong>${shiftMoney(selectedShift.wallet_sales)}</strong></div><div><span>رصيد البداية</span><strong>${shiftMoney(selectedShift.opening_cash)}</strong></div><div><span>مصروفات/سحب</span><strong>${shiftMoney(selectedShift.cash_expenses)}</strong></div><div><span>النقدي المتوقع بعد تسليم الدليفري</span><strong>${shiftMoney(selectedShift.expected_cash)}</strong></div><div><span>النقدي الفعلي عند التسليم</span><strong>${selectedShift.actual_closing_cash == null ? "لم يُسلّم" : shiftMoney(selectedShift.actual_closing_cash)}</strong></div><div><span>إضافات الأدمن</span><strong>${shiftMoney(selectedShift.cash_additions_total)}</strong></div><div><span>النقدي بعد الإضافات</span><strong>${selectedShift.adjusted_closing_cash == null ? "—" : shiftMoney(selectedShift.adjusted_closing_cash)}</strong></div><div><span>فرق العهدة</span><strong class="${difference == null ? "" : Number(difference) === 0 ? "is_ok" : "is_warning"}">${difference == null ? "—" : shiftMoney(difference)}</strong></div></div><div class="drawer_shift_total"><span>صافي مبيعات المطعم بالشيفت</span><strong>${shiftMoney(selectedShift.total_sales)}</strong></div>${selectedShift.closing_note ? `<p class="shift_closing_note">ملاحظة التسليم: ${shiftEscape(selectedShift.closing_note)}</p>` : ""}<section class="shift_additions"><h3>إضافات العهدة بواسطة الأدمن</h3><ul>${additionHistory}</ul>${additionForm}</section>`;
+      ? '<p class="shift_addition_hint">يجب تسجيل النقد الفعلي للشيفت أولاً.</p>'
+      : selectedShift.cash_tracking_enabled
+        ? `<form id="shiftCashAdditionForm"><label>مبلغ التسوية (+ إضافة / − رد أو تصحيح)<input name="amount" type="number" step="0.01" required></label><label>سبب التسوية<textarea name="reason" minlength="3" maxlength="500" required></textarea></label><button type="submit">تسجيل تسوية لاحقة</button></form>`
+        : `<form id="shiftCashAdditionForm"><label>المبلغ الموجود<input name="amount" type="number" min="0.01" step="0.01" required></label><label>سبب الإضافة<textarea name="reason" minlength="2" maxlength="500" required placeholder="مثال: تم العثور على المبلغ داخل درج جانبي"></textarea></label><button type="submit">إضافة المبلغ للشيفت</button></form>`;
+
+  const adminForceCloseSection = selectedShift.status === "active"
+    ? `<form class="shift_close_confirmation" id="adminForceCloseForm">
+        <header>
+          <span class="shift_close_badge" style="border-color:rgba(239,111,108,.3);background:rgba(239,111,108,.12);color:#ef928d;">شيفت معلق / نشط</span>
+          <h3>إغلاق الشيفت بواسطة الإدارة</h3>
+        </header>
+        <p class="shift_close_intro">لو الكاشير غادر أو ترك الوردية مفتوحة، يمكنك إدخال النقد الفعلي وإغلاق الشيفت الآن لمنع تعليق النظام.</p>
+        <div class="shift_close_counts">
+          <label class="shift_close_admin_count" style="grid-column:1/-1;">
+            النقد الفعلي الموجود بالدرج
+            <input name="actual_closing_cash" type="number" min="0" step="0.01" inputmode="decimal" placeholder="المبلغ الفعلي بعد العد" required>
+          </label>
+        </div>
+        <label class="shift_close_note">ملاحظة الإغلاق (اختياري)
+          <textarea name="closing_note" maxlength="500" rows="2" placeholder="اكتب سبب الإغلاق الإداري"></textarea>
+        </label>
+        <button type="submit" style="background:#ef8a75;color:#300;">إغلاق الشيفت واعتماد النقد</button>
+      </form>`
+    : "";
+
+
+
+  document.getElementById("shiftDrawerContent").innerHTML = `
+    <div class="drawer_shift_status">
+      <span class="shift_status ${selectedShift.status}">${selectedShift.status === "active" ? "نشط الآن" : "شيفت مغلق"}</span>
+      <small>${selectedShift.target_date}</small>
+    </div>
+
+    <h3 class="drawer_metrics_heading">وقت الوردية والطلبات</h3>
+    <div class="drawer_metrics">
+      <div><span>بداية الشيفت</span><strong>${shiftTime(selectedShift.start_time)}</strong></div>
+      <div><span>نهاية الشيفت</span><strong>${selectedShift.end_time ? shiftTime(selectedShift.end_time) : "مفتوح"}</strong></div>
+      <div><span>مدة الوردية</span><strong>${shiftDuration(selectedShift.duration_minutes)}</strong></div>
+      <div><span>إجمالي الطلبات</span><strong>${shiftNumber(selectedShift.total_orders)}</strong></div>
+    </div>
+
+    <h3 class="drawer_metrics_heading">حساب نقدية الدرج (الخزينة)</h3>
+    <div class="drawer_metrics">
+      <div><span>رصيد بداية الشيفت (العهدة)</span><strong>${shiftMoney(selectedShift.opening_cash)}</strong></div>
+      <div><span>(+) مبيعات نقدية بالدرج (كاش)</span><strong>${shiftMoney(selectedShift.cash_sales)}</strong></div>
+      <div><span>(−) مصروفات نقدية من الدرج</span><strong>${shiftMoney(selectedShift.cash_expenses)}</strong></div>
+      <div><span>(=) النقد المتوقع في الدرج</span><strong>${shiftMoney(selectedShift.expected_cash)}</strong></div>
+      <div><span>عدّ الكاشير الفعلي عند الإقفال</span><strong>${selectedShift.actual_closing_cash == null ? "غير مسجل بعد" : shiftMoney(selectedShift.actual_closing_cash)}</strong></div>
+      <div class="${differenceClass}"><span>${differenceLabel}</span><strong>${difference == null ? "—" : shiftMoney(difference)}</strong></div>
+      ${settledDifferenceMetric}
+    </div>
+    ${Number(selectedShift.unconfirmed_delivery_cash || 0) > 0 ? `<p class="shift_addition_hint">منها ${shiftMoney(selectedShift.unconfirmed_delivery_cash)} نقد دليفري لم يُسجَّل توريده من المندوب وقت الإقفال — راجعه قبل نسبة أي عجز للكاشير.</p>` : ""}
+    ${Number(selectedShift.late_cash_expenses || 0) > 0 ? `<p class="shift_addition_hint">مصروفات من الدرج سُجلت بعد الإقفال: ${shiftMoney(selectedShift.late_cash_expenses)} — غير مخصومة من المتوقع؛ لو اتصرفت فعلاً من الدرج سجّلها كتسوية لاحقة.</p>` : ""}
+
+    <h3 class="drawer_metrics_heading" style="margin-top:16px;">المبيعات الإلكترونية (لا تدخل في نقد الدرج)</h3>
+    <div class="drawer_metrics">
+      <div><span>مبيعات InstaPay</span><strong>${shiftMoney(selectedShift.instapay_sales)}</strong></div>
+      <div><span>مبيعات المحفظة الإلكترونية</span><strong>${shiftMoney(selectedShift.wallet_sales)}</strong></div>
+    </div>
+
+    <div class="drawer_shift_total" style="margin-top:16px;">
+      <span>صافي مبيعات المطعم بالشيفت</span>
+      <strong>${shiftMoney(selectedShift.total_sales)}</strong>
+    </div>
+
+    ${selectedShift.closing_note ? `<p class="shift_closing_note">ملاحظة التسليم: ${shiftEscape(selectedShift.closing_note)}</p>` : ""}
+    ${adminForceCloseSection}
+    ${selectedShift.status !== "active" ? `<section class="shift_additions"><h3>تسويات ما بعد الإقفال</h3><ul>${additionHistory}</ul>${additionForm}</section>` : ""}`;
+
   document.getElementById("shiftCashAdditionForm")?.addEventListener("submit", submitShiftCashAddition);
+  document.getElementById("adminForceCloseForm")?.addEventListener("submit", submitAdminForceClose);
   const drawer = document.getElementById("shiftDetailsDrawer");
   drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false");
+}
+
+async function submitAdminForceClose(event) {
+  event.preventDefault();
+  if (!selectedShift) return;
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type='submit']");
+  const actualCash = Number(form.elements.actual_closing_cash.value);
+  const note = String(form.elements.closing_note.value || "").trim();
+  if (!Number.isFinite(actualCash) || actualCash < 0) {
+    window.showToast?.("اكتب المبلغ الفعلي الموجود في الدرج", "error");
+    return;
+  }
+  button.disabled = true;
+  try {
+    const response = await window.apiFetch(`/shifts/${selectedShift.id}/admin-close`, {
+      method: "POST",
+      body: JSON.stringify({ actual_closing_cash: actualCash, closing_note: note || null }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(typeof data.detail === "string" ? data.detail : "تعذر إغلاق الشيفت");
+    }
+    const id = selectedShift.id;
+    await fetchShiftsReport();
+    openShiftDrawer(id);
+    window.showToast?.("تم إغلاق الشيفت إدارياً وتجميد حساباته", "success");
+  } catch (error) {
+    window.showToast?.(error.message, "error");
+    button.disabled = false;
+  }
+}
+
+async function submitShiftCloseConfirmation(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type='submit']");
+  const adminCountValue = String(form.elements.admin_count.value || "").trim();
+  const adminCount = Number(adminCountValue);
+  const note = String(form.elements.note.value || "").trim();
+  if (!adminCountValue || !Number.isFinite(adminCount) || adminCount < 0) {
+    window.showToast?.("اكتب المبلغ الذي عدّته الإدارة", "error");
+    return;
+  }
+  if (adminCount !== Number(selectedShift.actual_closing_cash) && !note) {
+    window.showToast?.("اكتب سبب اختلاف عدّ الإدارة عن عدّ الكاشير", "error");
+    form.elements.note.focus();
+    return;
+  }
+  button.disabled = true;
+  try {
+    const response = await window.apiFetch(`/shifts/${selectedShift.id}/confirm-close`, {
+      method: "POST",
+      body: JSON.stringify({ admin_count: adminCount, note: note || null }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(typeof data.detail === "string" ? data.detail : "تعذر اعتماد التسليم");
+    }
+    const id = selectedShift.id;
+    await fetchShiftsReport();
+    openShiftDrawer(id);
+    window.showToast?.("تم اعتماد تسليم الشيفت", "success");
+  } catch (error) {
+    window.showToast?.(error.message, "error");
+    button.disabled = false;
+  }
 }
 
 async function submitShiftCashAddition(event) {
@@ -185,10 +327,11 @@ async function submitShiftCashAddition(event) {
     amount: Number(form.elements.amount.value),
     reason: form.elements.reason.value.trim(),
   };
-  if (!(payload.amount > 0) || payload.reason.length < 2) return;
+  if (!Number.isFinite(payload.amount) || (selectedShift.cash_tracking_enabled ? payload.amount === 0 : payload.amount <= 0) || payload.reason.length < 2) return;
+  if (selectedShift.cash_tracking_enabled) payload.idempotency_key = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   button.disabled = true;
   try {
-    const response = await window.apiFetch(`/shifts/${selectedShift.id}/cash-additions`, {
+    const response = await window.apiFetch(`/shifts/${selectedShift.id}/${selectedShift.cash_tracking_enabled ? "post-close-adjustments" : "cash-additions"}`, {
       method: "POST",
       body: JSON.stringify(payload),
     });

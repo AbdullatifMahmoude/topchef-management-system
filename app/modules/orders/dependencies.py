@@ -1,10 +1,12 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_db
 from app.core.redis import get_redis
+from app.modules.offer.service import OfferService
 from app.modules.orders.service import OrderService
 from app.modules.pricing.service import PricingService
-from app.modules.offer.service import OfferService
+
 
 async def get_offer_service(
     db: AsyncSession = Depends(get_db),

@@ -1,24 +1,20 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Index,
-    DateTime,
     Boolean,
+    Column,
+    DateTime,
     ForeignKey,
+    Integer,
     Numeric,
-    Enum as SQLEnum,
-    UniqueConstraint
-    , Text
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
+
 from app.core.database import Base, DbEnum
-from enum import Enum
-from app.core.enums import ProductType 
-
-
+from app.core.enums import ProductType
 
 
 class Category(Base):
@@ -50,6 +46,7 @@ class Product(Base):
     )
     description = Column(String(500), nullable=True)
     is_available = Column(Boolean, default=True, nullable=False)
+    temporary_unavailable_until = Column(DateTime, nullable=True)
     is_deleted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow,
@@ -65,6 +62,13 @@ class Product(Base):
     def toggle_availability(self):
         self.is_available = not self.is_available
         return self.is_available
+
+    @property
+    def is_temporarily_unavailable(self) -> bool:
+        return bool(
+            self.temporary_unavailable_until
+            and self.temporary_unavailable_until > datetime.now(UTC).replace(tzinfo=None)
+        )
 
 
 class Variant(Base):

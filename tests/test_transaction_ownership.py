@@ -1,7 +1,6 @@
 import ast
 from pathlib import Path
 
-
 REPOSITORIES = Path("app/modules").glob("*/repository.py")
 
 

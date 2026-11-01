@@ -60,4 +60,10 @@ logs/
 *.tmp
 *.bak
 .cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 dedent_launcher.py
+
+# Shared frontend background is served from /assets/.
+app/frontend/cashier/assets/Gemini_Generated_Image_hsee73hsee73hsee.png

@@ -6,7 +6,7 @@ dependencies = [
     "fastapi[standard]",
     "httpx",
     "uvicorn",
-    "SQLAlchemy",
+    "SQLAlchemy[asyncio]",
     "pydantic",
     "psycopg2-binary",
     "pydantic-settings",
@@ -15,7 +15,8 @@ dependencies = [
     "bcrypt==4.0.1",
     "python-json-logger",
     "asyncpg",
-    "redis"
+    "redis",
+    "tzdata"
 ]
 
 [project.optional-dependencies]
@@ -38,3 +39,15 @@ entrypoint = "app.main:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI evaluates these declarations once while building the dependency graph.
+# They are intentional framework metadata, not stateful Python defaults.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "app.modules.infrastructure.dependencies.require_capability",
+    "app.modules.infrastructure.dependencies.require_role",
+    "app.modules.infrastructure.middlewares.role_guard.require_capability",
+    "app.modules.infrastructure.middlewares.role_guard.require_role",
+]

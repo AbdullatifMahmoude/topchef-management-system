@@ -1,8 +1,9 @@
 import asyncio
 import contextlib
 import json
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, ClassVar
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -53,7 +54,9 @@ event_bus = EventBus()
 class OrderEventsManager:
     CHANNEL_PREFIX = "topchef:orders:events"
     CLIENT_HEARTBEAT_INTERVAL_SECONDS = 25.0
-    PUBLIC_EVENT_TYPES = {"PRODUCT_UPDATED", "CATEGORY_UPDATED", "OFFER_UPDATED", "SETTING_UPDATED"}
+    PUBLIC_EVENT_TYPES: ClassVar[set[str]] = {
+        "PRODUCT_UPDATED", "CATEGORY_UPDATED", "OFFER_UPDATED", "SETTING_UPDATED"
+    }
 
     def __init__(self) -> None:
         self.active_connections: dict[str, list[WebSocket]] = {}
@@ -114,7 +117,7 @@ class OrderEventsManager:
                 raise
             except (WebSocketDisconnect, RuntimeError):
                 break
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.debug("Client heartbeat stopped: %s", exc)
                 break
 
@@ -133,7 +136,7 @@ class OrderEventsManager:
         async def send(connection: WebSocket):
             try:
                 await connection.send_text(payload)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return connection
             return None
 
@@ -157,7 +160,7 @@ class OrderEventsManager:
                 await redis_client.redis.publish(
                     f"{self.CHANNEL_PREFIX}:{channel}", json.dumps(message)
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("Redis publish failed for channel '%s': %s", channel, exc)
 
     async def _redis_listener(self) -> None:
@@ -188,7 +191,7 @@ class OrderEventsManager:
                         await self.broadcast(payload, channel)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.error("Order events Redis listener failed: %s", exc)
                 await asyncio.sleep(5)
             finally:

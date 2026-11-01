@@ -1,6 +1,19 @@
 import logging
 import sys
+import time
+
 from pythonjsonlogger import json
+
+
+def make_json_formatter():
+    formatter = json.JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%SZ",
+        rename_fields={"asctime": "timestamp", "levelname": "level"},
+        json_ensure_ascii=False # Support Arabic in logs
+    )
+    formatter.converter = time.gmtime
+    return formatter
 
 
 def setup_logging():
@@ -11,12 +24,7 @@ def setup_logging():
     else:
         loghandler = logging.StreamHandler(stream)
     
-    formatter = json.JsonFormatter(
-        "%(asctime)s %(levelname)s %(name)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        rename_fields={"asctime": "timestamp", "levelname": "level"},
-        json_ensure_ascii=False # Support Arabic in logs
-    )
+    formatter = make_json_formatter()
     loghandler.setFormatter(formatter)
 
     logger = logging.getLogger()
@@ -31,8 +39,8 @@ def setup_logging():
         fh = RotatingFileHandler(log_file, maxBytes=5_242_880, backupCount=5, encoding="utf-8")
         fh.setFormatter(formatter)
         logger.addHandler(fh)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("File logging is unavailable: %s", exc)
 
     logger.setLevel(logging.INFO)
     return logger

@@ -131,6 +131,58 @@ class PrinterManager:
         except (TypeError, ValueError):
             return default
 
+    def _offer_lines(self, order: Dict[str, Any]) -> list[str]:
+        offer = order.get("applied_offer")
+        if not isinstance(offer, dict):
+            return []
+        name = offer.get("display_name") or offer.get("code")
+        if not name:
+            return []
+        lines = [f"العرض: {name}"]
+        code = offer.get("code")
+        if code and code != name:
+            lines.append(f"كود العرض: {code}")
+        kind = str(offer.get("discount_type") or "").lower()
+        value = self._number(offer.get("discount_value"))
+        rules = offer.get("rules") or {}
+        detail = {
+            "percentage": f"خصم {value:g}%",
+            "fixed": f"خصم {value:g} ج.م",
+            "happy_hour": f"خصم {value:g}%",
+            "quantity_discount": f"خصم {value:g}% عند شراء {rules.get('quantity_required', 1)}",
+            "category_discount": f"خصم {value:g}{' ج.م' if rules.get('discount_mode') == 'fixed' else '%'} على التصنيف",
+            "buy_one_get_one": "اشترِ واحدًا واحصل على واحد",
+            "buy_x_get_y": f"اشترِ {rules.get('buy_quantity', 1)} وخذ {rules.get('get_quantity', 1)}",
+            "combo": f"الكومبو بسعر {self._number(rules.get('combo_price')):g} ج.م",
+            "free_delivery": "توصيل مجاني",
+        }.get(kind)
+        if detail:
+            lines.append(f"تفاصيل العرض: {detail}")
+        return lines
+
+    def _payment_lines(self, order: Dict[str, Any]) -> list[str]:
+        method = str(self._value(order, "payment_method", "paymentMethod", default="")).lower()
+        labels = {"cash": "نقدي", "instapay": "إنستا باي", "wallet": "محفظة إلكترونية"}
+        if method not in labels:
+            return []
+        lines = [f"طريقة الدفع: {labels[method]}"]
+        if method in ("instapay", "wallet"):
+            fallback = "01212758001" if method == "wallet" else "01009515031"
+            destination = self._value(order, "payment_destination", "paymentDestination", default=fallback)
+            lines.append(f"رقم التحويل: {destination}")
+        return lines
+
+    def _loyalty_lines(self, order: Dict[str, Any]) -> list[str]:
+        if self._number(order.get("loyalty_discount_amount")) <= 0:
+            return []
+        points = int(self._number(order.get("loyalty_points_spent")))
+        status = " (محجوزة)" if order.get("loyalty_status") == "reserved" else ""
+        if order.get("loyalty_reward_type") == "free_product":
+            name = str(order.get("loyalty_product_name") or "صنف مجاني")
+            variant = str(order.get("loyalty_variant_name") or "").strip()
+            return [f"نقاط: {name}{f' ({variant})' if variant else ''} — {points} نقطة{status}"]
+        return [f"خصم نقاط — {points} نقطة{status}"]
+
     def _format_date_parts(self, raw_value: Any) -> tuple[str, str]:
         if not raw_value:
             return "---", "---"
@@ -148,11 +200,15 @@ class PrinterManager:
         return value, "---"
 
     def _order_type_label(self, order_type: Any) -> str:
-        value = str(order_type or "").lower()
+        value = getattr(order_type, "value", order_type)
+        value = str(value or "").strip().lower().rsplit(".", 1)[-1]
+        value = value.replace("-", "_").replace(" ", "_")
         if value == "delivery":
             return "دليفري"
         if value == "takeaway":
             return "تيك اواي"
+        if value in {"phone_reservation", "phonebooking", "phone_booking"}:
+            return "حجز تلفون"
         if value == "dine_in" or value == "hall":
             return "صالة"
         return "غير محدد"
@@ -226,14 +282,7 @@ class PrinterManager:
         def u(value: int | float) -> int:
             return int(round(value * scale))
 
-        # Allocate enough vertical room for wrapped product names and addresses;
-        # the image is cropped to the actual drawn height before printing.
-        height = u(900 + (len(items) * 190))
-        if self._has_customer_info(order):
-            height += u(300)
-        image = Image.new("RGB", (width, height), "white")
-        draw = ImageDraw.Draw(image)
-        y = margin
+        measure_draw = ImageDraw.Draw(Image.new("RGB", (1, 1), "white"))
 
         def text_size(text: Any, font) -> tuple[int, int]:
             shaped = rtl(text)
@@ -274,7 +323,7 @@ class PrinterManager:
                 piece = ""
                 for char in chunk:
                     candidate = piece + char
-                    if piece and draw.textlength(rtl(candidate), font=font) > max_width:
+                    if piece and measure_draw.textlength(rtl(candidate), font=font) > max_width:
                         lines.append(rtl(piece))
                         piece = char
                     else:
@@ -284,13 +333,13 @@ class PrinterManager:
 
             for word in words:
                 candidate = f"{current} {word}".strip()
-                if draw.textlength(rtl(candidate), font=font) <= max_width:
+                if measure_draw.textlength(rtl(candidate), font=font) <= max_width:
                     current = candidate
                     continue
                 if current:
                     lines.append(rtl(current))
                     current = ""
-                if draw.textlength(rtl(word), font=font) <= max_width:
+                if measure_draw.textlength(rtl(word), font=font) <= max_width:
                     current = word
                 else:
                     append_fitted_chunk(word)
@@ -298,6 +347,32 @@ class PrinterManager:
             if current:
                 lines.append(rtl(current))
             return lines or [rtl(raw)]
+
+        item_name_width = u(235)
+        item_name_lines = [
+            wrap_text(
+                (cart_item.get("item") or cart_item).get("name")
+                or (cart_item.get("item") or cart_item).get("product_name")
+                or "---",
+                fonts["item"],
+                item_name_width,
+            )
+            for cart_item in items
+        ]
+        # Reserve the actual height of every wrapped item before drawing the receipt.
+        rows_height = sum(
+            max(u(190), max(u(44), len(lines) * u(34) + u(10)) + u(12))
+            for lines in item_name_lines
+        )
+        height = u(900) + rows_height
+        if self._has_customer_info(order):
+            height += u(300)
+        notes = self._value(order, "customerNotes", "customer_notes", default="")
+        if notes:
+            height += u(len(str(notes)) * 3)
+        image = Image.new("RGB", (width, height), "white")
+        draw = ImageDraw.Draw(image)
+        y = margin
 
         full_order_number = self._value(order, "orderNumber", "order_number", "id", default="---")
         order_number = str(full_order_number).split("-")[-1] if "-" in str(full_order_number) else str(full_order_number)
@@ -368,14 +443,12 @@ class PrinterManager:
         line(y)
         y += u(10)
 
-        for cart_item in items:
+        for cart_item, name_lines in zip(items, item_name_lines):
             item_data = cart_item.get("item") or cart_item
             qty = self._number(cart_item.get("qty") or cart_item.get("quantity") or 0)
             price = self._number(item_data.get("price") or cart_item.get("price") or item_data.get("unit_price") or 0)
-            name = item_data.get("name") or item_data.get("product_name") or "---"
             total = qty * price
 
-            name_lines = wrap_text(name, fonts["item"], u(235))
             row_start_y = y
             draw_right(f"{qty:g}", row_start_y, fonts["item"], qty_x)
             for line_index, line_text in enumerate(name_lines):
@@ -418,14 +491,30 @@ class PrinterManager:
             y += u(34)
 
         discount_amount = self._number(self._value(order, "discount_amount", "discountAmount", default=0))
+        loyalty_discount = self._number(self._value(order, "loyalty_discount_amount", default=0))
+        base_discount = max(0, discount_amount - loyalty_discount)
         discount_reason = self._value(order, "discount_reason", "discountReason", default="")
         
-        if discount_amount > 0:
+        for offer_line in self._offer_lines(order):
+            for wrapped in wrap_text(offer_line, fonts["small"], self.CONTENT_WIDTH * scale):
+                draw.text((content_right, y), wrapped, fill="black", font=fonts["small"], anchor="ra")
+                y += u(34)
+
+        if base_discount > 0:
             discount_label = "الخصم:"
             if discount_reason:
                 discount_label = f"الخصم ({discount_reason}):"
             draw_right(discount_label, y, fonts["small"])
-            draw_text(f"- {discount_amount:.2f}", margin, y, fonts["small"])
+            draw_text(f"- {base_discount:.2f}", margin, y, fonts["small"])
+            y += u(34)
+
+        if loyalty_discount > 0:
+            for detail in self._loyalty_lines(order):
+                for wrapped in wrap_text(detail, fonts["small"], self.CONTENT_WIDTH * scale):
+                    draw.text((content_right, y), wrapped, fill="black", font=fonts["small"], anchor="ra")
+                    y += u(34)
+            draw_right("قيمة مكافأة النقاط:", y, fonts["small"])
+            draw_text(f"- {loyalty_discount:.2f}", margin, y, fonts["small"])
             y += u(34)
 
         y += u(2)
@@ -434,6 +523,13 @@ class PrinterManager:
         draw_right("الإجمالي النهائي:", y, fonts["grand"])
         draw_text(f"{grand_total:.2f} ج.م", margin, y, fonts["grand"])
         y += u(50)
+
+        for payment_line in self._payment_lines(order):
+            for wrapped in wrap_text(payment_line, fonts["small"], self.CONTENT_WIDTH * scale):
+                draw.text((content_right, y), wrapped, fill="black", font=fonts["small"], anchor="ra")
+                y += u(34)
+        if self._payment_lines(order):
+            y += u(12)
 
         y = self._draw_customer_info(order, image, draw, fonts, y, scale)
 
@@ -465,7 +561,8 @@ class PrinterManager:
         address = self._address_to_text(
             self._value(order, "customerAddress", "customer_address", "address", default="")
         )
-        if not any([customer_name, customer_phone, address, customer_notes]):
+        has_customer_info = any([customer_name, customer_phone, address])
+        if not has_customer_info and not customer_notes:
             return y
 
         def u(value: int | float) -> int:
@@ -482,7 +579,7 @@ class PrinterManager:
         def draw_right(text, y_pos, font):
             draw.text((x2 - u(12), y_pos), rtl(text), fill="black", font=font, anchor="ra")
 
-        draw_center("بيانات العميل", y, fonts["small"])
+        draw_center("بيانات العميل" if has_customer_info else "ملاحظات الطلب", y, fonts["small"])
         y += u(37)
         if customer_name:
             draw_right(f" اسم العميل :{customer_name}", y, fonts["customer"])
@@ -494,8 +591,32 @@ class PrinterManager:
             draw_right(f" العنوان :{address}", y, fonts["customer"])
             y += u(36)
         if customer_notes:
-            draw_right(f" ملاحظات :{customer_notes}", y, fonts["customer"])
-            y += u(36)
+            if has_customer_info:
+                draw_right("ملاحظات الطلب:", y, fonts["customer"])
+                y += u(36)
+            max_width = x2 - x1 - u(24)
+            lines = []
+            current = ""
+            for word in str(customer_notes).split():
+                candidate = f"{current} {word}".strip()
+                if draw.textlength(rtl(candidate), font=fonts["customer"]) <= max_width:
+                    current = candidate
+                    continue
+                if current:
+                    lines.append(current)
+                    current = ""
+                for char in word:
+                    candidate = current + char
+                    if current and draw.textlength(rtl(candidate), font=fonts["customer"]) > max_width:
+                        lines.append(current)
+                        current = char
+                    else:
+                        current = candidate
+            if current:
+                lines.append(current)
+            for note_line in lines:
+                draw_right(note_line, y, fonts["customer"])
+                y += u(36)
 
         draw.rounded_rectangle((x1, box_top, x2, y + u(10)), radius=u(4), outline="black", width=scale)
         return y + u(24)
