@@ -100,6 +100,29 @@ async def cash_db():
     await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_zero_opening_cash_can_be_recorded_once(cash_db, monkeypatch):
+    router = import_module("app.modules.shifts.router")
+
+    cashier, other, _, _, shift, _ = await seed(cash_db)
+    shift.opening_cash = Decimal("0.00")
+    await cash_db.commit()
+    monkeypatch.setattr(router, "_current_shift", AsyncMock(return_value=shift))
+    current = await router.get_current_shift_cash(db=cash_db, current_user=cashier, redis=None)
+    assert current["opening_cash_editable"] is True
+    await router.update_current_shift_cash(router.ShiftCashUpdate(opening_cash=Decimal("125.00")),
+                                           db=cash_db, current_user=cashier, redis=None)
+    current = await router.get_current_shift_cash(db=cash_db, current_user=cashier, redis=None)
+    assert current["opening_cash"] == 125
+    assert current["opening_cash_editable"] is False
+    with pytest.raises(ValidationError):
+        await router.update_current_shift_cash(router.ShiftCashUpdate(opening_cash=Decimal("150.00")),
+                                               db=cash_db, current_user=cashier, redis=None)
+    with pytest.raises(ValidationError):
+        await router.update_current_shift_cash(router.ShiftCashUpdate(opening_cash=Decimal("150.00")),
+                                               db=cash_db, current_user=other, redis=None)
+
+
 async def seed(cash_db):
     target_date = get_current_business_date()
     local_start = business_day_start(target_date)
@@ -777,7 +800,7 @@ async def test_cashier_shifts_can_overlap_and_new_shift_ignores_pending_signoffs
     opened_while_signoffs_pending = await service.start_shift(unapproved_cashier.id)
     assert opened_while_signoffs_pending.user_id == unapproved_cashier.id
     assert opened_while_signoffs_pending.end_time is None
-    assert opened_while_signoffs_pending.opening_cash == Decimal("300.00")
+    assert opened_while_signoffs_pending.opening_cash == Decimal("0.00")
     assert opened_while_signoffs_pending.cash_tracking_enabled
 
 @pytest.mark.asyncio

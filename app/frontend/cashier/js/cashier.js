@@ -564,7 +564,7 @@ async function openShiftCashModal() {
   const currentCashSummary = reconciliation?.cash_tracking_enabled
     ? `<div class="shift_saved_expenses"><span>سجل استلام النقد (للمراجعة فقط)</span><strong>${Number(reconciliation.confirmed_cash || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>نقد دليفري لم يثبت وصوله: ${Number(reconciliation.unconfirmed_delivery_cash || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م • التأكيد لا يغيّر النقد المتوقع أو فرق الشيفت${Number(reconciliation.legacy_expenses_unverified || 0) > 0 ? ` • مصروفات قبل النشر مصدرها يحتاج مراجعة: ${Number(reconciliation.legacy_expenses_unverified).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م` : ""}</small></div>`
     : "";
-  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>${saved.stale_shift ? `شيفت يوم ${escapeExpenseText(saved.target_date)} ما زال مفتوحًا. سجّل العدّ الفعلي وأغلق الشيفت، ثم تعتمد الإدارة التسليم قبل بدء شيفت جديد.` : saved.cash_tracking_enabled && !saved.opening_confirmed ? `راجع عهدة البداية المسجلة (${Number(saved.opening_cash || 0).toLocaleString("ar-EG")} جنيه) وأكد مبلغها الفعلي بالحفظ قبل إغلاق الشيفت.` : "القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديل النقد الفعلي قبل إغلاق الشيفت."}</p>${currentCashSummary}<div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة من الدرج</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>عهدة بداية الشيفت من الإدارة<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00" ${saved.opening_confirmed ? "readonly" : ""}></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
+  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>${saved.stale_shift ? `شيفت يوم ${escapeExpenseText(saved.target_date)} ما زال مفتوحًا. سجّل العدّ الفعلي وأغلق الشيفت، ثم تعتمد الإدارة التسليم قبل بدء شيفت جديد.` : saved.cash_tracking_enabled && !saved.opening_confirmed ? `راجع عهدة البداية المسجلة (${Number(saved.opening_cash || 0).toLocaleString("ar-EG")} جنيه) وأكد مبلغها الفعلي بالحفظ قبل إغلاق الشيفت.` : "القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديل النقد الفعلي قبل إغلاق الشيفت."}</p>${currentCashSummary}<div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة من الدرج</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>عهدة بداية الشيفت من الإدارة<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00" ${saved.opening_cash_editable ?? !saved.opening_confirmed ? "" : "readonly"}></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
   document.body.appendChild(modal);
   modal.querySelector(".shift_cash_cancel").onclick = () => modal.remove();
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
@@ -2592,6 +2592,7 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(error.detail || "تعذر حفظ المصروف");
       }
       const savedExpense = await response.json();
+      currentShiftExpenses = currentShiftExpenses.filter((item) => Number(item.id) !== Number(savedExpense.id));
       currentShiftExpenses.unshift(savedExpense);
       if (Number.isFinite(Number(savedExpense.shift_total))) currentShiftExpensesTotal = Number(savedExpense.shift_total);
       expenseForm.reset();
@@ -3160,6 +3161,7 @@ function getCashierLiveSocket() {
       path: "/orders/ws/cashier",
       onMessage: (payload) => handleSocketEvent(payload),
       onOpen: (ws) => {
+        refreshVisibleShiftExpenses();
         setTimeout(() => {
           if (ws.readyState !== WebSocket.OPEN) return;
           Promise.all([
@@ -3176,7 +3178,10 @@ function getCashierLiveSocket() {
           }).catch((error) => console.warn("Post-reconnect order sync failed:", error));
         }, 700);
       },
-      onVisible: () => scheduleOffersRefresh(0),
+      onVisible: () => {
+        scheduleOffersRefresh(0);
+        refreshVisibleShiftExpenses();
+      },
     });
   }
   return cashierLiveSocket;
@@ -3190,6 +3195,12 @@ function updateConnectionStatus(status) {
   getCashierLiveSocket().updateStatus(status);
 }
 
+function refreshVisibleShiftExpenses() {
+  if (document.getElementById("tab_expenses")?.classList.contains("active")) {
+    loadShiftExpenses();
+  }
+}
+
 function handleSocketEvent(payload) {
   if (
     !payload ||
@@ -3197,6 +3208,11 @@ function handleSocketEvent(payload) {
     payload.type === "HEARTBEAT_ACK" ||
     payload.type === "heartbeat_ack"
   ) {
+    return;
+  }
+
+  if (payload.type === "EXPENSE_UPDATED") {
+    refreshVisibleShiftExpenses();
     return;
   }
 
@@ -4152,13 +4168,12 @@ function showCustomActionConfirm(message) {
 // ===================================================
 //  Logout
 // ===================================================
-async function logout() {
+async function logout(leaveShiftOpen = false) {
   const token = localStorage.getItem("token");
   const headers = token ? { Authorization: "Bearer " + token } : {};
 
   try {
-    // تسجيل الخروج هو الذي يقفل الشيفت على السيرفر؛ لا نمسح الجلسة محليًا إذا فشل.
-    const response = await fetch(`${API_BASE}/auth/logout`, {
+    const response = await fetch(`${API_BASE}/auth/logout${leaveShiftOpen ? "?close_shift=false" : ""}`, {
       method: "POST",
       headers: {
         ...headers,
@@ -4181,10 +4196,10 @@ async function logout() {
   } catch (err) {
     console.warn("Logout API error:", err);
     if (String(err.message).includes("400")) {
-      showToast("سجل عدّ النقد الفعلي ثم أعد محاولة الخروج", "error");
-      openShiftCashModal();
+      const leaveOpen = await showCustomActionConfirm("لم تُسجّل تسوية الشيفت. هل تريد الخروج وترك الشيفت مفتوحًا لتكمله لاحقًا؟");
+      if (leaveOpen) return logout(true);
     } else {
-      showToast("تعذر إغلاق الشيفت. تأكد من الاتصال وحاول تسجيل الخروج مرة أخرى", "error");
+      showToast("تعذر تسجيل الخروج. تأكد من الاتصال وحاول مرة أخرى", "error");
     }
     return;
   }

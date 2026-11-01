@@ -141,7 +141,8 @@ class ShiftsService:
             user_id=user_id,
             target_date=target_date,
             start_time=datetime.now(UTC).replace(tzinfo=None),
-            opening_cash=Decimal("300.00"),
+            opening_cash=Decimal("0.00"),
+            opening_confirmed_at=datetime.now(UTC),
             cash_tracking_enabled=True,
         )
         self.db.add(new_shift)

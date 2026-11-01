@@ -399,6 +399,7 @@ async def get_current_shift_cash(
         "stale_shift": shift.target_date != get_business_date(),
         "opening_cash": float(shift.opening_cash or 0),
         "opening_confirmed": bool(shift.opening_confirmed_at) if ledger_mode else True,
+        "opening_cash_editable": not ledger_mode or not shift.opening_confirmed_at or not shift.opening_cash,
         "cash_tracking_enabled": ledger_mode,
         "actual_closing_cash": float(shift.actual_closing_cash) if shift.actual_closing_cash is not None else None,
         "closing_note": shift.closing_note or "",
@@ -417,12 +418,21 @@ async def update_current_shift_cash(
     shift = await _current_shift(db, current_user.id, redis)
     if not shift:
         raise ValidationError("لا يوجد شيفت نشط لتسويته")
+    shift = await db.scalar(
+        select(CashierShift).where(
+            CashierShift.id == shift.id,
+            CashierShift.user_id == current_user.id,
+            CashierShift.end_time.is_(None),
+        ).with_for_update().execution_options(populate_existing=True)
+    )
+    if not shift:
+        raise ValidationError("لا يوجد شيفت نشط لتسويته")
     ledger_mode = await ShiftsService(db).shift_uses_cash_ledger(shift)
     changes = payload.model_dump(exclude_unset=True)
     if "opening_cash" in changes and changes["opening_cash"] is None:
         raise ValidationError("عهدة بداية الشيفت لا يمكن تركها فارغة")
     if "opening_cash" in changes and changes["opening_cash"] is not None:
-        if ledger_mode and shift.opening_confirmed_at and changes["opening_cash"] != shift.opening_cash:
+        if ledger_mode and shift.opening_confirmed_at and shift.opening_cash and changes["opening_cash"] != shift.opening_cash:
             raise ValidationError("بعد تأكيد عهدة البداية، لا تُعدل قيمتها؛ اطلب تصحيحًا موثقًا من الإدارة")
         shift.opening_confirmed_at = datetime.now(UTC)
     for field, value in changes.items():

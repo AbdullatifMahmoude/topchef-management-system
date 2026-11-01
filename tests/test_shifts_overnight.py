@@ -210,7 +210,8 @@ async def test_closed_cashier_shift_is_not_reopened_for_new_float():
 
     assert isinstance(created, CashierShift)
     assert created.target_date == target
-    assert created.opening_cash == 300
+    assert created.opening_cash == 0
+    assert created.opening_confirmed_at is not None
     db.add.assert_called_once_with(created)
     db.commit.assert_awaited_once()
 

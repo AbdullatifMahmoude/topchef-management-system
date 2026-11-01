@@ -64,6 +64,7 @@ from app.modules.auth.dependencies import get_current_user, security_scheme
 
 @router.post("/logout")
 async def logout(
+    close_shift: bool = True,
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
     _current_user = Depends(get_current_user),
     redis = Depends(get_redis),
@@ -78,7 +79,7 @@ async def logout(
             raise AuthenticationError("Token payload is malformed")
         # A cashier must be able to correct a missing cash count before the
         # token is revoked; otherwise logout could strand an open shift.
-        if user_id:
+        if user_id and close_shift:
             from app.core.enums import UserRole
             if payload.get("role") == UserRole.CASHIER.value:
                 from app.core.database import AsyncSessionLocal
