@@ -298,6 +298,22 @@ async def reverse_movement(db: AsyncSession, movement_id: int, admin, key: str, 
     return movement
 
 
+async def reverse_for_cancellation(db: AsyncSession, order: Order, admin) -> None:
+    """Append linked corrections, undoing handoffs before customer collections."""
+    if not admin or admin.role != UserRole.ADMIN:
+        raise AuthorizationError("الإدارة فقط تلغي التحصيل المسجل")
+    summary = await movement_summary(db, order)
+    movements = summary["movements"]
+    reversed_ids = {row.reversal_of_id for row in movements if row.reversal_of_id is not None}
+    originals = [row for row in movements if row.reversal_of_id is None and row.id not in reversed_ids]
+    for movement in reversed(originals):
+        await reverse_movement(
+            db, movement.id, admin, f"cancel-order:{order.id}:movement:{movement.id}",
+            "تصحيح تحصيل بسبب إلغاء الطلب بواسطة الإدارة",
+        )
+    await assert_financial_change_clear(db, order)
+
+
 async def assert_financial_change_clear(db: AsyncSession, order: Order) -> None:
     count = await db.scalar(select(OrderCashMovement.id).where(OrderCashMovement.order_id == order.id).limit(1))
     if count:

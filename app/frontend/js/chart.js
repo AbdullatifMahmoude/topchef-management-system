@@ -163,6 +163,30 @@ document.addEventListener("DOMContentLoaded", () => {
       overlay.querySelector("h2").textContent = `طلب #${order.order_number}`;
       overlay.querySelector(".report_order_body").innerHTML = `<p class="report_order_date">${escapeHtml(dateLabel(order.order_date))} • ${escapeHtml(String(order.created_at || "").replace("T", " ").slice(11, 16))}</p><div class="report_order_info">${info}</div><div class="report_order_items"><table><thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead><tbody>${items || '<tr><td colspan="4">لا توجد أصناف</td></tr>'}</tbody></table></div><div class="report_order_totals"><div><span>الإجمالي قبل الخصم</span><strong>${money(order.subtotal)}</strong></div><div><span>الخصم</span><strong>${money(order.discount_amount)}</strong></div><div><span>رسوم التوصيل</span><strong>${money(order.delivery_fee)}</strong></div><div><span>إجمالي الطلب</span><strong>${money(order.total_amount)}</strong></div><div class="report_order_grand"><span>حصة المطعم في التقرير</span><strong>${money(Number(order.total_amount || 0) - (String(order.order_type).toLowerCase() === "delivery" ? Number(order.delivery_fee || 0) : 0))}</strong></div></div>${notes ? `<div class="report_order_notes">${notes}</div>` : ""}`;
       overlay.querySelector(".report_order_body").removeAttribute("role");
+      if (order.order_status === "delivered") {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "إلغاء الطلب المسلم";
+        button.addEventListener("click", async () => {
+          if (button.disabled || !confirm("إلغاء الطلب المسلم؟ سيتم تسجيل تصحيح لحركات التحصيل مع الاحتفاظ بالسجل.")) return;
+          button.disabled = true;
+          try {
+            const result = await window.apiFetch(`/orders/${orderId}/status`, {
+              method: "PATCH", body: JSON.stringify({ order_status: "cancelled" }),
+            });
+            if (!result.ok) {
+              const error = await result.json().catch(() => ({}));
+              throw new Error(typeof error.detail === "string" ? error.detail : "تعذر إلغاء الطلب");
+            }
+            close();
+            await loadReport(currentBaseUrl, currentType, currentOffset);
+          } catch (error) {
+            button.disabled = false;
+            alert(error.message || "تعذر إلغاء الطلب");
+          }
+        });
+        overlay.querySelector(".report_order_body").appendChild(button);
+      }
     } catch (error) {
       if (overlay.isConnected) overlay.querySelector(".report_order_body").textContent = error.message || "تعذر تحميل تفاصيل الطلب";
     }

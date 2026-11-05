@@ -543,8 +543,15 @@ class OrderService:
             if update_data.order_status == OrderStatus.CANCELLED:
                 from app.modules.shifts.cash_custody import (
                     assert_financial_change_clear,
+                    reverse_for_cancellation,
                 )
-                await assert_financial_change_clear(self.db, order)
+                from app.modules.users.models import User
+
+                actor = await self.db.get(User, current_user_id) if current_user_id else None
+                if actor and actor.role == UserRole.ADMIN and order.order_status == OrderStatus.DELIVERED:
+                    await reverse_for_cancellation(self.db, order, actor)
+                else:
+                    await assert_financial_change_clear(self.db, order)
             if "delivery_person_id" in update_data.model_fields_set and update_data.delivery_person_id != order.delivery_person_id:
                 from app.modules.shifts.cash_custody import (
                     assert_financial_change_clear,
@@ -580,14 +587,19 @@ class OrderService:
                     and not target_rider_id
                 ):
                     raise ValidationError("يجب إسناد مندوب قبل قبول طلب الدليفري")
-                if order.order_type == OrderType.DELIVERY and target_rider_id:
+                if order.order_type == OrderType.DELIVERY and target_rider_id and update_data.order_status != OrderStatus.CANCELLED:
                     from app.modules.users.models import User
                     rider = await self.db.get(User, target_rider_id)
                     if not rider or rider.role != UserRole.DELIVERY or not rider.is_active or rider.is_deleted:
                         raise ValidationError("المندوب المختار غير متاح")
                 if update_data.order_status == OrderStatus.OUT_FOR_DELIVERY and not target_rider_id:
                     raise ValidationError("A delivery rider must be assigned before dispatch")
-                if not order.can_transition_to(update_data.order_status):
+                admin_cancel_delivered = (
+                    update_data.order_status == OrderStatus.CANCELLED
+                    and order.order_status == OrderStatus.DELIVERED
+                    and actor and actor.role == UserRole.ADMIN
+                )
+                if not admin_cancel_delivered and not order.can_transition_to(update_data.order_status):
                     raise ValidationError(f"Invalid status transition from {order.order_status} to {update_data.order_status}")
                 
                 # If an online order is confirmed by a cashier, assign it to them
