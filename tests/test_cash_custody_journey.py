@@ -101,7 +101,7 @@ async def cash_db():
 
 
 @pytest.mark.asyncio
-async def test_zero_opening_cash_can_be_recorded_once(cash_db, monkeypatch):
+async def test_opening_cash_can_be_corrected_while_shift_is_open(cash_db, monkeypatch):
     router = import_module("app.modules.shifts.router")
 
     cashier, other, _, _, shift, _ = await seed(cash_db)
@@ -114,13 +114,21 @@ async def test_zero_opening_cash_can_be_recorded_once(cash_db, monkeypatch):
                                            db=cash_db, current_user=cashier, redis=None)
     current = await router.get_current_shift_cash(db=cash_db, current_user=cashier, redis=None)
     assert current["opening_cash"] == 125
-    assert current["opening_cash_editable"] is False
-    with pytest.raises(ValidationError):
-        await router.update_current_shift_cash(router.ShiftCashUpdate(opening_cash=Decimal("150.00")),
-                                               db=cash_db, current_user=cashier, redis=None)
+    assert current["opening_cash_editable"] is True
+    await router.update_current_shift_cash(router.ShiftCashUpdate(opening_cash=Decimal("150.00")),
+                                           db=cash_db, current_user=cashier, redis=None)
+    current = await router.get_current_shift_cash(db=cash_db, current_user=cashier, redis=None)
+    assert current["opening_cash"] == 150
+    report = await ShiftsService(cash_db).get_shifts_report(shift.target_date)
+    assert next(item for item in report if item["id"] == shift.id)["expected_cash"] == 150
     with pytest.raises(ValidationError):
         await router.update_current_shift_cash(router.ShiftCashUpdate(opening_cash=Decimal("150.00")),
                                                db=cash_db, current_user=other, redis=None)
+    shift.end_time = datetime.now(UTC)
+    await cash_db.commit()
+    with pytest.raises(ValidationError):
+        await router.update_current_shift_cash(router.ShiftCashUpdate(opening_cash=Decimal("200.00")),
+                                               db=cash_db, current_user=cashier, redis=None)
 
 
 async def seed(cash_db):
@@ -280,6 +288,66 @@ async def test_rider_collection_cross_shift_handoff_stays_minimal(cash_db):
     await cash_db.commit()
     assert (await movement_summary(cash_db, delivery))["rider_holding"] == Decimal("80.00")
     assert other_handoff.shift_id != handoff.shift_id
+
+
+@pytest.mark.asyncio
+async def test_admin_cancels_delivered_order_and_reverses_cash_with_history(cash_db, monkeypatch):
+    cashier, other, rider, admin, shift, created_at = await seed(cash_db)
+    delivery = await order(cash_db, "CANCEL-DELIVERED", cashier, created_at, "110.00",
+                           OrderType.DELIVERY, rider, "10.00")
+    collection = await record_customer_collection(cash_db, delivery.id, rider, "cancel-collection")
+    handoff = await record_rider_handoff(cash_db, delivery.id, other, Decimal("40.00"), "cancel-handoff")
+    delivery.order_status = OrderStatus.DELIVERED
+    rider.is_active = False
+    await cash_db.commit()
+    order_id, cashier_id, admin_id, shift_id = delivery.id, cashier.id, admin.id, shift.id
+    collection_id, handoff_id = collection.id, handoff.id
+    monkeypatch.setattr("app.core.events.order_events_manager.emit", AsyncMock())
+    service = OrderService(cash_db, notification_service=AsyncMock())
+
+    with pytest.raises(ValidationError):
+        await service.update_order_status(order_id, OrderUpdate(order_status=OrderStatus.CANCELLED), cashier_id)
+    delivery = await cash_db.get(Order, order_id)
+    assert (await movement_summary(cash_db, delivery))["customer_paid"] == Decimal("100.00")
+
+    result = await service.update_order_status(order_id, OrderUpdate(order_status=OrderStatus.CANCELLED), admin_id)
+    assert result.order_status == OrderStatus.CANCELLED
+    summary = await movement_summary(cash_db, delivery)
+    assert summary["customer_paid"] == summary["rider_holding"] == summary["cashier_received"] == 0
+    assert {row.reversal_of_id for row in summary["movements"] if row.reversal_of_id} == {collection_id, handoff_id}
+    assert (await cash_db.scalar(select(OrderStatusHistory).where(
+        OrderStatusHistory.order_id == delivery.id, OrderStatusHistory.status == OrderStatus.CANCELLED
+    ))) is not None
+    report = next(row for row in await ShiftsService(cash_db).get_shifts_report(get_current_business_date()) if row["id"] == shift_id)
+    assert report["cash_sales"] == 0
+    await service.update_order_status(order_id, OrderUpdate(order_status=OrderStatus.CANCELLED), admin_id)
+    assert len((await movement_summary(cash_db, delivery))["movements"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_cancelling_delivered_order_preserves_closed_shift_snapshot(cash_db, monkeypatch):
+    cashier, _, rider, admin, shift, created_at = await seed(cash_db)
+    delivery = await order(cash_db, "CANCEL-CLOSED", cashier, created_at, "110.00",
+                           OrderType.DELIVERY, rider, "10.00")
+    await record_customer_collection(cash_db, delivery.id, rider, "closed-collection")
+    await record_rider_handoff(cash_db, delivery.id, cashier, Decimal("100.00"), "closed-handoff")
+    delivery.order_status = OrderStatus.DELIVERED
+    shift.end_time = datetime.now(UTC) - timedelta(minutes=1)
+    snapshot = ShiftCloseSnapshot(shift_id=shift.id, opening_cash=Decimal(300),
+                                  confirmed_cash=Decimal(100), unconfirmed_cash_sales=Decimal(0),
+                                  cash_expenses=Decimal(0), expected_cash=Decimal(400),
+                                  cashier_count=Decimal(400), difference=Decimal(0))
+    cash_db.add(snapshot)
+    await cash_db.commit()
+    monkeypatch.setattr("app.core.events.order_events_manager.emit", AsyncMock())
+    await OrderService(cash_db, notification_service=AsyncMock()).update_order_status(
+        delivery.id, OrderUpdate(order_status=OrderStatus.CANCELLED), admin.id,
+    )
+    report = next(row for row in await ShiftsService(cash_db).get_shifts_report(shift.target_date)
+                  if row["id"] == shift.id)
+    assert report["expected_cash"] == 400
+    assert report["confirmed_cash"] == 100
+    assert any(row["order_id"] == delivery.id for row in report["late_order_cash_movements"])
 
 
 @pytest.mark.asyncio

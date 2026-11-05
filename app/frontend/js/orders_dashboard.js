@@ -109,7 +109,7 @@
           <td>${order.customer_name || "عميل نقدي"}</td>
           <td style="font-size:12px; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${itemsSummary}</td>
           <td style="font-weight:bold;">${totalAmount} ج.م</td>
-          <td><span class="${statusObj.cls}">${statusObj.label}</span></td>
+          <td><span class="${statusObj.cls}">${statusObj.label}</span>${order.order_status === "delivered" ? ` <button type="button" data-cancel-delivered="${Number(order.id)}">إلغاء الطلب</button>` : ""}</td>
           <td style="opacity:0.7; font-size:11px;">${timeStr}${updatedTimeStr}</td>
         </tr>
       `;
@@ -433,6 +433,25 @@
 
   // ===== INIT =====
   document.addEventListener("DOMContentLoaded", () => {
+    document.querySelector("#home_orders_table")?.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-cancel-delivered]");
+      if (!button || button.disabled) return;
+      if (!confirm("إلغاء الطلب المسلم؟ سيتم تسجيل تصحيح لحركات التحصيل مع الاحتفاظ بالسجل.")) return;
+      button.disabled = true;
+      try {
+        const response = await apiFetch(`/orders/${button.dataset.cancelDelivered}/status`, {
+          method: "PATCH", body: JSON.stringify({ order_status: "cancelled" }),
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(typeof error.detail === "string" ? error.detail : "تعذر إلغاء الطلب");
+        }
+        await loadDashboardData();
+      } catch (error) {
+        button.disabled = false;
+        alert(error.message || "تعذر إلغاء الطلب");
+      }
+    });
     document.getElementById("ops_alerts")?.addEventListener("click", async (event) => {
       const button = event.target.closest("button[data-cancellation-id]");
       if (!button) return;

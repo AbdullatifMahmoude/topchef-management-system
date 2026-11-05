@@ -564,7 +564,7 @@ async function openShiftCashModal() {
   const currentCashSummary = reconciliation?.cash_tracking_enabled
     ? `<div class="shift_saved_expenses"><span>سجل استلام النقد (للمراجعة فقط)</span><strong>${Number(reconciliation.confirmed_cash || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>نقد دليفري لم يثبت وصوله: ${Number(reconciliation.unconfirmed_delivery_cash || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م • التأكيد لا يغيّر النقد المتوقع أو فرق الشيفت${Number(reconciliation.legacy_expenses_unverified || 0) > 0 ? ` • مصروفات قبل النشر مصدرها يحتاج مراجعة: ${Number(reconciliation.legacy_expenses_unverified).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م` : ""}</small></div>`
     : "";
-  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>${saved.stale_shift ? `شيفت يوم ${escapeExpenseText(saved.target_date)} ما زال مفتوحًا. سجّل العدّ الفعلي وأغلق الشيفت، ثم تعتمد الإدارة التسليم قبل بدء شيفت جديد.` : saved.cash_tracking_enabled && !saved.opening_confirmed ? `راجع عهدة البداية المسجلة (${Number(saved.opening_cash || 0).toLocaleString("ar-EG")} جنيه) وأكد مبلغها الفعلي بالحفظ قبل إغلاق الشيفت.` : "القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديل النقد الفعلي قبل إغلاق الشيفت."}</p>${currentCashSummary}<div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة من الدرج</span><strong>${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>عهدة بداية الشيفت من الإدارة<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00" ${saved.opening_cash_editable ?? !saved.opening_confirmed ? "" : "readonly"}></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
+  modal.innerHTML = `<form id="shift_cash_form"><h2>تسوية الشيفت</h2><p>${saved.stale_shift ? `شيفت يوم ${escapeExpenseText(saved.target_date)} ما زال مفتوحًا. سجّل العدّ الفعلي وأغلق الشيفت، ثم تعتمد الإدارة التسليم قبل بدء شيفت جديد.` : saved.cash_tracking_enabled && !saved.opening_confirmed ? `راجع عهدة البداية المسجلة (${Number(saved.opening_cash || 0).toLocaleString("ar-EG")} جنيه) وأكد مبلغها الفعلي بالحفظ قبل إغلاق الشيفت.` : "القيم المحفوظة تظهر تلقائيًا، ويمكنك تعديل عهدة البداية والنقد الفعلي قبل إغلاق الشيفت."}</p>${currentCashSummary}<div class="shift_saved_expenses"><span>مصروفات الشيفت المسجلة من الدرج</span><strong id="shift_cash_expenses_total">${Number(saved.expenses_total || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 })} ج.م</strong><small>تُدار من تابة المصروفات</small></div><div class="shift_cash_fields"><label>عهدة بداية الشيفت من الإدارة<input name="opening_cash" type="number" min="0" step="0.01" value="${Number(saved.opening_cash || 0)}" placeholder="0.00" ${saved.opening_cash_editable ?? !saved.opening_confirmed ? "" : "readonly"}></label><label>النقد الفعلي عند التسليم<input name="actual_closing_cash" type="number" min="0" step="0.01" value="${saved.actual_closing_cash == null ? "" : Number(saved.actual_closing_cash)}" placeholder="اتركه فارغًا قبل التسليم"></label><label>ملاحظة التسليم<textarea name="closing_note" rows="2" placeholder="اختياري">${escapeExpenseText(saved.closing_note || "")}</textarea></label></div><div class="shift_cash_actions"><button class="shift_cash_save" type="submit">حفظ التسوية</button><button class="shift_cash_cancel" type="button">إلغاء</button></div></form>`;
   document.body.appendChild(modal);
   modal.querySelector(".shift_cash_cancel").onclick = () => modal.remove();
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
@@ -1855,7 +1855,11 @@ function closeDeliveryModal() {
 // ===================================================
 //  Delivery Customer Form
 // ===================================================
+let customerPhoneLookupVersion = 0;
+
 function resetDeliveryCustomerInfo() {
+  customerPhoneLookupVersion++;
+  clearTimeout(_phoneSearchTimeout);
   deliveryCustomerInfo = {
     phone: "",
     name: "",
@@ -2007,6 +2011,7 @@ function hideDeliveryCustomerForm() {
 }
 
 function handlePhoneInput(phone) {
+  customerPhoneLookupVersion++;
   deliveryCustomerInfo.phone = normalizePhoneDigits(phone);
   deliveryCustomerInfo.name = "";
   deliveryCustomerInfo.customerId = null;
@@ -2041,6 +2046,9 @@ function handlePhoneInput(phone) {
 }
 
 async function lookupCustomerByPhone(phone) {
+  const lookupVersion = ++customerPhoneLookupVersion;
+  const isCurrentLookup = () => lookupVersion === customerPhoneLookupVersion &&
+    normalizePhoneDigits(deliveryCustomerInfo.phone) === normalizePhoneDigits(phone);
   const status = document.getElementById("dcf_phone_status");
 
   const applyFound = (found) => {
@@ -2049,13 +2057,6 @@ async function lookupCustomerByPhone(phone) {
     deliveryCustomerInfo.addresses = Array.isArray(found.addresses)
       ? found.addresses
       : [];
-
-    if (deliveryCustomerInfo.addresses.length === 1) {
-      deliveryCustomerInfo.selectedAddressId =
-        deliveryCustomerInfo.addresses[0].id;
-    } else {
-      deliveryCustomerInfo.selectedAddressId = null;
-    }
 
     if (deliveryCustomerInfo.addresses.length === 1) {
       deliveryCustomerInfo.selectedAddressId =
@@ -2083,7 +2084,6 @@ async function lookupCustomerByPhone(phone) {
 
     const nameInput = document.getElementById("dcf_name");
     if (nameInput) {
-      nameInput.value = "";
       nameInput.readOnly = false;
       nameInput.style.opacity = "1";
       nameInput.classList.remove("filled");
@@ -2095,42 +2095,24 @@ async function lookupCustomerByPhone(phone) {
     if (addrField) addrField.innerHTML = renderAddressFieldHTML();
   };
 
-  const token = localStorage.getItem("token");
-  const headers = token ? { Authorization: "Bearer " + token } : {};
-
-  // ── المحاولة الأولى: by-phone (أسرع وأدق) ──
   try {
-    const r1 = await apiFetch(
+    const response = await apiFetch(
       `/customers/by-phone/${encodeURIComponent(phone)}`,
     );
-    if (r1.ok) {
-      const data = await r1.json();
-      applyFound(data);
-      return;
+    if (!isCurrentLookup()) return;
+    if (response.status === 404) {
+      applyNew();
+    } else if (response.ok) {
+      const customer = await response.json();
+      if (isCurrentLookup()) applyFound(customer);
+    } else {
+      throw new Error(`Customer lookup failed: ${response.status}`);
     }
-  } catch (_) {
-    /* تجاهل وانتقل للخطوة التالية */
+  } catch (error) {
+    if (!isCurrentLookup()) return;
+    console.warn("Customer lookup failed", error);
+    if (status) status.textContent = "تعذر البحث عن العميل؛ تحقق من الاتصال وحاول مجددًا";
   }
-
-  // ── المحاولة الثانية: قايمة كل العملاء + فلتر ──
-  try {
-    const r2 = await apiFetch("/customers/");
-    if (r2.ok) {
-      const list = await r2.json();
-      const found = Array.isArray(list)
-        ? list.find((c) => normalizePhoneDigits(c.phone_number) === normalizePhoneDigits(phone))
-        : null;
-      if (found) {
-        applyFound(found);
-        return;
-      }
-    }
-  } catch (_) {
-    /* تجاهل */
-  }
-
-  // ── كلاهما فشل → عميل جديد ──
-  applyNew();
 }
 
 // ===================================================
@@ -2532,6 +2514,8 @@ async function loadShiftExpenses() {
     currentShiftExpenses = data.items || [];
     currentShiftExpensesTotal = Number(data.total || 0);
     renderShiftExpenses();
+    const modalTotal = document.getElementById("shift_cash_expenses_total");
+    if (modalTotal) modalTotal.textContent = expenseMoney(currentShiftExpensesTotal);
   } catch (error) {
     if (error?.name === "AbortError" || requestSequence !== expensesRequestSequence) return;
     console.error(error);
@@ -3196,7 +3180,8 @@ function updateConnectionStatus(status) {
 }
 
 function refreshVisibleShiftExpenses() {
-  if (document.getElementById("tab_expenses")?.classList.contains("active")) {
+  if (document.getElementById("tab_expenses")?.classList.contains("active") ||
+      document.getElementById("shift_cash_expenses_total")) {
     loadShiftExpenses();
   }
 }
@@ -4055,8 +4040,6 @@ async function changeOrderStatus(orderId, status) {
       body: JSON.stringify({
         order_status: status,
         digital_payment_verified: digitalPaymentVerified,
-        delivery_person_id: null,
-        internal_notes: null,
       }),
     });
 
@@ -4537,6 +4520,18 @@ async function loadOrderCashCustody(orderId) {
     const canHandoff = order && order.order_type === "delivery" && Number(data.rider_holding) > 0;
     const canDirect = order && order.order_type === "delivery" && (order.delivery_person_id || (data.legacy_same_shift && order.order_status === "delivered")) && !["new", "cancelled"].includes(order.order_status) && Number(data.restaurant_due) > 0 && Number(data.customer_paid) === 0 && Number(data.cashier_received) === 0 && Number(data.rider_holding) === 0;
     target.innerHTML = `<strong>عهدة النقد لهذا الطلب</strong>${data.legacy_same_shift ? '<p>الطلب اتسجل قبل النشر في نفس الشيفت. تحصيله غير مؤكد لحد ما تسجل الاستلام الفعلي.</p>' : ""}<p>حصة المطعم: ${format(data.restaurant_due)} ج.م • وصل للصندوق: ${format(data.cashier_received)} ج.م • مع المندوب مؤكد: ${format(data.rider_holding)} ج.م • لم يؤكد تحصيله: ${format(data.uncollected)} ج.م</p><div class="cash_custody_actions">${canCollect ? '<button type="button" class="cash_custody_button" data-cash-action="collect">أؤكد استلام النقد من العميل</button>' : ""}${canHandoff ? '<button type="button" class="cash_custody_button" data-cash-action="handoff">أؤكد استلام النقد من المندوب</button>' : ""}${canDirect ? '<button type="button" class="cash_custody_button" data-cash-action="direct">تسوية مباشرة من المندوب</button>' : ""}</div><small>كل تأكيد يُحفظ باسم المستخدم ووقت العملية. عند وجود فرق في المبلغ راجع الإدارة.</small>`;
+    if (order?.order_status === "cancelled" && data.movements?.some((movement) => movement.reversal_of_id)) {
+      const notice = document.createElement("p");
+      notice.textContent = "الطلب ملغي، وسُجّلت تصحيحات لحركات التحصيل مع الاحتفاظ بالسجل الأصلي.";
+      target.appendChild(notice);
+      const reversedIds = new Set(data.movements.map((movement) => movement.reversal_of_id).filter(Boolean));
+      for (const movement of data.movements) {
+        const row = document.createElement("p");
+        const state = movement.reversal_of_id ? "تصحيح إلغاء" : reversedIds.has(movement.id) ? "ملغاة" : "مسجلة";
+        row.textContent = `حركة #${Number(movement.id)}: ${format(movement.amount)} ج.م — ${state}`;
+        target.appendChild(row);
+      }
+    }
     target.querySelector("[data-cash-action='collect']")?.addEventListener("click", () => recordOrderCash(orderId, "collect", data.uncollected));
     target.querySelector("[data-cash-action='handoff']")?.addEventListener("click", () => recordOrderCash(orderId, "handoff", data.rider_holding));
     target.querySelector("[data-cash-action='direct']")?.addEventListener("click", () => recordOrderCash(orderId, "direct", data.restaurant_due));
