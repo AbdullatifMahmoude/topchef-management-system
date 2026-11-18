@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.database import Base
 from app.core.enums import OrderSource, OrderStatus, OrderType
-from app.core.exceptions import ValidationError
 from app.modules.customer.models import Customer, CustomerAddress
 from app.modules.orders import schemas
 from app.modules.orders.models import Order
@@ -99,10 +98,6 @@ async def test_address_edit_persists_or_rejects_missing_customer(
                 customer_phone="01000000001" if has_customer_snapshot else "",
                 customer_address="New address",
             )
-            if not has_linked_customer:
-                with pytest.raises(ValidationError):
-                    await service.update_order(order_id, update)
-                return
             updated = await service.update_order(order_id, update)
             assert updated.customer_address == "New address"
             await db.commit()
@@ -110,9 +105,13 @@ async def test_address_edit_persists_or_rejects_missing_customer(
         async with sessions() as db:
             stored = await db.scalar(select(Order).where(Order.id == order_id))
             assert stored is not None
-            address = await db.get(CustomerAddress, stored.address_id)
-            assert address is not None
-            assert address.address == "New address"
+            if has_linked_customer:
+                address = await db.get(CustomerAddress, stored.address_id)
+                assert address is not None
+                assert address.address == "New address"
+            else:
+                assert stored.address_id is None
+                assert stored.guest_address == "New address"
     finally:
         await engine.dispose()
 

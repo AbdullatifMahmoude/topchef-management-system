@@ -456,6 +456,11 @@
       const button = event.target.closest("button[data-cancellation-id]");
       if (!button) return;
       const approve = button.dataset.approve === "true";
+      if (approve) {
+        const request = pendingCancellations.find((item) => String(item.id) === button.dataset.cancellationId);
+        const orderNumber = request ? displayOrderNumber(request.order_number, request.order_id) : "";
+        if (!window.confirm(`هل أنت متأكد من الموافقة على إلغاء الأوردر${orderNumber ? ` #${orderNumber}` : ""}؟`)) return;
+      }
       button.disabled = true;
       try {
         const response = await apiFetch(`/orders/cancellation-requests/${button.dataset.cancellationId}`, {

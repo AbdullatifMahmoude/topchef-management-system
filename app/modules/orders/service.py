@@ -172,9 +172,9 @@ class OrderService:
             if order_data.order_type == OrderType.PHONE_RESERVATION:
                 from app.modules.customer.phone import normalize_egyptian_phone
                 phone = normalize_egyptian_phone(order_data.customer_phone)
-                if len(phone) != 11 or not phone.startswith("01"):
-                    raise ValidationError("رقم تليفون العميل مطلوب لحجز التلفون ويجب أن يكون 11 رقمًا")
-                order_data.customer_phone = phone
+                if phone and (len(phone) != 11 or not phone.startswith("01")):
+                    raise ValidationError("رقم تليفون العميل يجب أن يكون 11 رقمًا")
+                order_data.customer_phone = phone or None
 
             # A cashier-created delivery is operational immediately, so it
             # must never enter the database without an active delivery rider.
@@ -268,6 +268,8 @@ class OrderService:
                         new_addr = await customer_service.add_address(order_data.customer_id, CustomerAddressCreate(address=order_data.customer_address))
                         order_data.address_id = new_addr.id
 
+            guest_address = order_data.customer_address if not order_data.address_id else None
+
             redemption = None
             order_items = list(order_data.items)
             if order_data.loyalty_rule_id:
@@ -312,6 +314,7 @@ class OrderService:
             order_business_date = getattr(order_data, "order_date", None) or self.repository.get_business_date()
             next_number = await self.repository.get_next_order_number(order_business_date)
             order_dict = order_data.model_dump(exclude={'items', 'offer_code', 'source', 'customer_address', 'order_number', 'order_date', 'manual_discount_type', 'manual_discount_value', 'discount_reason', 'loyalty_rule_id', 'loyalty_expected_points', 'loyalty_expected_value', 'cash_received', 'digital_payment_verified'})
+            order_dict["guest_address"] = guest_address
             order = models.Order(**order_dict)
             if order_data.digital_payment_verified:
                 order.digital_payment_verified_at = datetime.now(UTC)
@@ -655,10 +658,10 @@ class OrderService:
             target_type = update_data.order_type or order.order_type
             if target_type == OrderType.PHONE_RESERVATION:
                 from app.modules.customer.phone import normalize_egyptian_phone
-                phone = normalize_egyptian_phone(update_data.customer_phone or order.customer_phone)
-                if len(phone) != 11 or not phone.startswith("01"):
-                    raise ValidationError("رقم تليفون العميل مطلوب لحجز التلفون ويجب أن يكون 11 رقمًا")
-                update_data.customer_phone = phone
+                phone = normalize_egyptian_phone(update_data.customer_phone if "customer_phone" in update_data.model_fields_set else order.customer_phone)
+                if phone and (len(phone) != 11 or not phone.startswith("01")):
+                    raise ValidationError("رقم تليفون العميل يجب أن يكون 11 رقمًا")
+                update_data.customer_phone = phone or None
             
             old_state = {
                 "total_amount": order.total_amount,
@@ -673,24 +676,19 @@ class OrderService:
             }
             
             if update_data.customer_phone or update_data.customer_name or getattr(update_data, 'customer_address', None):
-                target_phone = update_data.customer_phone or order.customer_phone
+                target_phone = update_data.customer_phone if "customer_phone" in update_data.model_fields_set else order.customer_phone
                 target_name = update_data.customer_name or order.customer_name
                 if update_data.customer_address and not (target_phone and target_name):
-                    # Older/guest orders may have a linked customer without both
-                    # display fields. Resolve from that customer before saving an
-                    # address; never return 200 for an address we did not apply.
                     from app.modules.customer.repository import CustomerRepository
 
                     linked_customer_id = update_data.customer_id or order.customer_id
-                    linked_customer = (
-                        await CustomerRepository(self.db).get_by_id(linked_customer_id)
-                        if linked_customer_id else None
-                    )
+                    linked_customer = (await CustomerRepository(self.db).get_by_id(linked_customer_id)
+                                       if linked_customer_id else None)
                     if linked_customer:
                         target_phone = target_phone or linked_customer.phone_number
                         target_name = target_name or linked_customer.name
-                    if not (target_phone and target_name):
-                        raise ValidationError("لا يمكن حفظ العنوان بدون بيانات عميل مرتبطة بالطلب")
+                    else:
+                        update_data.address_id = None
                 if target_phone and target_name:
                     from app.modules.customer.phone import normalize_egyptian_phone
                     from app.modules.customer.schemas import (
@@ -857,6 +855,12 @@ class OrderService:
                 await active_shift(self.db, actor.id)
                 order.digital_payment_verified_at = datetime.now(UTC)
                 order.digital_payment_verified_by_user_id = actor.id
+            if "customer_address" in update_data.model_fields_set:
+                order.guest_address = update_data.customer_address if not update_data.address_id else None
+                if not update_data.address_id:
+                    order.address_id = None
+                    order.address = None
+
             updated_order = await self.repository.update_order_full(order, update_data, changed_by_user_id=current_user_id)
             
             # Track changes

@@ -830,12 +830,6 @@ async function confirmOrder() {
   const phoneDigits = normalizePhoneDigits(deliveryCustomerInfo.phone);
   deliveryCustomerInfo.phone = phoneDigits;
 
-  // التحقق من بيانات العميل في حالة الديليفري
-  if (["delivery", "phone_reservation"].includes(orderType) && !phoneDigits) {
-    showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
-    return;
-  }
-
   if (phoneDigits && !isValidEgyptianPhone(phoneDigits)) {
     showToast("رقم التليفون يجب أن يكون 11 رقم", "error");
     return;
@@ -1881,6 +1875,10 @@ function getAddressText(addr) {
   );
 }
 
+function escapeCashierAddress(value) {
+  return String(value || "").replace(/[&<>'"]/g, char => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"})[char]);
+}
+
 function renderAddressFieldHTML() {
   const label = `<span class="dcf_label">📍 العنوان</span>`;
 
@@ -1888,27 +1886,13 @@ function renderAddressFieldHTML() {
   if (deliveryCustomerInfo.customerId) {
     const addresses = deliveryCustomerInfo.addresses || [];
 
-    // لو وضع الكتابة اليدوية مفعل (اختير "إضافة جديد")
-    if (deliveryCustomerInfo.manualAddressMode) {
-      return `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">
-          ${label}
-          <button class="dcf_link_btn" onclick="deliveryCustomerInfo.manualAddressMode=false; renderDeliveryCustomerForm()">الرجوع للعناوين المحفوظة</button>
-        </div>
-        <input type="text" id="dcf_address_input" class="dcf_input"
-          placeholder="أدخل العنوان الجديد"
-          value="${deliveryCustomerInfo.newAddress}"
-          oninput="deliveryCustomerInfo.newAddress = this.value" />
-      `;
-    }
-
     // عرض القائمة المنسدلة
     const options = addresses
       .map((a) => {
         const text = getAddressText(a);
         const sel =
           deliveryCustomerInfo.selectedAddressId === a.id ? "selected" : "";
-        return `<option value="${a.id}" ${sel}>${text}</option>`;
+        return `<option value="${a.id}" ${sel}>${escapeCashierAddress(text)}</option>`;
       })
       .join("");
 
@@ -1920,6 +1904,9 @@ function renderAddressFieldHTML() {
         ${options}
         <option value="NEW_ADDRESS" ${deliveryCustomerInfo.manualAddressMode ? "selected" : ""}>➕ إضافة عنوان جديد...</option>
       </select>
+      ${deliveryCustomerInfo.manualAddressMode ? `<input type="text" id="dcf_address_input" class="dcf_input"
+        placeholder="أدخل العنوان الجديد" value="${escapeCashierAddress(deliveryCustomerInfo.newAddress)}"
+        oninput="deliveryCustomerInfo.newAddress = this.value" />` : ""}
     `;
   } else {
     // عميل جديد تماماً → text input فقط
@@ -1927,7 +1914,7 @@ function renderAddressFieldHTML() {
       ${label}
       <input type="text" id="dcf_address_input" class="dcf_input"
         placeholder="أدخل العنوان"
-        value="${deliveryCustomerInfo.newAddress}"
+        value="${escapeCashierAddress(deliveryCustomerInfo.newAddress)}"
         oninput="deliveryCustomerInfo.newAddress = this.value" />
     `;
   }
@@ -1937,7 +1924,6 @@ function handleAddressSelect(val) {
   if (val === "NEW_ADDRESS") {
     deliveryCustomerInfo.manualAddressMode = true;
     deliveryCustomerInfo.selectedAddressId = null;
-    deliveryCustomerInfo.newAddress = "";
   } else {
     deliveryCustomerInfo.manualAddressMode = false;
     deliveryCustomerInfo.selectedAddressId = parseInt(val) || null;
@@ -1964,7 +1950,7 @@ function renderDeliveryCustomerForm() {
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          ${orderType === "delivery" ? "بيانات عميل الديليفري" : orderType === "phone_reservation" ? "بيانات الحجز (رقم الهاتف مطلوب)" : "بيانات العميل (اختياري)"}
+          ${orderType === "delivery" ? "بيانات عميل الديليفري" : orderType === "phone_reservation" ? "بيانات الحجز (اختياري)" : "بيانات العميل (اختياري)"}
         </div>
         <button class="dcf_close_btn" onclick="hideDeliveryCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
       </div>
@@ -2017,8 +2003,7 @@ function handlePhoneInput(phone) {
   deliveryCustomerInfo.customerId = null;
   deliveryCustomerInfo.addresses = [];
   deliveryCustomerInfo.selectedAddressId = null;
-  deliveryCustomerInfo.newAddress = "";
-  deliveryCustomerInfo.manualAddressMode = false;
+  deliveryCustomerInfo.manualAddressMode = Boolean(deliveryCustomerInfo.newAddress.trim());
 
   const nameInput = document.getElementById("dcf_name");
   if (nameInput) {
@@ -2058,7 +2043,7 @@ async function lookupCustomerByPhone(phone) {
       ? found.addresses
       : [];
 
-    if (deliveryCustomerInfo.addresses.length === 1) {
+    if (!String(deliveryCustomerInfo.newAddress || "").trim() && deliveryCustomerInfo.addresses.length === 1) {
       deliveryCustomerInfo.selectedAddressId =
         deliveryCustomerInfo.addresses[0].id;
     } else {
@@ -3495,10 +3480,10 @@ async function _refreshCustomerAddresses(phone) {
     );
     if (res.ok) {
       const data = await res.json();
-      if (data && Array.isArray(data.addresses)) {
+      if (data && Array.isArray(data.addresses) && normalizePhoneDigits(deliveryCustomerInfo.phone) === normalizePhoneDigits(phone)) {
         deliveryCustomerInfo.addresses = data.addresses;
         // If we had a selected address, keep it; otherwise auto-select if only one
-        if (data.addresses.length === 1) {
+        if (data.addresses.length === 1 && !deliveryCustomerInfo.manualAddressMode && !deliveryCustomerInfo.selectedAddressId && !deliveryCustomerInfo.newAddress) {
           deliveryCustomerInfo.selectedAddressId = data.addresses[0].id;
         }
         // Re-render the address field if visible
@@ -5185,7 +5170,7 @@ function selectOrderTypeInEditModal(type) {
            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
            </svg>
-           <span>${type === "delivery" ? "تعديل بيانات عميل الديليفري" : type === "phone_reservation" ? "بيانات الحجز (رقم الهاتف مطلوب)" : "تعديل بيانات العميل (اختياري)"}</span>
+           <span>${type === "delivery" ? "تعديل بيانات عميل الديليفري" : type === "phone_reservation" ? "بيانات الحجز (اختياري)" : "تعديل بيانات العميل (اختياري)"}</span>
          </div>
          <button class="dcf_close_btn" onclick="hideEditModalCustomerForm()" title="إغلاق البيانات مؤقتاً">✕</button>
        `;
@@ -5617,11 +5602,6 @@ async function updateEditOrderConfirm() {
 
   if (editModalState.customerPhone && !isValidEgyptianPhone(editModalState.customerPhone)) {
     showToast("رقم التليفون يجب أن يكون 11 رقم", "error");
-    return;
-  }
-
-  if (["delivery", "phone_reservation"].includes(editModalState.orderType) && !editModalState.customerPhone) {
-    showToast("يرجى إدخال رقم تليفون العميل أولاً", "error");
     return;
   }
 

@@ -57,6 +57,7 @@ class Order(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
     customer_phone = Column(String(20), nullable=True)
     customer_name = Column(String(100), nullable=True)
+    guest_address = Column(Text, nullable=True)
     # Consent snapshot for this specific order. Existing rows intentionally
     # default to false so a migration can never opt customers in implicitly.
     whatsapp_initial_contact_allowed = Column(Boolean, nullable=False, default=False, server_default="false")
@@ -144,7 +145,7 @@ class Order(Base):
     def customer_address(self) -> str | None:
         if self.address:
             return self.address.address
-        return None
+        return self.guest_address
 
     @property
     def applied_offer(self):

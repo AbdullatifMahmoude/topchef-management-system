@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   window.addEventListener("topchef:admin-live", (event) => {
     const payload = event.detail || {};
-    if (["SHIFT_CREATED", "SHIFT_UPDATED"].includes(payload.type) && document.getElementById("page-shifts")?.style.display !== "none") {
+    if (["SHIFT_CREATED", "SHIFT_UPDATED", "EXPENSE_UPDATED"].includes(payload.type) && document.getElementById("page-shifts")?.style.display !== "none") {
       fetchShiftsReport();
     }
   });
@@ -82,6 +82,7 @@ async function fetchShiftsReport() {
     if (!response.ok) throw new Error("Failed to fetch shifts");
     shiftsData = await response.json();
     updateShiftDashboard();
+    if (selectedShift && document.getElementById("shiftDetailsDrawer")?.classList.contains("open")) openShiftDrawer(selectedShift.id);
   } catch (error) {
     console.error("Error fetching shifts:", error);
     tbody.innerHTML = '<tr><td colspan="8" class="shift_empty_cell is_error">حدث خطأ أثناء جلب بيانات الشيفتات</td></tr>';

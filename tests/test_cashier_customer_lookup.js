@@ -30,6 +30,14 @@ vm.runInContext(lookup, context);
   assert.match(status.textContent, /تعذر البحث/);
   assert.doesNotMatch(status.innerHTML, /جديد/);
 
+  state.newAddress = "عنوان أدخله الكاشير";
+  state.manualAddressMode = true;
+  fetcher = async () => ({ ok: true, json: async () => ({ id: 3, name: "عميل", addresses: [{ id: 9, address: "عنوان محفوظ" }] }) });
+  await context.lookupCustomerByPhone(state.phone);
+  assert.equal(state.newAddress, "عنوان أدخله الكاشير");
+  assert.equal(state.selectedAddressId, null);
+  assert.equal(state.manualAddressMode, true);
+
   let resolveOld;
   fetcher = () => new Promise(resolve => { resolveOld = resolve; });
   const old = context.lookupCustomerByPhone(state.phone);
