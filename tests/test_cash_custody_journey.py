@@ -351,6 +351,59 @@ async def test_cancelling_delivered_order_preserves_closed_shift_snapshot(cash_d
 
 
 @pytest.mark.asyncio
+async def test_shift_difference_accounts_for_cash_order_cancelled_after_close(cash_db, monkeypatch):
+    cashier, _, rider, admin, shift, created_at = await seed(cash_db)
+    delivery = await order(cash_db, "LATE-CASH", cashier, created_at, "60.00",
+                           OrderType.DELIVERY, rider, "10.00")
+    early = await order(cash_db, "EARLY-CASH", cashier, created_at, "20.00")
+    digital = await order(cash_db, "LATE-DIGITAL", cashier, created_at, "30.00")
+    digital.payment_method = PaymentMethod.INSTAPAY
+    shift.actual_closing_cash = Decimal("300.00")
+    await cash_db.commit()
+    monkeypatch.setattr("app.core.events.order_events_manager.emit", AsyncMock())
+    clock = import_module("app.modules.orders.models")
+    service = OrderService(cash_db, notification_service=AsyncMock())
+    cancellation = OrderUpdate(order_status=OrderStatus.CANCELLED)
+
+    with monkeypatch.context() as timing:
+        early_at = datetime.now(UTC) - timedelta(minutes=1)
+        timing.setattr(clock, "datetime", SimpleNamespace(now=early_at.astimezone))
+        await service.update_order_status(early.id, cancellation, admin.id)
+    await ShiftsService(cash_db).end_shift(cashier.id)
+    with monkeypatch.context() as timing:
+        late_at = datetime.now(UTC) + timedelta(minutes=1)
+        timing.setattr(clock, "datetime", SimpleNamespace(now=late_at.astimezone))
+        await service.update_order_status(delivery.id, cancellation, admin.id)
+        await service.update_order_status(digital.id, cancellation, admin.id)
+
+    report = next(row for row in await ShiftsService(cash_db).get_shifts_report(shift.target_date)
+                  if row["id"] == shift.id)
+    assert report["cash_sales"] == 0
+    assert report["expected_cash"] == 350
+    assert report["cash_sales_at_close"] == 50
+    assert report["cash_difference"] == -50
+    assert report["post_close_cancelled_cash_sales"] == 50
+    assert report["difference_after_adjustments"] == 0
+    assert report["post_close_adjustments"] == []
+
+    # If the early order was already excluded during close, a timestamp that
+    # falls just after end_time cannot make the same cancellation count again.
+    early_history = await cash_db.scalar(select(OrderStatusHistory).where(
+        OrderStatusHistory.order_id == early.id, OrderStatusHistory.status == OrderStatus.CANCELLED,
+    ))
+    early_history.changed_at += timedelta(minutes=2)
+    await cash_db.commit()
+    await record_post_close_adjustment(
+        shift.id, ShiftCashAdjustmentCreate(amount=Decimal("-5.00"), reason="Separate refund",
+                                            idempotency_key="late-cancellation-adjustment"), cash_db, admin,
+    )
+    adjusted = next(row for row in await ShiftsService(cash_db).get_shifts_report(shift.target_date)
+                    if row["id"] == shift.id)
+    assert adjusted["post_close_cancelled_cash_sales"] == 50
+    assert adjusted["difference_after_adjustments"] == -5
+
+
+@pytest.mark.asyncio
 async def test_direct_rider_settlement_requires_full_physical_handoff_and_is_idempotent(cash_db):
     cashier, _, rider, admin, shift, created_at = await seed(cash_db)
     delivery = await order(cash_db, "DIRECT-RIDER-1", cashier, created_at, "110.00",

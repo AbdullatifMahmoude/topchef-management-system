@@ -32,7 +32,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   window.addEventListener("topchef:admin-live", (event) => {
     const payload = event.detail || {};
-    if (["SHIFT_CREATED", "SHIFT_UPDATED", "EXPENSE_UPDATED"].includes(payload.type) && document.getElementById("page-shifts")?.style.display !== "none") {
+    const shiftUpdate = ["SHIFT_CREATED", "SHIFT_UPDATED", "EXPENSE_UPDATED"].includes(payload.type);
+    const cancellation = payload.type === "ORDER_UPDATED" && payload.data?.order_status === "cancelled";
+    const page = document.getElementById("page-shifts");
+    if ((shiftUpdate || cancellation) && page && page.style.display !== "none") {
       fetchShiftsReport();
     }
   });
@@ -163,12 +166,19 @@ function openShiftDrawer(id) {
   selectedShift = shiftsData.find((shift) => Number(shift.id) === id);
   if (!selectedShift) return;
   document.getElementById("drawerCashierName").textContent = selectedShift.cashier_name;
-  const difference = selectedShift.cash_difference;
+  const cancelledCash = Number(selectedShift.post_close_cancelled_cash_sales || 0);
+  const settledDifference = selectedShift.difference_after_adjustments;
+  const hasAdminAdjustments = (selectedShift.post_close_adjustments || []).length > 0;
+  const useAdjustedCount = Boolean(cancelledCash && hasAdminAdjustments);
+  const cashSales = cancelledCash ? selectedShift.cash_sales_at_close - cancelledCash : selectedShift.cash_sales;
+  const expectedCash = selectedShift.expected_cash - cancelledCash;
+  const actualCash = useAdjustedCount ? selectedShift.adjusted_closing_cash : selectedShift.actual_closing_cash;
+  const actualCashLabel = useAdjustedCount ? "النقد الفعلي بعد التسويات" : "عدّ الكاشير الفعلي عند الإقفال";
+  const difference = cancelledCash ? settledDifference : selectedShift.cash_difference;
   const differenceClass = difference == null ? "" : Number(difference) > 0 ? "cash_difference_positive" : Number(difference) < 0 ? "cash_difference_negative" : "";
   const differenceLabel = difference == null ? "فرق النقدية" : Number(difference) < 0 ? "عجز نقدية بالدرج" : Number(difference) > 0 ? "زيادة نقدية بالدرج" : "نقدية مطابقة تماماً";
-  const settledDifference = selectedShift.difference_after_adjustments;
   const settledDifferenceClass = settledDifference == null ? "" : Number(settledDifference) > 0 ? "cash_difference_positive" : Number(settledDifference) < 0 ? "cash_difference_negative" : "";
-  const settledDifferenceMetric = selectedShift.cash_tracking_enabled && (selectedShift.post_close_adjustments || []).length && settledDifference != null
+  const settledDifferenceMetric = !cancelledCash && selectedShift.cash_tracking_enabled && hasAdminAdjustments && settledDifference != null
     ? `<div class="${settledDifferenceClass}"><span>الفرق بعد تسويات الإدارة المسجلة</span><strong>${shiftMoney(settledDifference)}</strong></div>`
     : "";
   const additions = selectedShift.cash_additions || [];
@@ -221,10 +231,10 @@ function openShiftDrawer(id) {
     <h3 class="drawer_metrics_heading">حساب نقدية الدرج (الخزينة)</h3>
     <div class="drawer_metrics">
       <div><span>رصيد بداية الشيفت (العهدة)</span><strong>${shiftMoney(selectedShift.opening_cash)}</strong></div>
-      <div><span>(+) مبيعات نقدية بالدرج (كاش)</span><strong>${shiftMoney(selectedShift.cash_sales)}</strong></div>
+      <div><span>(+) مبيعات نقدية بالدرج (كاش)</span><strong>${shiftMoney(cashSales)}</strong></div>
       <div><span>(−) مصروفات نقدية من الدرج</span><strong>${shiftMoney(selectedShift.cash_expenses)}</strong></div>
-      <div><span>(=) النقد المتوقع في الدرج</span><strong>${shiftMoney(selectedShift.expected_cash)}</strong></div>
-      <div><span>عدّ الكاشير الفعلي عند الإقفال</span><strong>${selectedShift.actual_closing_cash == null ? "غير مسجل بعد" : shiftMoney(selectedShift.actual_closing_cash)}</strong></div>
+      <div><span>(=) النقد المتوقع في الدرج</span><strong>${shiftMoney(expectedCash)}</strong></div>
+      <div><span>${actualCashLabel}</span><strong>${actualCash == null ? "غير مسجل بعد" : shiftMoney(actualCash)}</strong></div>
       <div class="${differenceClass}"><span>${differenceLabel}</span><strong>${difference == null ? "—" : shiftMoney(difference)}</strong></div>
       ${settledDifferenceMetric}
     </div>

@@ -252,18 +252,37 @@ class ShiftsService:
         day_orders = orders_result.all()
         # Online orders belong to the shift that accepted them. Customer-created
         # timestamps can precede that shift (or even the business day).
-        candidate_ids = [order.id for order in day_orders if getattr(order, "id", None) is not None]
+        online_ids = [
+            order.id for order in day_orders
+            if getattr(order, "order_source", None) == OrderSource.ONLINE
+        ]
+        closed_cashier_ids = {
+            shift.user_id for shift in shifts
+            if shift.end_time is not None and getattr(shift, "cash_tracking_enabled", False)
+        }
+        cancelled_cash_ids = [
+            order.id for order in day_orders
+            if order.created_by_user_id in closed_cashier_ids
+            and order.order_status == OrderStatus.CANCELLED
+            and order.payment_method == PaymentMethod.CASH
+        ]
         confirmation_times = {}
-        if candidate_ids:
-            confirmations = (await self.db.execute(select(
-                OrderStatusHistory.order_id, OrderStatusHistory.changed_at,
+        cancellation_times = {}
+        if online_ids or cancelled_cash_ids:
+            status_history = (await self.db.execute(select(
+                OrderStatusHistory.order_id, OrderStatusHistory.status, OrderStatusHistory.changed_at,
             ).where(
-                OrderStatusHistory.order_id.in_(candidate_ids),
-                OrderStatusHistory.status == OrderStatus.CONFIRMED,
+                or_(
+                    (OrderStatusHistory.status == OrderStatus.CONFIRMED)
+                    & OrderStatusHistory.order_id.in_(online_ids),
+                    (OrderStatusHistory.status == OrderStatus.CANCELLED)
+                    & OrderStatusHistory.order_id.in_(cancelled_cash_ids),
+                ),
                 OrderStatusHistory.is_deleted == False,
             ).order_by(OrderStatusHistory.changed_at, OrderStatusHistory.id))).all()
-            for order_id, changed_at in confirmations:
-                confirmation_times.setdefault(order_id, changed_at)
+            for order_id, status, changed_at in status_history:
+                times = confirmation_times if status == OrderStatus.CONFIRMED else cancellation_times
+                times.setdefault(order_id, changed_at)
         tracked = any(getattr(shift, "cash_tracking_enabled", False) for shift in shifts) or any(getattr(order, "cash_tracking_enabled", False) for order in day_orders)
         order_ids = [order.id for order in day_orders] if tracked else []
         cash_movements_result = await self.db.execute(
@@ -384,6 +403,8 @@ class ShiftsService:
             )
             snapshot = snapshots.get(shift.id)
             late_expenses = []
+            cash_sales_at_close = None
+            post_close_cancelled_cash_sales = Decimal("0.00")
             shift_adjustments = [row for row in cash_adjustments if row.shift_id == shift.id]
             late_order_movements = []
             if snapshot:
@@ -403,12 +424,23 @@ class ShiftsService:
                 cash_expenses = snapshot.cash_expenses
                 expected_cash = snapshot.expected_cash
                 cash_difference = snapshot.difference
+                # Status history and shift_end_local use the same order-storage clock.
+                late_cancelled_sales = sum(
+                    (restaurant_sales_amount(order) for order in shift_orders
+                     if order.id in cancellation_times and cancellation_times[order.id] > shift_end_local),
+                    Decimal("0.00"),
+                )
+                # An order cancelled while the shift is closing can already be
+                # absent from the snapshot. Reconcile only the recorded decline.
+                cash_sales_at_close = expected_cash - opening_cash + cash_expenses
+                cash_sales_decline = max(Decimal("0.00"), cash_sales_at_close - payment_sales[PaymentMethod.CASH.value])
+                post_close_cancelled_cash_sales = min(late_cancelled_sales, cash_sales_decline)
                 adjusted_closing_cash = (
                     snapshot.cashier_count + sum((row.amount for row in shift_adjustments), Decimal("0.00"))
                     if snapshot.cashier_count is not None else None
                 )
             difference_after_adjustments = (
-                adjusted_closing_cash - expected_cash
+                adjusted_closing_cash - (expected_cash - post_close_cancelled_cash_sales)
                 if adjusted_closing_cash is not None else None
             )
             duration_end = shift_time_to_local(shift.end_time) or now_local
@@ -427,6 +459,7 @@ class ShiftsService:
                 "total_discount": float(total_discount),
                 "total_delivery_fee": float(total_delivery_fee),
                 "cash_sales": float(payment_sales[PaymentMethod.CASH.value]),
+                "cash_sales_at_close": float(cash_sales_at_close) if cash_sales_at_close is not None else None,
                 "delivery_cash_sales": float(delivery_cash_sales),
                 "confirmed_cash": float(confirmed_cash),
                 "unconfirmed_cash_sales": float(unconfirmed_cash_sales),
@@ -435,6 +468,7 @@ class ShiftsService:
                 "legacy_expenses_unverified": float(sum((expense.amount or 0) for expense in day_expenses if expense.shift_id == shift.id and expense.paid_from == "legacy_unverified")) if ledger_mode else 0.0,
                 "close_snapshot_at": format_dt(snapshot.closed_at) if snapshot else None,
                 "late_cash_expenses": float(sum((row.amount for row in late_expenses), Decimal("0.00"))),
+                "post_close_cancelled_cash_sales": float(post_close_cancelled_cash_sales),
                 "late_order_cash_movements": [
                     {"id": row.id, "order_id": row.order_id, "from_holder": row.from_holder,
                      "to_holder": row.to_holder, "amount": float(row.amount),

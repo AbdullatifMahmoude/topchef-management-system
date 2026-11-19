@@ -1970,7 +1970,7 @@ function renderDeliveryCustomerForm() {
         <span class="dcf_label">👤 اسم العميل</span>
         <input type="text" id="dcf_name" class="dcf_input"
           placeholder="اسم العميل"
-          value="${deliveryCustomerInfo.name}"
+          value="${escapeOrderText(deliveryCustomerInfo.name)}"
           oninput="deliveryCustomerInfo.name = this.value" />
       </div>
 
@@ -1999,7 +1999,9 @@ function hideDeliveryCustomerForm() {
 function handlePhoneInput(phone) {
   customerPhoneLookupVersion++;
   deliveryCustomerInfo.phone = normalizePhoneDigits(phone);
-  deliveryCustomerInfo.name = "";
+  if (deliveryCustomerInfo.customerId !== null) {
+    deliveryCustomerInfo.name = "";
+  }
   deliveryCustomerInfo.customerId = null;
   deliveryCustomerInfo.addresses = [];
   deliveryCustomerInfo.selectedAddressId = null;
@@ -2007,7 +2009,7 @@ function handlePhoneInput(phone) {
 
   const nameInput = document.getElementById("dcf_name");
   if (nameInput) {
-    nameInput.value = "";
+    nameInput.value = deliveryCustomerInfo.name;
     nameInput.readOnly = false;
     nameInput.style.opacity = "1";
     nameInput.classList.remove("filled");
